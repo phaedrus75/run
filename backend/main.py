@@ -25,7 +25,7 @@ import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan
+from models import Run, WeeklyPlan, Weight
 from schemas import (
     RunCreate, RunUpdate, RunResponse, 
     WeeklyPlanCreate, WeeklyPlanResponse,
