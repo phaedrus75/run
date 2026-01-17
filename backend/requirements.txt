@@ -1,0 +1,20 @@
+# Python Dependencies for RunTracker Backend
+# Install with: pip install -r requirements.txt
+
+# FastAPI - The web framework we're using
+fastapi>=0.115.0
+
+# Uvicorn - The server that runs our app
+uvicorn[standard]>=0.30.0
+
+# SQLAlchemy - Helps us talk to the database
+sqlalchemy>=2.0.30
+
+# Pydantic - Validates our data
+pydantic>=2.10.0
+
+# Python-dotenv - Loads environment variables
+python-dotenv>=1.0.0
+
+# PostgreSQL adapter (for production deployment)
+psycopg2-binary>=2.9.9

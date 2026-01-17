@@ -1,0 +1,441 @@
+/**
+ * 🌐 API SERVICE
+ * ==============
+ * 
+ * This file handles all communication with our Python backend.
+ * 
+ * 🎓 LEARNING NOTES:
+ * - fetch() is a built-in function for making HTTP requests
+ * - async/await makes asynchronous code look like regular code
+ * - We wrap everything in try/catch for error handling
+ */
+
+// 🔧 API Configuration
+// Change this to your server's address when deploying!
+// const API_BASE_URL = 'http://localhost:8000';
+
+// For testing on physical device, use your computer's IP:
+const API_BASE_URL = 'http://192.168.86.132:8000';
+
+/**
+ * 🔧 Generic fetch wrapper with error handling
+ */
+async function apiFetch<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  const config: RequestInit = {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  };
+
+  try {
+    const response = await fetch(url, config);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'API Error');
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error(`API Error [${endpoint}]:`, error);
+    throw error;
+  }
+}
+
+// ==========================================
+// 📊 TYPE DEFINITIONS
+// ==========================================
+
+export interface Run {
+  id: number;
+  run_type: string;
+  duration_seconds: number;
+  distance_km: number;
+  completed_at: string;
+  notes: string | null;
+  pace_per_km: string;
+  formatted_duration: string;
+}
+
+export interface WeeklyPlan {
+  id: number;
+  week_id: string;
+  planned_runs: string[];
+  created_at: string;
+}
+
+export interface Stats {
+  total_runs: number;
+  total_km: number;
+  current_streak: number;
+  longest_streak: number;
+  average_pace: string;
+  runs_this_week: number;
+  km_this_week: number;
+  runs_this_month: number;
+  km_this_month: number;
+}
+
+export interface MotivationalMessage {
+  message: string;
+  emoji: string;
+  achievement?: string;
+}
+
+export interface WeeklyStreakProgress {
+  long_runs_completed: number;
+  long_runs_needed: number;
+  short_runs_completed: number;
+  short_runs_needed: number;
+  is_complete: boolean;
+  current_streak: number;
+  longest_streak: number;
+  message: string;
+}
+
+export interface PersonalRecord {
+  time: string;
+  duration_seconds: number;
+  pace: string;
+  date: string;
+  run_id: number;
+}
+
+export interface PersonalRecords {
+  [key: string]: PersonalRecord | null;
+}
+
+export interface GoalsProgress {
+  yearly: {
+    goal_km: number;
+    current_km: number;
+    remaining_km: number;
+    percent: number;
+    days_remaining: number;
+    on_track: boolean;
+  };
+  monthly: {
+    goal_km: number;
+    current_km: number;
+    remaining_km: number;
+    percent: number;
+    days_remaining: number;
+    month_name: string;
+    is_complete: boolean;
+  };
+  monthly_goals_hit: number;
+}
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  category: string;
+  unlocked: boolean;
+}
+
+export interface AchievementsData {
+  unlocked: Achievement[];
+  locked: Achievement[];
+  total: number;
+  unlocked_count: number;
+}
+
+export interface WeightEntry {
+  id: number;
+  weight_lbs: number;
+  recorded_at: string;
+  notes: string | null;
+}
+
+export interface WeightProgress {
+  start_weight: number;
+  current_weight: number;
+  goal_weight: number;
+  weight_lost: number;
+  weight_to_lose: number;
+  percent_complete: number;
+  on_track: boolean;
+  trend: 'up' | 'down' | 'stable';
+  entries_count: number;
+}
+
+export interface WeightChartData {
+  date: string;
+  weight: number;
+  label: string;
+}
+
+// ==========================================
+// 🏃 RUN API
+// ==========================================
+
+export const runApi = {
+  /**
+   * ✨ Create a new run
+   */
+  create: (run: {
+    run_type: string;
+    duration_seconds: number;
+    notes?: string;
+    completed_at?: string;  // ISO date string for backdating
+  }): Promise<Run> => {
+    return apiFetch('/runs', {
+      method: 'POST',
+      body: JSON.stringify(run),
+    });
+  },
+
+  /**
+   * 📖 Get all runs
+   */
+  getAll: (params?: { run_type?: string; limit?: number }): Promise<Run[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.run_type) queryParams.set('run_type', params.run_type);
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+    
+    const query = queryParams.toString();
+    return apiFetch(`/runs${query ? `?${query}` : ''}`);
+  },
+
+  /**
+   * 🔍 Get a single run
+   */
+  get: (id: number): Promise<Run> => {
+    return apiFetch(`/runs/${id}`);
+  },
+
+  /**
+   * ✏️ Update a run
+   */
+  update: (id: number, data: {
+    run_type?: string;
+    duration_seconds?: number;
+    notes?: string;
+  }): Promise<Run> => {
+    return apiFetch(`/runs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * 🗑️ Delete a run
+   */
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/runs/${id}`, { method: 'DELETE' });
+  },
+};
+
+// ==========================================
+// 📅 WEEKLY PLAN API
+// ==========================================
+
+export const planApi = {
+  /**
+   * 📅 Create or update a weekly plan
+   */
+  create: (plan: {
+    week_id: string;
+    planned_runs: string[];
+  }): Promise<WeeklyPlan> => {
+    return apiFetch('/plans', {
+      method: 'POST',
+      body: JSON.stringify(plan),
+    });
+  },
+
+  /**
+   * 📅 Get current week's plan
+   */
+  getCurrent: (): Promise<WeeklyPlan> => {
+    return apiFetch('/plans/current');
+  },
+
+  /**
+   * 📅 Get a specific week's plan
+   */
+  get: (weekId: string): Promise<WeeklyPlan> => {
+    return apiFetch(`/plans/${weekId}`);
+  },
+};
+
+// ==========================================
+// 📊 STATS API
+// ==========================================
+
+export const statsApi = {
+  /**
+   * 📊 Get user statistics
+   */
+  get: (): Promise<Stats> => {
+    return apiFetch('/stats');
+  },
+
+  /**
+   * 🎉 Get motivational message
+   */
+  getMotivation: (): Promise<MotivationalMessage> => {
+    return apiFetch('/motivation');
+  },
+
+  /**
+   * 🔥 Get weekly streak progress
+   */
+  getStreakProgress: (): Promise<WeeklyStreakProgress> => {
+    return apiFetch('/streak');
+  },
+
+  /**
+   * 🏆 Get personal records
+   */
+  getPersonalRecords: (): Promise<PersonalRecords> => {
+    return apiFetch('/personal-records');
+  },
+
+  /**
+   * 🎯 Get goals progress
+   */
+  getGoals: (): Promise<GoalsProgress> => {
+    return apiFetch('/goals');
+  },
+
+  /**
+   * 🎖️ Get achievements
+   */
+  getAchievements: (): Promise<AchievementsData> => {
+    return apiFetch('/achievements');
+  },
+
+  /**
+   * ⚖️ Get weight progress
+   */
+  getWeightProgress: (): Promise<WeightProgress> => {
+    return apiFetch('/weight-progress');
+  },
+
+  /**
+   * ⚖️ Get weight chart data
+   */
+  getWeightChart: (): Promise<WeightChartData[]> => {
+    return apiFetch('/weight-chart');
+  },
+};
+
+// ==========================================
+// ⚖️ WEIGHT API
+// ==========================================
+
+export const weightApi = {
+  /**
+   * ⚖️ Get all weight entries
+   */
+  getAll: (limit: number = 100): Promise<WeightEntry[]> => {
+    return apiFetch(`/weights?limit=${limit}`);
+  },
+
+  /**
+   * ⚖️ Create a new weight entry
+   */
+  create: (data: { weight_lbs: number; recorded_at?: string; notes?: string }): Promise<WeightEntry> => {
+    return apiFetch('/weights', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * ⚖️ Delete a weight entry
+   */
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/weights/${id}`, { method: 'DELETE' });
+  },
+
+  /**
+   * ⚖️ Get weight progress
+   */
+  getProgress: (): Promise<WeightProgress> => {
+    return apiFetch('/weight-progress');
+  },
+
+  /**
+   * ⚖️ Get weight chart data
+   */
+  getChartData: (): Promise<WeightChartData[]> => {
+    return apiFetch('/weight-chart');
+  },
+};
+
+// ==========================================
+// 🔧 UTILITY FUNCTIONS
+// ==========================================
+
+/**
+ * Get the current week ID (YYYY-Www)
+ * Uses Sunday-Saturday weeks (US standard)
+ */
+export function getCurrentWeekId(): string {
+  const now = new Date();
+  
+  // Find the Sunday that starts this week
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - dayOfWeek);
+  sunday.setHours(0, 0, 0, 0);
+  
+  // Calculate week number (weeks since start of year)
+  const startOfYear = new Date(sunday.getFullYear(), 0, 1);
+  const days = Math.floor((sunday.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+  const weekNumber = Math.floor(days / 7) + 1;
+  
+  return `${sunday.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Get the start (Sunday) and end (Saturday) of current week
+ */
+export function getCurrentWeekRange(): { start: Date; end: Date } {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - dayOfWeek);
+  sunday.setHours(0, 0, 0, 0);
+  
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  saturday.setHours(23, 59, 59, 999);
+  
+  return { start: sunday, end: saturday };
+}
+
+/**
+ * Format seconds to mm:ss
+ */
+export function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Get distance for a run type
+ */
+export function getDistance(runType: string): number {
+  const distances: Record<string, number> = {
+    '3k': 3,
+    '5k': 5,
+    '10k': 10,
+    '15k': 15,
+    '20k': 20,
+  };
+  return distances[runType] || 0;
+}

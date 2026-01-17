@@ -1,0 +1,444 @@
+"""
+🏃 RUNTRACKER API - Main Entry Point
+=====================================
+
+Welcome! This is where your API starts.
+
+🎓 LEARNING NOTES:
+This file does three things:
+1. Creates the FastAPI application
+2. Defines API endpoints (URLs that do things)
+3. Connects everything together
+
+To run this:
+    uvicorn main:app --reload
+
+Then visit: http://localhost:8000/docs
+You'll see interactive API documentation!
+"""
+
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from typing import List
+import json
+
+# 📦 Import our modules
+from database import engine, get_db, Base
+from models import Run, WeeklyPlan
+from schemas import (
+    RunCreate, RunUpdate, RunResponse, 
+    WeeklyPlanCreate, WeeklyPlanResponse,
+    StatsResponse, MotivationalMessage, WeeklyStreakProgress,
+    RUN_DISTANCES
+)
+import crud
+
+# ==========================================
+# 🚀 CREATE THE APP
+# ==========================================
+
+app = FastAPI(
+    title="🏃 RunTracker API",
+    description="Track your runs, crush your goals!",
+    version="1.0.0",
+)
+
+# 🌐 CORS Middleware
+# This allows your React Native app to talk to this API
+# Without this, the browser/app blocks the connection for security
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your app's domain
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
+
+# 🏗️ Create database tables
+# This runs when the app starts - creates tables if they don't exist
+Base.metadata.create_all(bind=engine)
+
+
+# ==========================================
+# 🏠 HOME ENDPOINT
+# ==========================================
+
+@app.get("/")
+def read_root():
+    """
+    👋 Welcome endpoint
+    
+    Just a friendly greeting to confirm the API is running!
+    
+    🎓 LEARNING:
+    - @app.get("/") is a "decorator" - it registers this function as a route
+    - The "/" means this handles requests to the root URL
+    - Whatever you return gets sent back as JSON automatically!
+    """
+    return {
+        "message": "🏃 Welcome to RunTracker API!",
+        "docs": "Visit /docs for interactive documentation",
+        "health": "OK"
+    }
+
+
+# ==========================================
+# 🏃 RUN ENDPOINTS
+# ==========================================
+
+@app.post("/runs", response_model=RunResponse)
+def create_run(run: RunCreate, db: Session = Depends(get_db)):
+    """
+    ✨ Create a new run
+    
+    Call this when you complete a run!
+    
+    🎓 LEARNING:
+    - @app.post means this handles POST requests (creating data)
+    - response_model tells FastAPI what shape the response should be
+    - Depends(get_db) is "dependency injection" - it gives us a database connection
+    - FastAPI automatically validates the request body against RunCreate
+    """
+    # Validate run type
+    if run.run_type not in RUN_DISTANCES:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid run type. Must be one of: {list(RUN_DISTANCES.keys())}"
+        )
+    
+    db_run = crud.create_run(db=db, run=run)
+    return format_run_response(db_run)
+
+
+@app.get("/runs", response_model=List[RunResponse])
+def get_runs(
+    skip: int = 0, 
+    limit: int = 100,
+    run_type: str = None,
+    db: Session = Depends(get_db)
+):
+    """
+    📖 Get all runs
+    
+    Optional filters:
+    - skip: For pagination (skip first N records)
+    - limit: Maximum records to return
+    - run_type: Filter by type (3k, 5k, etc.)
+    """
+    runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type)
+    return [format_run_response(run) for run in runs]
+
+
+@app.get("/runs/{run_id}", response_model=RunResponse)
+def get_run(run_id: int, db: Session = Depends(get_db)):
+    """
+    🔍 Get a specific run by ID
+    
+    🎓 LEARNING:
+    - {run_id} in the path is a "path parameter"
+    - FastAPI automatically converts it to an int
+    - If the run doesn't exist, we return a 404 error
+    """
+    run = crud.get_run(db, run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return format_run_response(run)
+
+
+@app.put("/runs/{run_id}", response_model=RunResponse)
+def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)):
+    """
+    ✏️ Update an existing run
+    
+    Allows editing run type, duration, and notes.
+    """
+    # Validate run type if provided
+    if run_update.run_type and run_update.run_type not in RUN_DISTANCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid run type. Must be one of: {list(RUN_DISTANCES.keys())}"
+        )
+    
+    updated_run = crud.update_run(
+        db,
+        run_id=run_id,
+        run_type=run_update.run_type,
+        duration_seconds=run_update.duration_seconds,
+        notes=run_update.notes
+    )
+    
+    if not updated_run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    return format_run_response(updated_run)
+
+
+@app.delete("/runs/{run_id}")
+def delete_run(run_id: int, db: Session = Depends(get_db)):
+    """🗑️ Delete a run"""
+    success = crud.delete_run(db, run_id=run_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"message": "Run deleted successfully"}
+
+
+# ==========================================
+# 📅 WEEKLY PLAN ENDPOINTS
+# ==========================================
+
+@app.post("/plans", response_model=WeeklyPlanResponse)
+def create_weekly_plan(plan: WeeklyPlanCreate, db: Session = Depends(get_db)):
+    """📅 Create or update a weekly plan"""
+    # Validate all run types
+    for run_type in plan.planned_runs:
+        if run_type not in RUN_DISTANCES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid run type: {run_type}"
+            )
+    
+    db_plan = crud.create_weekly_plan(db=db, plan=plan)
+    return format_plan_response(db_plan)
+
+
+@app.get("/plans/current", response_model=WeeklyPlanResponse)
+def get_current_week_plan(db: Session = Depends(get_db)):
+    """📅 Get this week's plan"""
+    week_id = crud.get_current_week_id()
+    plan = crud.get_weekly_plan(db, week_id=week_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="No plan for this week")
+    return format_plan_response(plan)
+
+
+@app.get("/plans/{week_id}", response_model=WeeklyPlanResponse)
+def get_weekly_plan(week_id: str, db: Session = Depends(get_db)):
+    """📅 Get a specific week's plan"""
+    plan = crud.get_weekly_plan(db, week_id=week_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return format_plan_response(plan)
+
+
+# ==========================================
+# 📊 STATS ENDPOINTS
+# ==========================================
+
+@app.get("/stats", response_model=StatsResponse)
+def get_stats(db: Session = Depends(get_db)):
+    """
+    📊 Get your running statistics
+    
+    Returns totals, weekly stats, monthly stats, and more!
+    """
+    return crud.get_stats_summary(db)
+
+
+@app.get("/motivation", response_model=MotivationalMessage)
+def get_motivation(db: Session = Depends(get_db)):
+    """
+    🎉 Get a motivational message
+    
+    Returns encouragement based on your progress!
+    Milestone achievements when you hit certain numbers.
+    """
+    return crud.get_motivational_message(db)
+
+
+@app.get("/streak", response_model=WeeklyStreakProgress)
+def get_streak_progress(db: Session = Depends(get_db)):
+    """
+    🔥 Get weekly streak progress
+    
+    Shows progress toward this week's streak goal:
+    - 1 long run (10k+)
+    - 2 short runs (any distance)
+    """
+    return crud.get_weekly_streak_progress(db)
+
+
+# ==========================================
+# 🏆 ACHIEVEMENTS & GOALS ENDPOINTS
+# ==========================================
+
+@app.get("/personal-records")
+def get_personal_records(db: Session = Depends(get_db)):
+    """
+    🏆 Get personal records for each distance
+    
+    Returns fastest time for 3k, 5k, 10k, 15k, 20k
+    """
+    from achievements import get_personal_records
+    return get_personal_records(db)
+
+
+@app.get("/goals")
+def get_goals(db: Session = Depends(get_db)):
+    """
+    🎯 Get progress toward yearly and monthly goals
+    
+    - Yearly goal: 1000km
+    - Monthly goal: 100km
+    """
+    from achievements import get_goals_progress
+    return get_goals_progress(db)
+
+
+@app.get("/achievements")
+def get_achievements(db: Session = Depends(get_db)):
+    """
+    🎖️ Get all achievements and their unlock status
+    """
+    from achievements import get_achievements
+    stats = crud.get_stats_summary(db)
+    return get_achievements(db, stats)
+
+
+# ==========================================
+# ⚖️ WEIGHT TRACKING ENDPOINTS
+# ==========================================
+
+@app.post("/weights")
+def create_weight(weight_data: dict, db: Session = Depends(get_db)):
+    """
+    ⚖️ Log a new weight entry
+    """
+    from weight import create_weight_entry
+    from datetime import datetime
+    
+    weight_lbs = weight_data.get("weight_lbs")
+    if not weight_lbs or weight_lbs <= 0:
+        raise HTTPException(status_code=400, detail="Weight must be a positive number")
+    
+    recorded_at = None
+    if weight_data.get("recorded_at"):
+        try:
+            recorded_at = datetime.fromisoformat(weight_data["recorded_at"].replace("Z", "+00:00"))
+        except:
+            recorded_at = None
+    
+    entry = create_weight_entry(
+        db,
+        weight_lbs=weight_lbs,
+        recorded_at=recorded_at,
+        notes=weight_data.get("notes")
+    )
+    
+    return {
+        "id": entry.id,
+        "weight_lbs": entry.weight_lbs,
+        "recorded_at": entry.recorded_at,
+        "notes": entry.notes,
+    }
+
+
+@app.get("/weights")
+def get_weights(limit: int = 100, db: Session = Depends(get_db)):
+    """
+    📋 Get all weight entries
+    """
+    from weight import get_all_weights
+    weights = get_all_weights(db, limit=limit)
+    return [
+        {
+            "id": w.id,
+            "weight_lbs": w.weight_lbs,
+            "recorded_at": w.recorded_at,
+            "notes": w.notes,
+        }
+        for w in weights
+    ]
+
+
+@app.delete("/weights/{weight_id}")
+def delete_weight(weight_id: int, db: Session = Depends(get_db)):
+    """
+    🗑️ Delete a weight entry
+    """
+    from weight import delete_weight_entry
+    success = delete_weight_entry(db, weight_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Weight entry not found")
+    return {"message": "Weight entry deleted"}
+
+
+@app.get("/weight-progress")
+def get_weight_progress(db: Session = Depends(get_db)):
+    """
+    📊 Get weight progress toward goal
+    
+    Goal: 209lb (Jan 7) → 180lb (Dec 31)
+    """
+    from weight import get_weight_progress
+    return get_weight_progress(db)
+
+
+@app.get("/weight-chart")
+def get_weight_chart(db: Session = Depends(get_db)):
+    """
+    📈 Get weight data for charting
+    """
+    from weight import get_weight_chart_data
+    return get_weight_chart_data(db)
+
+
+# ==========================================
+# 🛠️ HELPER FUNCTIONS
+# ==========================================
+
+def format_run_response(run: Run) -> dict:
+    """
+    Format a Run object for the API response.
+    
+    Adds calculated fields like pace and formatted duration.
+    """
+    # Calculate pace (time per km)
+    if run.distance_km > 0:
+        seconds_per_km = run.duration_seconds / run.distance_km
+        pace_mins = int(seconds_per_km // 60)
+        pace_secs = int(seconds_per_km % 60)
+        pace = f"{pace_mins}:{pace_secs:02d}"
+    else:
+        pace = "0:00"
+    
+    # Format duration
+    mins = run.duration_seconds // 60
+    secs = run.duration_seconds % 60
+    formatted = f"{mins}:{secs:02d}"
+    
+    return {
+        "id": run.id,
+        "run_type": run.run_type,
+        "duration_seconds": run.duration_seconds,
+        "distance_km": run.distance_km,
+        "completed_at": run.completed_at,
+        "notes": run.notes,
+        "pace_per_km": pace,
+        "formatted_duration": formatted,
+    }
+
+
+def format_plan_response(plan: WeeklyPlan) -> dict:
+    """Format a WeeklyPlan for API response."""
+    return {
+        "id": plan.id,
+        "week_id": plan.week_id,
+        "planned_runs": json.loads(plan.planned_runs),
+        "created_at": plan.created_at,
+    }
+
+
+# ==========================================
+# 🎓 WHAT'S NEXT?
+# ==========================================
+"""
+Congratulations! You've read through the main API file.
+
+Try these exercises:
+1. Add a new endpoint: GET /runs/today (runs completed today)
+2. Add a new run type: "25k" 
+3. Add a new stat: fastest 5k time
+
+The FastAPI docs at http://localhost:8000/docs let you test all endpoints!
+"""
