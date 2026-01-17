@@ -11,11 +11,11 @@
  */
 
 // 🔧 API Configuration
-// Change this to your server's address when deploying!
-// const API_BASE_URL = 'http://localhost:8000';
+// Production URL (Railway deployment)
+const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
-// For testing on physical device, use your computer's IP:
-const API_BASE_URL = 'http://192.168.86.132:8000';
+// For local development, uncomment this:
+// const API_BASE_URL = 'http://192.168.86.132:8000';
 
 /**
  * 🔧 Generic fetch wrapper with error handling
