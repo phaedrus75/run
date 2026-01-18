@@ -74,7 +74,7 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   };
   
   // 💾 Save edited run
-  const handleSaveRun = async (id: number, data: { run_type?: string; duration_seconds?: number; notes?: string }) => {
+  const handleSaveRun = async (id: number, data: { run_type?: string; duration_seconds?: number; notes?: string; category?: string }) => {
     await runApi.update(id, data);
     fetchRuns(); // Refresh the list
   };

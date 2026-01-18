@@ -32,6 +32,7 @@ export function AddRunScreen({ navigation }: AddRunScreenProps) {
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
   const [notes, setNotes] = useState('');
+  const [category, setCategory] = useState('outdoor');
   const [saving, setSaving] = useState(false);
   
   // Date state - default to today
@@ -93,6 +94,7 @@ export function AddRunScreen({ navigation }: AddRunScreenProps) {
         duration_seconds: durationSeconds,
         notes: notes || undefined,
         completed_at: selectedDate.toISOString(),
+        category: category,
       });
       
       Alert.alert(
@@ -413,6 +415,39 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.5,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  categoryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    ...shadows.small,
+  },
+  categoryButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
+  },
+  categoryEmoji: {
+    fontSize: 20,
+    marginRight: spacing.sm,
+  },
+  categoryText: {
+    fontSize: typography.sizes.md,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+  },
+  categoryTextActive: {
+    color: colors.primary,
+    fontWeight: typography.weights.bold,
   },
   saveButtonText: {
     color: colors.textOnPrimary,

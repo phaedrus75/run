@@ -35,7 +35,8 @@ RUN_DISTANCES = {
     "5k": 5.0,
     "10k": 10.0,
     "15k": 15.0,
-    "20k": 20.0,
+    "18k": 18.0,
+    "21k": 21.0,
 }
 
 
@@ -54,6 +55,7 @@ class RunCreate(BaseModel):
     duration_seconds: int = Field(..., ge=0, description="How long the run took in seconds")
     notes: Optional[str] = Field(None, description="Optional notes about your run")
     completed_at: Optional[datetime] = Field(None, description="When the run was completed (for backdating)")
+    category: Optional[str] = Field("outdoor", description="Category: outdoor or treadmill")
     
     class Config:
         # 📖 Example for the auto-generated docs
@@ -62,7 +64,8 @@ class RunCreate(BaseModel):
                 "run_type": "5k",
                 "duration_seconds": 1800,
                 "notes": "Felt great today! 🎉",
-                "completed_at": "2024-01-15T09:30:00"
+                "completed_at": "2024-01-15T09:30:00",
+                "category": "outdoor"
             }
         }
 
@@ -76,12 +79,14 @@ class RunUpdate(BaseModel):
     run_type: Optional[str] = Field(None, description="Type of run: 3k, 5k, 10k, 15k, 18k, or 21k")
     duration_seconds: Optional[int] = Field(None, ge=0, description="How long the run took in seconds")
     notes: Optional[str] = Field(None, description="Optional notes about your run")
+    category: Optional[str] = Field(None, description="Category: outdoor or treadmill")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "duration_seconds": 1650,
-                "notes": "Updated - actually felt even better!"
+                "notes": "Updated - actually felt even better!",
+                "category": "treadmill"
             }
         }
 

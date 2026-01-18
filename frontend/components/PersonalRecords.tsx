@@ -24,7 +24,7 @@ export function PersonalRecords({ records }: PersonalRecordsProps) {
       <View style={styles.recordsGrid}>
         {distances.map(distance => {
           const record = records[distance];
-          const hasRecord = record !== null;
+          const hasRecord = record != null;
           
           return (
             <View 

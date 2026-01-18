@@ -60,6 +60,7 @@ export interface Run {
   distance_km: number;
   completed_at: string;
   notes: string | null;
+  category: string | null;
   pace_per_km: string;
   formatted_duration: string;
 }

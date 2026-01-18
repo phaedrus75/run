@@ -54,7 +54,8 @@ def create_run(db: Session, run: RunCreate) -> Run:
         run_type=run.run_type,
         duration_seconds=run.duration_seconds,
         distance_km=distance,
-        notes=run.notes
+        notes=run.notes,
+        category=run.category or "outdoor"
     )
     
     # Set completed_at if provided (for backdating)
@@ -123,7 +124,7 @@ def delete_run(db: Session, run_id: int) -> bool:
     return False
 
 
-def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds: int = None, notes: str = None) -> Optional[Run]:
+def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds: int = None, notes: str = None, category: str = None) -> Optional[Run]:
     """
     ✏️ Update an existing run
     
@@ -143,6 +144,9 @@ def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds:
     
     if notes is not None:
         run.notes = notes
+    
+    if category is not None:
+        run.category = category
     
     db.commit()
     db.refresh(run)

@@ -67,6 +67,9 @@ class Run(Base):
     
     # 📝 Optional notes about the run
     notes = Column(String, nullable=True)
+    
+    # 🏃 Run category (outdoor or treadmill)
+    category = Column(String, nullable=True, default="outdoor")
 
 
 class WeeklyPlan(Base):

@@ -205,7 +205,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onPress={() => navigation.navigate('Run')}
           activeOpacity={0.8}
         >
-          <Text style={styles.startButtonText}>▶️ Start a Run</Text>
+          <Text style={styles.startButtonText}>📝 Log a Run</Text>
         </TouchableOpacity>
         
         {/* 🎯 Goals Progress */}

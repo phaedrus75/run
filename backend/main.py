@@ -321,7 +321,8 @@ def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)
         run_id=run_id,
         run_type=run_update.run_type,
         duration_seconds=run_update.duration_seconds,
-        notes=run_update.notes
+        notes=run_update.notes,
+        category=run_update.category
     )
     
     if not updated_run:

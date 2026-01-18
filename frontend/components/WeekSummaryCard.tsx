@@ -74,10 +74,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statValue: {
-    fontSize: typography.sizes.xl,
+    fontSize: 28,
     fontWeight: typography.weights.bold,
     color: colors.primary,
-    lineHeight: typography.sizes.xl * 1.1,
+    lineHeight: 28 * 1.1,
   },
   statLabel: {
     fontSize: typography.sizes.sm,

@@ -25,7 +25,7 @@ interface EditRunModalProps {
   visible: boolean;
   run: Run | null;
   onClose: () => void;
-  onSave: (id: number, data: { run_type?: string; duration_seconds?: number; notes?: string }) => Promise<void>;
+  onSave: (id: number, data: { run_type?: string; duration_seconds?: number; notes?: string; category?: string }) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }
 
@@ -34,6 +34,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
   const [notes, setNotes] = useState('');
+  const [category, setCategory] = useState('outdoor');
   const [saving, setSaving] = useState(false);
 
   // Update state when run changes
@@ -45,6 +46,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
       setMinutes(mins.toString());
       setSeconds(secs.toString());
       setNotes(run.notes || '');
+      setCategory(run.category || 'outdoor');
     }
   }, [run]);
 
@@ -58,6 +60,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
         run_type: runType,
         duration_seconds: durationSeconds,
         notes: notes || undefined,
+        category: category,
       });
       onClose();
     } catch (error) {
@@ -154,6 +157,37 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             />
             <Text style={styles.durationLabel}>sec</Text>
           </View>
+        </View>
+
+        {/* Category */}
+        <Text style={styles.label}>Category</Text>
+        <View style={styles.categoryRow}>
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              category === 'outdoor' && styles.categoryButtonActive,
+            ]}
+            onPress={() => setCategory('outdoor')}
+          >
+            <Text style={styles.categoryEmoji}>🌳</Text>
+            <Text style={[
+              styles.categoryText,
+              category === 'outdoor' && styles.categoryTextActive,
+            ]}>Outdoor</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              category === 'treadmill' && styles.categoryButtonActive,
+            ]}
+            onPress={() => setCategory('treadmill')}
+          >
+            <Text style={styles.categoryEmoji}>🏃</Text>
+            <Text style={[
+              styles.categoryText,
+              category === 'treadmill' && styles.categoryTextActive,
+            ]}>Treadmill</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Notes */}
@@ -254,6 +288,39 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     fontSize: typography.sizes.md,
     textAlign: 'left',
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  categoryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    ...shadows.small,
+  },
+  categoryButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
+  },
+  categoryEmoji: {
+    fontSize: 18,
+    marginRight: spacing.xs,
+  },
+  categoryText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+  },
+  categoryTextActive: {
+    color: colors.primary,
+    fontWeight: typography.weights.bold,
   },
   deleteButton: {
     marginTop: spacing.xxl,

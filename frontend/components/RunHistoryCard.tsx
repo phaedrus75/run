@@ -53,7 +53,11 @@ export function RunHistoryCard({ run, onPress }: RunHistoryCardProps) {
       {/* Middle: Details */}
       <View style={styles.details}>
         <Text style={styles.duration}>{run.formatted_duration}</Text>
-        <Text style={styles.date}>{formatDate(run.completed_at)}</Text>
+        <Text style={styles.date}>
+          {formatDate(run.completed_at)}
+          {run.category === 'treadmill' && ' 🏃'}
+          {run.category === 'outdoor' && ' 🌳'}
+        </Text>
       </View>
       
       {/* Right: Pace */}
