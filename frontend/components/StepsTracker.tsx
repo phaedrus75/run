@@ -162,11 +162,16 @@ export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
 
       {/* All Time */}
       {allTime.total_entries > 0 && (
-        <View style={styles.allTimeRow}>
-          <Text style={styles.allTimeLabel}>All Time:</Text>
-          <Text style={styles.allTimeValue}>
-            {allTime.days_15k} × 15k+ • {allTime.days_20k} × 20k+ • {allTime.days_25k} × 25k+
-          </Text>
+        <View style={styles.allTimeSection}>
+          <View style={styles.totalBadge}>
+            <Text style={styles.totalNumber}>{allTime.total_entries}</Text>
+            <Text style={styles.totalLabel}>total high step days</Text>
+          </View>
+          <View style={styles.allTimeRow}>
+            <Text style={styles.allTimeValue}>
+              {allTime.days_15k} × 15k+ • {allTime.days_20k} × 20k+ • {allTime.days_25k} × 25k+
+            </Text>
+          </View>
         </View>
       )}
 
@@ -328,6 +333,28 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+  },
+  allTimeSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.background,
+  },
+  totalBadge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  totalNumber: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+    marginRight: spacing.xs,
+  },
+  totalLabel: {
+    fontSize: typography.sizes.sm,
     color: colors.textSecondary,
   },
   allTimeRow: {
