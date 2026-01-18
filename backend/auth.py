@@ -18,7 +18,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from database import get_db
 from models import User
@@ -45,14 +45,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 class UserCreate(BaseModel):
     """Schema for user registration"""
-    email: EmailStr
+    email: str
     password: str
     name: Optional[str] = None
 
 
 class UserLogin(BaseModel):
     """Schema for user login"""
-    email: EmailStr
+    email: str
     password: str
 
 
