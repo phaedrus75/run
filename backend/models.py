@@ -136,3 +136,32 @@ class Weight(Base):
     
     # 📝 Optional notes (e.g., "morning weight", "after workout")
     notes = Column(String, nullable=True)
+    
+    # 👤 User who logged this weight (optional for backward compatibility)
+    user_id = Column(Integer, nullable=True)
+
+
+class User(Base):
+    """
+    👤 User Model - App users
+    
+    Each row represents a registered user.
+    """
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 📧 Email (unique identifier for login)
+    email = Column(String, unique=True, index=True, nullable=False)
+    
+    # 🔒 Hashed password (never store plain text!)
+    hashed_password = Column(String, nullable=False)
+    
+    # 👤 Display name
+    name = Column(String, nullable=True)
+    
+    # ✅ Is the account active?
+    is_active = Column(Boolean, default=True)
+    
+    # 📅 When the account was created
+    created_at = Column(DateTime, server_default=func.now())

@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "RunTracker",
+    "slug": "runtracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.phaedrus75.runtracker",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "package": "com.phaedrus75.runtracker"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "owner": "phaedrus75",
+    "extra": {
+      "eas": {
+        "projectId": "281b02e7-43f9-419b-bff1-a92e99faba5a"
+      }
+    }
+  }
+}

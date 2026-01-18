@@ -17,15 +17,20 @@ Then visit: http://localhost:8000/docs
 You'll see interactive API documentation!
 """
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight
+from models import Run, WeeklyPlan, Weight, User
+from auth import (
+    UserCreate, UserLogin, UserResponse, Token,
+    create_user, authenticate_user, get_user_by_email,
+    create_access_token, get_current_user, require_auth
+)
 from schemas import (
     RunCreate, RunUpdate, RunResponse, 
     WeeklyPlanCreate, WeeklyPlanResponse,
@@ -81,6 +86,79 @@ def read_root():
         "docs": "Visit /docs for interactive documentation",
         "health": "OK"
     }
+
+
+# ==========================================
+# 🔐 AUTHENTICATION ENDPOINTS
+# ==========================================
+
+@app.post("/auth/signup", response_model=Token)
+def signup(user_data: UserCreate, db: Session = Depends(get_db)):
+    """
+    📝 Create a new user account
+    
+    Returns a JWT token on successful registration.
+    """
+    # Check if user already exists
+    existing_user = get_user_by_email(db, user_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Validate password
+    if len(user_data.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters"
+        )
+    
+    # Create user
+    user = create_user(db, user_data)
+    
+    # Create access token
+    access_token = create_access_token(data={"sub": user.email})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": UserResponse.model_validate(user)
+    }
+
+
+@app.post("/auth/login", response_model=Token)
+def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    """
+    🔑 Login with email and password
+    
+    Returns a JWT token on successful authentication.
+    """
+    user = authenticate_user(db, credentials.email, credentials.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(data={"sub": user.email})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": UserResponse.model_validate(user)
+    }
+
+
+@app.get("/auth/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(require_auth)):
+    """
+    👤 Get current user info
+    
+    Requires authentication.
+    """
+    return UserResponse.model_validate(current_user)
 
 
 # ==========================================

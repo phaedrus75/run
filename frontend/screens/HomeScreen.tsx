@@ -18,9 +18,12 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   StatCard, 
   MotivationBanner, 
@@ -51,6 +54,9 @@ interface HomeScreenProps {
 }
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
+  // 🔐 Auth context
+  const { user, logout } = useAuth();
+  
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentRuns, setRecentRuns] = useState<Run[]>([]);
@@ -153,8 +159,27 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       >
         {/* 👋 Header */}
         <View style={styles.header}>
-          <Text style={styles.greeting}>{getGreeting()}</Text>
-          <Text style={styles.title}>RunTracker</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>
+              {getGreeting()} {user?.name || 'Runner'}
+            </Text>
+            <Text style={styles.title}>RunTracker</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.logoutButton}
+            onPress={() => {
+              Alert.alert(
+                'Log Out',
+                'Are you sure you want to log out?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Log Out', style: 'destructive', onPress: logout },
+                ]
+              );
+            }}
+          >
+            <Ionicons name="log-out-outline" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
         
         {/* 🎉 Motivation Banner */}
@@ -253,7 +278,16 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: spacing.lg,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  logoutButton: {
+    padding: spacing.sm,
   },
   greeting: {
     fontSize: typography.sizes.md,
