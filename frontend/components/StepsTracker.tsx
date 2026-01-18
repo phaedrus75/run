@@ -9,13 +9,14 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Modal,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 
@@ -45,33 +46,35 @@ interface StepsTrackerProps {
 
 export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
   const [showModal, setShowModal] = useState(false);
-  const [stepCount, setStepCount] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedSteps, setSelectedSteps] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit() {
-    const steps = parseInt(stepCount);
-    if (!steps || steps <= 0) {
-      Alert.alert('Error', 'Please enter a valid step count');
+    if (!selectedSteps) {
+      Alert.alert('Error', 'Please select a step count');
       return;
     }
 
     setIsLoading(true);
     try {
+      const dateStr = selectedDate.toISOString().split('T')[0];
       const response = await fetch(`${API_BASE_URL}/steps`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          step_count: steps,
-          recorded_date: `${selectedDate}T12:00:00`,
+          step_count: selectedSteps,
+          recorded_date: `${dateStr}T12:00:00`,
         }),
       });
 
       if (response.ok) {
         setShowModal(false);
-        setStepCount('');
+        setSelectedSteps(null);
+        setSelectedDate(new Date());
         onUpdate();
-        Alert.alert('Success', `Logged ${steps.toLocaleString()} steps! 👟`);
+        Alert.alert('Success', `Logged ${(selectedSteps / 1000).toFixed(0)}k steps! 👟`);
       } else {
         throw new Error('Failed to save');
       }
@@ -82,8 +85,28 @@ export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
     }
   }
 
-  // Quick step buttons
-  const quickSteps = [15000, 20000, 25000];
+  function onDateChange(event: any, date?: Date) {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (date) {
+      setSelectedDate(date);
+    }
+  }
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short',
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Quick step options
+  const stepOptions = [
+    { value: 15000, label: '15k', color: colors.runTypes['15k'] },
+    { value: 20000, label: '20k', color: colors.runTypes['20k'] },
+    { value: 25000, label: '25k', color: colors.success },
+  ];
 
   const currentMonth = summary?.current_month || {
     month: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
@@ -159,55 +182,60 @@ export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
             <TouchableOpacity onPress={() => setShowModal(false)}>
               <Ionicons name="close" size={28} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Log Steps</Text>
+            <Text style={styles.modalTitle}>Log High Step Day</Text>
             <View style={{ width: 28 }} />
           </View>
 
           <View style={styles.modalContent}>
             <Text style={styles.emoji}>👟</Text>
             
-            {/* Date Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Date</Text>
-              <TextInput
-                style={styles.input}
+            {/* Date Picker */}
+            <Text style={styles.sectionLabel}>Select Date</Text>
+            <TouchableOpacity 
+              style={styles.dateButton}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={24} color={colors.primary} />
+              <Text style={styles.dateButtonText}>{formatDate(selectedDate)}</Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
                 value={selectedDate}
-                onChangeText={setSelectedDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textLight}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onDateChange}
+                maximumDate={new Date()}
               />
-            </View>
+            )}
 
-            {/* Step Count Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Step Count</Text>
-              <TextInput
-                style={[styles.input, styles.bigInput]}
-                value={stepCount}
-                onChangeText={setStepCount}
-                keyboardType="numeric"
-                placeholder="e.g., 18500"
-                placeholderTextColor={colors.textLight}
-              />
-            </View>
-
-            {/* Quick Select */}
-            <Text style={styles.quickLabel}>Quick Select:</Text>
-            <View style={styles.quickRow}>
-              {quickSteps.map((steps) => (
+            {/* Step Count Selection */}
+            <Text style={styles.sectionLabel}>Step Count</Text>
+            <View style={styles.optionsRow}>
+              {stepOptions.map((option) => (
                 <TouchableOpacity
-                  key={steps}
+                  key={option.value}
                   style={[
-                    styles.quickButton,
-                    stepCount === steps.toString() && styles.quickButtonActive,
+                    styles.optionButton,
+                    selectedSteps === option.value && { 
+                      backgroundColor: option.color,
+                      borderColor: option.color,
+                    },
                   ]}
-                  onPress={() => setStepCount(steps.toString())}
+                  onPress={() => setSelectedSteps(option.value)}
                 >
                   <Text style={[
-                    styles.quickButtonText,
-                    stepCount === steps.toString() && styles.quickButtonTextActive,
+                    styles.optionLabel,
+                    selectedSteps === option.value && styles.optionLabelActive,
                   ]}>
-                    {(steps / 1000).toFixed(0)}k
+                    {option.label}
+                  </Text>
+                  <Text style={[
+                    styles.optionSubtext,
+                    selectedSteps === option.value && styles.optionSubtextActive,
+                  ]}>
+                    steps
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -215,14 +243,19 @@ export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
 
             {/* Submit Button */}
             <TouchableOpacity
-              style={[styles.submitButton, isLoading && styles.buttonDisabled]}
+              style={[
+                styles.submitButton, 
+                (!selectedSteps || isLoading) && styles.buttonDisabled
+              ]}
               onPress={handleSubmit}
-              disabled={isLoading}
+              disabled={!selectedSteps || isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color={colors.surface} />
               ) : (
-                <Text style={styles.submitButtonText}>Log Steps</Text>
+                <Text style={styles.submitButtonText}>
+                  {selectedSteps ? `Log ${(selectedSteps / 1000).toFixed(0)}k Steps` : 'Select Steps'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -339,55 +372,62 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 64,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
-  inputContainer: {
-    width: '100%',
-    marginBottom: spacing.lg,
+  sectionLabel: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
+    alignSelf: 'flex-start',
   },
-  label: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  input: {
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.md,
+    width: '100%',
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
+  },
+  dateButtonText: {
+    flex: 1,
     fontSize: typography.sizes.md,
     color: colors.text,
-    textAlign: 'center',
   },
-  bigInput: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-  },
-  quickLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  quickRow: {
+  optionsRow: {
     flexDirection: 'row',
     gap: spacing.md,
     marginBottom: spacing.xl,
+    width: '100%',
+    justifyContent: 'center',
   },
-  quickButton: {
+  optionButton: {
+    flex: 1,
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
-  quickButtonActive: {
-    backgroundColor: colors.primary,
+  optionLabel: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
   },
-  quickButtonText: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-    color: colors.textSecondary,
-  },
-  quickButtonTextActive: {
+  optionLabelActive: {
     color: colors.surface,
+  },
+  optionSubtext: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  optionSubtextActive: {
+    color: colors.surface,
+    opacity: 0.8,
   },
   submitButton: {
     backgroundColor: colors.primary,
@@ -396,9 +436,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     width: '100%',
     alignItems: 'center',
+    marginTop: spacing.lg,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
   },
   submitButtonText: {
     fontSize: typography.sizes.md,
