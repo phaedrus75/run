@@ -280,10 +280,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   badge15k: {
-    backgroundColor: colors.runColors['15k'] + '30',
+    backgroundColor: colors.runTypes['15k'] + '30',
   },
   badge20k: {
-    backgroundColor: colors.runColors['20k'] + '30',
+    backgroundColor: colors.runTypes['20k'] + '30',
   },
   badge25k: {
     backgroundColor: colors.success + '30',
