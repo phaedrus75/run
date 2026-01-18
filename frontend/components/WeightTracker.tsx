@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   weightValue: {
-    fontSize: typography.sizes.hero,
+    fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },

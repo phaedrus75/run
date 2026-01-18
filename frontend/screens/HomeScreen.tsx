@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.primaryLight + "40",
     borderRadius: 22,
   },
   streakEmoji: {
