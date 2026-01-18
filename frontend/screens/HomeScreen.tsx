@@ -169,12 +169,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       >
         {/* 👋 Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>
-              {getGreeting()} {user?.name || 'Runner'}
-            </Text>
-            <Text style={styles.title}>RunZen</Text>
-          </View>
+          <Text style={styles.title}>RunZen</Text>
           <View style={styles.headerRight}>
             {/* 🔥 Streak Badge */}
             {streakProgress && (
@@ -195,6 +190,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </TouchableOpacity>
           </View>
         </View>
+        
+        {/* 👋 Greeting */}
+        <Text style={styles.greeting}>
+          {getGreeting()} {user?.name || 'Runner'}
+        </Text>
         
         {/* 📊 Lifetime Stats */}
         <View style={[styles.lifetimeCard, shadows.medium]}>
@@ -321,10 +321,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  headerLeft: {
-    flex: 1,
+    marginBottom: spacing.xs,
   },
   headerRight: {
     flexDirection: 'row',
@@ -332,29 +329,29 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   streakBadge: {
+    width: 44,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.accent,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
+    borderRadius: 22,
   },
   streakEmoji: {
-    fontSize: 14,
+    fontSize: 12,
   },
   streakCount: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     fontWeight: typography.weights.bold,
     color: colors.text,
-    marginLeft: 2,
+    marginLeft: 1,
   },
   profileButton: {
-    padding: spacing.xs,
   },
   profileAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -367,12 +364,12 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: typography.sizes.md,
     color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   title: {
-    fontSize: typography.sizes.hero,
+    fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
     color: colors.text,
-    marginTop: spacing.xs,
   },
   sectionTitle: {
     fontSize: typography.sizes.lg,
