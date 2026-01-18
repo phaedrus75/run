@@ -20,3 +20,4 @@ export { Achievements } from './Achievements';
 export { WeightTracker } from './WeightTracker';
 export { PaceTrendChart } from './PaceTrendChart';
 export { ProfileModal } from './ProfileModal';
+export { StepsTracker } from './StepsTracker';

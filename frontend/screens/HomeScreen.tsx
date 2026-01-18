@@ -34,11 +34,13 @@ import {
   GoalsProgress as GoalsProgressComponent,
   WeightTracker,
   ProfileModal,
+  StepsTracker,
 } from '../components';
 import { 
   runApi, 
   statsApi, 
   weightApi,
+  stepsApi,
   type Run, 
   type Stats, 
   type MotivationalMessage, 
@@ -48,6 +50,7 @@ import {
   type AchievementsData,
   type WeightProgress,
   type WeightChartData,
+  type StepsSummary,
 } from '../services/api';
 
 interface HomeScreenProps {
@@ -71,13 +74,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [achievements, setAchievements] = useState<AchievementsData | null>(null);
   const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
   const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
+  const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   
   // 📡 Fetch data from API
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, runsData, motivationData, streakData, goalsData, recordsData, achievementsData, weightProgressData, weightChartData] = await Promise.all([
+      const [statsData, runsData, motivationData, streakData, goalsData, recordsData, achievementsData, weightProgressData, weightChartData, stepsData] = await Promise.all([
         statsApi.get(),
         runApi.getAll({ limit: 3 }),
         statsApi.getMotivation(),
@@ -87,6 +91,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         statsApi.getAchievements(),
         weightApi.getProgress(),
         weightApi.getChartData(),
+        stepsApi.getSummary(),
       ]);
       
       setStats(statsData);
@@ -98,6 +103,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       setAchievements(achievementsData);
       setWeightProgress(weightProgressData);
       setWeightChart(weightChartData);
+      setStepsSummary(stepsData);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       // For demo purposes, show mock data if API is unavailable
@@ -212,6 +218,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             onUpdate={fetchData}
           />
         )}
+        
+        {/* 👟 Steps Tracker */}
+        <StepsTracker 
+          summary={stepsSummary}
+          onUpdate={fetchData}
+        />
         
         {/* 🎯 Goals Progress */}
         {goals && (

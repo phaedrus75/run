@@ -375,6 +375,75 @@ export const weightApi = {
 };
 
 // ==========================================
+// 👟 STEPS API
+// ==========================================
+
+export interface StepEntry {
+  id: number;
+  step_count: number;
+  recorded_date: string;
+  notes: string | null;
+}
+
+export interface StepsSummary {
+  current_month: {
+    month: string;
+    days_15k: number;
+    days_20k: number;
+    days_25k: number;
+    highest: number;
+    total_entries: number;
+  };
+  monthly_history: Array<{
+    month: string;
+    days_15k: number;
+    days_20k: number;
+    days_25k: number;
+    highest: number;
+    total_entries: number;
+  }>;
+  all_time: {
+    days_15k: number;
+    days_20k: number;
+    days_25k: number;
+    total_entries: number;
+  };
+}
+
+export const stepsApi = {
+  /**
+   * 👟 Get all step entries
+   */
+  getAll: (limit: number = 100): Promise<StepEntry[]> => {
+    return apiFetch(`/steps?limit=${limit}`);
+  },
+
+  /**
+   * 👟 Create a new step entry
+   */
+  create: (data: { step_count: number; recorded_date?: string; notes?: string }): Promise<StepEntry> => {
+    return apiFetch('/steps', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * 👟 Delete a step entry
+   */
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/steps/${id}`, { method: 'DELETE' });
+  },
+
+  /**
+   * 👟 Get steps summary (monthly counts)
+   */
+  getSummary: (): Promise<StepsSummary> => {
+    return apiFetch('/steps/summary');
+  },
+};
+
+// ==========================================
 // 🔧 UTILITY FUNCTIONS
 // ==========================================
 

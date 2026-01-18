@@ -25,7 +25,7 @@ import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight, User, UserGoals
+from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email,
@@ -537,6 +537,149 @@ def get_weight_chart(db: Session = Depends(get_db)):
     """
     from weight import get_weight_chart_data
     return get_weight_chart_data(db)
+
+
+# ==========================================
+# 👟 STEPS TRACKING ENDPOINTS
+# ==========================================
+
+@app.post("/steps")
+def create_step_entry(step_data: dict, db: Session = Depends(get_db)):
+    """
+    👟 Log a step count for a day
+    """
+    from datetime import datetime
+    
+    step_count = step_data.get("step_count")
+    if not step_count or step_count <= 0:
+        raise HTTPException(status_code=400, detail="Step count must be a positive number")
+    
+    # Parse date
+    recorded_date = None
+    if step_data.get("recorded_date"):
+        try:
+            recorded_date = datetime.fromisoformat(step_data["recorded_date"].replace("Z", "+00:00"))
+        except:
+            recorded_date = datetime.now()
+    else:
+        recorded_date = datetime.now()
+    
+    # Create entry
+    entry = StepEntry(
+        step_count=step_count,
+        recorded_date=recorded_date,
+        notes=step_data.get("notes")
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    
+    return {
+        "id": entry.id,
+        "step_count": entry.step_count,
+        "recorded_date": entry.recorded_date.isoformat(),
+        "notes": entry.notes,
+    }
+
+
+@app.get("/steps")
+def get_step_entries(limit: int = 100, db: Session = Depends(get_db)):
+    """
+    📋 Get all step entries
+    """
+    entries = db.query(StepEntry).order_by(StepEntry.recorded_date.desc()).limit(limit).all()
+    return [
+        {
+            "id": e.id,
+            "step_count": e.step_count,
+            "recorded_date": e.recorded_date.isoformat(),
+            "notes": e.notes,
+        }
+        for e in entries
+    ]
+
+
+@app.delete("/steps/{entry_id}")
+def delete_step_entry(entry_id: int, db: Session = Depends(get_db)):
+    """
+    🗑️ Delete a step entry
+    """
+    entry = db.query(StepEntry).filter(StepEntry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Step entry not found")
+    db.delete(entry)
+    db.commit()
+    return {"message": "Step entry deleted"}
+
+
+@app.get("/steps/summary")
+def get_steps_summary(db: Session = Depends(get_db)):
+    """
+    📊 Get monthly high step day counts
+    
+    Returns counts of 15k+, 20k+, 25k+ days per month.
+    """
+    from datetime import datetime
+    from sqlalchemy import extract
+    
+    # Get all step entries from 2026
+    entries = db.query(StepEntry).filter(
+        StepEntry.recorded_date >= datetime(2026, 1, 1)
+    ).all()
+    
+    # Group by month
+    monthly_data = {}
+    for entry in entries:
+        month_key = entry.recorded_date.strftime("%Y-%m")
+        if month_key not in monthly_data:
+            monthly_data[month_key] = {
+                "month": entry.recorded_date.strftime("%b %Y"),
+                "total_entries": 0,
+                "days_15k": 0,
+                "days_20k": 0,
+                "days_25k": 0,
+                "highest": 0,
+            }
+        
+        data = monthly_data[month_key]
+        data["total_entries"] += 1
+        
+        if entry.step_count >= 15000:
+            data["days_15k"] += 1
+        if entry.step_count >= 20000:
+            data["days_20k"] += 1
+        if entry.step_count >= 25000:
+            data["days_25k"] += 1
+        if entry.step_count > data["highest"]:
+            data["highest"] = entry.step_count
+    
+    # Calculate current month stats
+    now = datetime.now()
+    current_month = now.strftime("%Y-%m")
+    current_data = monthly_data.get(current_month, {
+        "month": now.strftime("%b %Y"),
+        "total_entries": 0,
+        "days_15k": 0,
+        "days_20k": 0,
+        "days_25k": 0,
+        "highest": 0,
+    })
+    
+    # Calculate all-time totals
+    all_15k = sum(m["days_15k"] for m in monthly_data.values())
+    all_20k = sum(m["days_20k"] for m in monthly_data.values())
+    all_25k = sum(m["days_25k"] for m in monthly_data.values())
+    
+    return {
+        "current_month": current_data,
+        "monthly_history": sorted(monthly_data.values(), key=lambda x: x["month"], reverse=True),
+        "all_time": {
+            "days_15k": all_15k,
+            "days_20k": all_20k,
+            "days_25k": all_25k,
+            "total_entries": len(entries),
+        }
+    }
 
 
 # ==========================================

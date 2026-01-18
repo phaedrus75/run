@@ -170,6 +170,32 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class StepEntry(Base):
+    """
+    👟 Step Entry Model - Track daily step counts
+    
+    Captures high step days (15k+, 20k+, 25k+).
+    """
+    __tablename__ = "step_entries"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 👤 User who logged this
+    user_id = Column(Integer, nullable=True, index=True)
+    
+    # 👟 Step count for the day
+    step_count = Column(Integer, nullable=False)
+    
+    # 📅 Date of the step entry
+    recorded_date = Column(DateTime, nullable=False)
+    
+    # 📝 Optional notes
+    notes = Column(String, nullable=True)
+    
+    # 📅 When this was created
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class UserGoals(Base):
     """
     🎯 User Goals Model - Personal goals for each user
