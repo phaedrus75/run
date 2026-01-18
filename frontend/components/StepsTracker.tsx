@@ -167,11 +167,6 @@ export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
             <Text style={styles.totalNumber}>{allTime.total_entries}</Text>
             <Text style={styles.totalLabel}>total high step days</Text>
           </View>
-          <View style={styles.allTimeRow}>
-            <Text style={styles.allTimeValue}>
-              {allTime.days_15k} × 15k+ • {allTime.days_20k} × 20k+ • {allTime.days_25k} × 25k+
-            </Text>
-          </View>
         </View>
       )}
 
