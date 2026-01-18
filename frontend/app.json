@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "RunTracker",
-    "slug": "runtracker",
+    "name": "RunZen",
+    "slug": "runzen",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,14 +9,14 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1a1a2e"
+      "backgroundColor": "#1E3A5F"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.phaedrus75.runtracker",
+      "bundleIdentifier": "com.phaedrus75.runzen",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -24,9 +24,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1a1a2e"
+        "backgroundColor": "#1E3A5F"
       },
-      "package": "com.phaedrus75.runtracker"
+      "package": "com.phaedrus75.runzen"
     },
     "web": {
       "favicon": "./assets/favicon.png"

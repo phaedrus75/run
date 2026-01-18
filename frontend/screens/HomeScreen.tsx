@@ -173,7 +173,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.greeting}>
               {getGreeting()} {user?.name || 'Runner'}
             </Text>
-            <Text style={styles.title}>RunTracker</Text>
+            <Text style={styles.title}>RunZen</Text>
           </View>
           <View style={styles.headerRight}>
             {/* 🔥 Streak Badge */}

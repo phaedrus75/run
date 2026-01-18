@@ -45,7 +45,7 @@ import crud
 # ==========================================
 
 app = FastAPI(
-    title="🏃 RunTracker API",
+    title="🏃 RunZen API",
     description="Track your runs, crush your goals!",
     version="1.0.0",
 )
@@ -108,7 +108,7 @@ def read_root():
     - Whatever you return gets sent back as JSON automatically!
     """
     return {
-        "message": "🏃 Welcome to RunTracker API!",
+        "message": "🏃 Welcome to RunZen API!",
         "docs": "Visit /docs for interactive documentation",
         "health": "OK"
     }
