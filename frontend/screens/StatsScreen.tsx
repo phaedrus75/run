@@ -212,29 +212,30 @@ export function StatsScreen() {
   const renderWeeklyView = () => {
     const chartData = getWeeklyChartData();
     
-    // Calculate totals for summary
-    const totalKm = chartData.reduce((sum, d) => sum + d.totalKm, 0);
-    const totalRuns = chartData.reduce((sum, d) => sum + d.numRuns, 0);
+    // Get CURRENT week stats (last item in chartData is current week)
+    const currentWeek = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+    const thisWeekKm = currentWeek?.totalKm || 0;
+    const thisWeekRuns = currentWeek?.numRuns || 0;
     
     return (
       <View>
-        {/* Summary */}
+        {/* This Week Summary */}
         <View style={[styles.summaryRow, shadows.small]}>
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{totalRuns}</Text>
-            <Text style={styles.summaryLabel}>Total Runs</Text>
+            <Text style={styles.summaryValue}>{thisWeekRuns}</Text>
+            <Text style={styles.summaryLabel}>Runs This Week</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{totalKm.toFixed(1)}</Text>
-            <Text style={styles.summaryLabel}>Total KM</Text>
+            <Text style={styles.summaryValue}>{thisWeekKm.toFixed(1)}</Text>
+            <Text style={styles.summaryLabel}>KM This Week</Text>
           </View>
         </View>
         
         {/* Chart */}
         <StatsChart 
           data={chartData} 
-          title="Last 8 Weeks (2026+)" 
+          title="Last 8 Weeks" 
         />
         
         {/* Pace Trend */}

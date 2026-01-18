@@ -126,39 +126,7 @@ export function StatsChart({ data, title }: StatsChartProps) {
             })}
           </View>
           
-          {/* Connect line points */}
-          <View style={styles.lineContainer}>
-            {data.map((point, index) => {
-              if (index === 0 || point.avgPaceSeconds === 0) return null;
-              const prevPoint = data[index - 1];
-              if (prevPoint.avgPaceSeconds === 0) return null;
-              
-              const y1 = getLineY(prevPoint.avgPaceSeconds);
-              const y2 = getLineY(point.avgPaceSeconds);
-              const barWidth = 100 / data.length;
-              
-              // Simple line connector (using a rotated view)
-              const dx = barWidth;
-              const dy = y2 - y1;
-              const length = Math.sqrt(dx * dx + dy * dy);
-              const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-              
-              return (
-                <View
-                  key={`line-${index}`}
-                  style={[
-                    styles.lineSegment,
-                    {
-                      left: `${(index - 0.5) * barWidth}%`,
-                      bottom: chartHeight - Math.max(y1, y2) - 3,
-                      width: `${barWidth}%`,
-                      height: Math.abs(dy) + 2,
-                    }
-                  ]}
-                />
-              );
-            })}
-          </View>
+          {/* Line points are shown above, no line segments needed */}
         </View>
         
         {/* Y-Axis Labels - Pace */}
