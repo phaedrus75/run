@@ -163,5 +163,35 @@ class User(Base):
     # ✅ Is the account active?
     is_active = Column(Boolean, default=True)
     
+    # 🎯 Has completed onboarding?
+    onboarding_complete = Column(Boolean, default=False)
+    
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
+
+
+class UserGoals(Base):
+    """
+    🎯 User Goals Model - Personal goals for each user
+    
+    Stores weight goals and running goals.
+    """
+    __tablename__ = "user_goals"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 👤 User this goal belongs to
+    user_id = Column(Integer, nullable=False, unique=True, index=True)
+    
+    # ⚖️ Weight Goals
+    start_weight_lbs = Column(Float, nullable=True)
+    goal_weight_lbs = Column(Float, nullable=True)
+    weight_goal_date = Column(DateTime, nullable=True)
+    
+    # 🏃 Running Goals
+    yearly_km_goal = Column(Float, default=1000.0)
+    monthly_km_goal = Column(Float, default=100.0)
+    
+    # 📅 Timestamps
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

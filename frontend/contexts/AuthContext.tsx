@@ -13,15 +13,18 @@ import {
   logout as apiLogout,
   getStoredUser,
   getToken,
+  setStoredUser,
 } from '../services/auth';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  needsOnboarding: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
+  completeOnboarding: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,15 +69,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  function completeOnboarding() {
+    if (user) {
+      const updatedUser = { ...user, onboarding_complete: true };
+      setUser(updatedUser);
+      setStoredUser(updatedUser);
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isLoading,
         isAuthenticated: !!user,
+        needsOnboarding: !!user && !user.onboarding_complete,
         login,
         signup,
         logout,
+        completeOnboarding,
       }}
     >
       {children}

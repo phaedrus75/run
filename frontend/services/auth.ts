@@ -20,6 +20,7 @@ export interface User {
   email: string;
   name: string | null;
   is_active: boolean;
+  onboarding_complete: boolean;
   created_at: string;
 }
 

@@ -27,6 +27,7 @@ import { HistoryScreen } from './screens/HistoryScreen';
 import { AddRunScreen } from './screens/AddRunScreen';
 import { StatsScreen } from './screens/StatsScreen';
 import AuthScreen from './screens/AuthScreen';
+import OnboardingScreen from './screens/OnboardingScreen';
 
 // 🔐 Import auth context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -153,10 +154,10 @@ function MainTabs() {
 }
 
 /**
- * 🔄 App Navigator - Chooses between Auth and Main based on login state
+ * 🔄 App Navigator - Chooses between Auth, Onboarding, and Main based on state
  */
 function AppNavigator() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, needsOnboarding, user, completeOnboarding } = useAuth();
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -167,9 +168,29 @@ function AppNavigator() {
     );
   }
 
+  // Not logged in - show auth screen
+  if (!isAuthenticated) {
+    return (
+      <NavigationContainer>
+        <AuthScreen />
+      </NavigationContainer>
+    );
+  }
+
+  // Logged in but needs onboarding
+  if (needsOnboarding) {
+    return (
+      <OnboardingScreen 
+        onComplete={completeOnboarding}
+        userName={user?.name || undefined}
+      />
+    );
+  }
+
+  // Fully authenticated and onboarded
   return (
     <NavigationContainer>
-      {isAuthenticated ? <MainTabs /> : <AuthScreen />}
+      <MainTabs />
     </NavigationContainer>
   );
 }

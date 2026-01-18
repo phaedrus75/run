@@ -62,6 +62,7 @@ class UserResponse(BaseModel):
     email: str
     name: Optional[str]
     is_active: bool
+    onboarding_complete: bool = False
     created_at: datetime
 
     class Config:

@@ -25,7 +25,7 @@ import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight, User
+from models import Run, WeeklyPlan, Weight, User, UserGoals
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email,
@@ -159,6 +159,84 @@ def get_me(current_user: User = Depends(require_auth)):
     Requires authentication.
     """
     return UserResponse.model_validate(current_user)
+
+
+# ==========================================
+# 🎯 USER GOALS ENDPOINTS
+# ==========================================
+
+@app.get("/user/goals")
+def get_user_goals(current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """
+    🎯 Get current user's goals
+    """
+    goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+    if not goals:
+        # Return defaults
+        return {
+            "start_weight_lbs": None,
+            "goal_weight_lbs": None,
+            "weight_goal_date": None,
+            "yearly_km_goal": 1000.0,
+            "monthly_km_goal": 100.0,
+            "onboarding_complete": current_user.onboarding_complete,
+        }
+    return {
+        "start_weight_lbs": goals.start_weight_lbs,
+        "goal_weight_lbs": goals.goal_weight_lbs,
+        "weight_goal_date": goals.weight_goal_date.isoformat() if goals.weight_goal_date else None,
+        "yearly_km_goal": goals.yearly_km_goal,
+        "monthly_km_goal": goals.monthly_km_goal,
+        "onboarding_complete": current_user.onboarding_complete,
+    }
+
+
+@app.post("/user/goals")
+def set_user_goals(goals_data: dict, current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """
+    🎯 Set or update user's goals
+    """
+    from datetime import datetime
+    
+    # Get existing goals or create new
+    goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+    if not goals:
+        goals = UserGoals(user_id=current_user.id)
+        db.add(goals)
+    
+    # Update fields if provided
+    if "start_weight_lbs" in goals_data:
+        goals.start_weight_lbs = goals_data["start_weight_lbs"]
+    if "goal_weight_lbs" in goals_data:
+        goals.goal_weight_lbs = goals_data["goal_weight_lbs"]
+    if "weight_goal_date" in goals_data and goals_data["weight_goal_date"]:
+        goals.weight_goal_date = datetime.fromisoformat(goals_data["weight_goal_date"].replace("Z", "+00:00"))
+    if "yearly_km_goal" in goals_data:
+        goals.yearly_km_goal = goals_data["yearly_km_goal"]
+    if "monthly_km_goal" in goals_data:
+        goals.monthly_km_goal = goals_data["monthly_km_goal"]
+    
+    db.commit()
+    db.refresh(goals)
+    
+    return {
+        "message": "Goals updated",
+        "start_weight_lbs": goals.start_weight_lbs,
+        "goal_weight_lbs": goals.goal_weight_lbs,
+        "weight_goal_date": goals.weight_goal_date.isoformat() if goals.weight_goal_date else None,
+        "yearly_km_goal": goals.yearly_km_goal,
+        "monthly_km_goal": goals.monthly_km_goal,
+    }
+
+
+@app.post("/user/complete-onboarding")
+def complete_onboarding(current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """
+    ✅ Mark onboarding as complete
+    """
+    current_user.onboarding_complete = True
+    db.commit()
+    return {"message": "Onboarding complete", "onboarding_complete": True}
 
 
 # ==========================================
