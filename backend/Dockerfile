@@ -1,5 +1,5 @@
-# Use Python 3.11 slim image
-FROM python:3.11-slim
+# Use Python 3.11 image (not slim - need build tools for bcrypt)
+FROM python:3.11
 
 # Set working directory
 WORKDIR /app
