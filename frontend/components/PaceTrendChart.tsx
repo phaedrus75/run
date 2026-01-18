@@ -60,9 +60,10 @@ export function PaceTrendChart({ data, title = "Pace Trend" }: PaceTrendChartPro
   const paddedMax = maxPace + range * 0.1;
   const paddedRange = paddedMax - paddedMin;
 
-  const chartHeight = 120;
-  const chartWidth = Dimensions.get('window').width - (spacing.lg * 2) - (spacing.lg * 2);
-  const pointSpacing = chartWidth / (validData.length - 1);
+  const chartHeight = 100;
+  // Account for: screen padding (lg*2), container padding (lg*2), y-axis (40), extra buffer (20)
+  const chartWidth = Dimensions.get('window').width - (spacing.lg * 4) - 40 - 20;
+  const pointSpacing = validData.length > 1 ? chartWidth / (validData.length - 1) : chartWidth;
 
   // Calculate improvement
   const firstPace = validData[0].avgPaceSeconds;
@@ -177,19 +178,32 @@ export function PaceTrendChart({ data, title = "Pace Trend" }: PaceTrendChartPro
         </View>
       </View>
 
-      {/* X-axis labels */}
+      {/* X-axis labels - show first, middle, and last only */}
       <View style={styles.xAxis}>
-        {validData.map((d, i) => (
-          <Text 
-            key={i} 
-            style={[
-              styles.xLabel,
-              { left: i * pointSpacing - 15, width: 30 }
-            ]}
-          >
-            {d.label.split(' ')[0]}
-          </Text>
-        ))}
+        {validData.length <= 4 ? (
+          // Show all labels if 4 or fewer
+          validData.map((d, i) => (
+            <Text 
+              key={i} 
+              style={[
+                styles.xLabel,
+                { left: Math.max(0, i * pointSpacing - 12), width: 28 }
+              ]}
+            >
+              {d.label.split(' ')[0]}
+            </Text>
+          ))
+        ) : (
+          // Show first and last only
+          <>
+            <Text style={[styles.xLabel, { left: 0, width: 28 }]}>
+              {validData[0].label.split(' ')[0]}
+            </Text>
+            <Text style={[styles.xLabel, { left: (validData.length - 1) * pointSpacing - 12, width: 28 }]}>
+              {validData[validData.length - 1].label.split(' ')[0]}
+            </Text>
+          </>
+        )}
       </View>
 
       <Text style={styles.footerNote}>
@@ -270,6 +284,7 @@ const styles = StyleSheet.create({
   chartContainer: {
     flexDirection: 'row',
     marginBottom: spacing.sm,
+    overflow: 'hidden',
   },
   yAxis: {
     width: 40,
@@ -284,6 +299,7 @@ const styles = StyleSheet.create({
   chart: {
     flex: 1,
     position: 'relative',
+    overflow: 'hidden',
   },
   gridLine: {
     position: 'absolute',
@@ -311,10 +327,11 @@ const styles = StyleSheet.create({
     position: 'relative',
     height: 20,
     marginLeft: 40,
+    overflow: 'hidden',
   },
   xLabel: {
     position: 'absolute',
-    fontSize: 10,
+    fontSize: 9,
     color: colors.textLight,
     textAlign: 'center',
   },
