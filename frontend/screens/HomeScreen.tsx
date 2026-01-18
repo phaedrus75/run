@@ -33,6 +33,7 @@ import {
   Achievements,
   GoalsProgress as GoalsProgressComponent,
   WeightTracker,
+  ProfileModal,
 } from '../components';
 import { 
   runApi, 
@@ -55,7 +56,10 @@ interface HomeScreenProps {
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   // 🔐 Auth context
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  
+  // 👤 Profile modal state
+  const [showProfile, setShowProfile] = useState(false);
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
@@ -166,21 +170,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.title}>RunTracker</Text>
           </View>
           <TouchableOpacity 
-            style={styles.logoutButton}
-            onPress={() => {
-              Alert.alert(
-                'Log Out',
-                'Are you sure you want to log out?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Log Out', style: 'destructive', onPress: logout },
-                ]
-              );
-            }}
+            style={styles.profileButton}
+            onPress={() => setShowProfile(true)}
           >
-            <Ionicons name="log-out-outline" size={24} color={colors.textSecondary} />
+            <View style={styles.profileAvatar}>
+              <Text style={styles.profileAvatarText}>
+                {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
+        
+        {/* 👤 Profile Modal */}
+        <ProfileModal 
+          visible={showProfile} 
+          onClose={() => setShowProfile(false)} 
+        />
         
         {/* 🎉 Motivation Banner */}
         {motivation && (
@@ -286,8 +291,21 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
-  logoutButton: {
-    padding: spacing.sm,
+  profileButton: {
+    padding: spacing.xs,
+  },
+  profileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileAvatarText: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.surface,
   },
   greeting: {
     fontSize: typography.sizes.md,
