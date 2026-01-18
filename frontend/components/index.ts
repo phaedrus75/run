@@ -14,6 +14,7 @@ export { MotivationBanner } from './MotivationBanner';
 export { EditRunModal } from './EditRunModal';
 export { StatsChart } from './StatsChart';
 export { StreakProgress } from './StreakProgress';
+export { StreakModal } from './StreakModal';
 export { GoalsProgress } from './GoalsProgress';
 export { PersonalRecords } from './PersonalRecords';
 export { Achievements } from './Achievements';

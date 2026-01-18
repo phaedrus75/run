@@ -28,6 +28,7 @@ import {
   StatCard, 
   RunHistoryCard, 
   StreakProgress,
+  StreakModal,
   PersonalRecords,
   Achievements,
   GoalsProgress as GoalsProgressComponent,
@@ -63,6 +64,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   
   // 👤 Profile modal state
   const [showProfile, setShowProfile] = useState(false);
+  
+  // 🔥 Streak modal state
+  const [showStreak, setShowStreak] = useState(false);
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
@@ -173,10 +177,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <View style={styles.headerRight}>
             {/* 🔥 Streak Badge */}
             {streakProgress && (
-              <View style={styles.streakBadge}>
+              <TouchableOpacity 
+                style={styles.streakBadge}
+                onPress={() => setShowStreak(true)}
+              >
                 <Text style={styles.streakEmoji}>🔥</Text>
                 <Text style={styles.streakCount}>{streakProgress.current_streak}</Text>
-              </View>
+              </TouchableOpacity>
             )}
             <TouchableOpacity 
               style={styles.profileButton}
@@ -292,6 +299,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <ProfileModal 
         visible={showProfile} 
         onClose={() => setShowProfile(false)} 
+      />
+      
+      {/* 🔥 Streak Modal */}
+      <StreakModal
+        visible={showStreak}
+        onClose={() => setShowStreak(false)}
+        progress={streakProgress}
       />
     </SafeAreaView>
   );

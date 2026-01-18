@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
-import { StatCard, StatsChart, PaceTrendChart, WeightTracker } from '../components';
+import { StatCard, StatsChart, PaceTrendChart, WeightTracker, StreakProgress } from '../components';
 import { 
   runApi, 
   statsApi, 
@@ -26,6 +26,7 @@ import {
   type Stats,
   type WeightProgress,
   type WeightChartData,
+  type WeeklyStreakProgress,
 } from '../services/api';
 
 type ViewMode = 'week' | 'month' | 'all';
@@ -41,19 +42,22 @@ export function StatsScreen() {
   const [loading, setLoading] = useState(true);
   const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
   const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
+  const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
 
   // 📡 Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, runsData, weightProgressData, weightChartData] = await Promise.all([
+      const [statsData, runsData, weightProgressData, weightChartData, streakData] = await Promise.all([
         statsApi.get(),
         runApi.getAll({ limit: 1000 }),
         weightApi.getProgress(),
         weightApi.getChartData(),
+        statsApi.getStreakProgress(),
       ]);
       setStats(statsData);
       setWeightProgress(weightProgressData);
       setWeightChart(weightChartData);
+      setStreakProgress(streakData);
       
       // Filter runs to only include 2026+
       const filteredRuns = runsData.filter(run => {
@@ -247,6 +251,25 @@ export function StatsScreen() {
           }))}
           title="📈 Pace Trend"
         />
+        
+        {/* Streak Progress */}
+        <Text style={styles.sectionTitle}>🔥 Weekly Streak</Text>
+        {streakProgress && (
+          <StreakProgress progress={streakProgress} />
+        )}
+        
+        {/* Streak Stats */}
+        <View style={[styles.streakStatsRow, shadows.small]}>
+          <View style={styles.streakStatItem}>
+            <Text style={styles.streakStatValue}>{streakProgress?.current_streak || 0}</Text>
+            <Text style={styles.streakStatLabel}>Current</Text>
+          </View>
+          <View style={styles.streakStatDivider} />
+          <View style={styles.streakStatItem}>
+            <Text style={styles.streakStatValue}>{streakProgress?.longest_streak || 0}</Text>
+            <Text style={styles.streakStatLabel}>Best Ever</Text>
+          </View>
+        </View>
         
         {/* Weekly Details */}
         <Text style={styles.sectionTitle}>Week Details</Text>
@@ -622,5 +645,32 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.textLight,
     marginTop: 2,
+  },
+  streakStatsRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    alignItems: 'center',
+  },
+  streakStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  streakStatValue: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
+  streakStatLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  streakStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.border,
   },
 });
