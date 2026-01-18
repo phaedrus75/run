@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   title: {
     fontSize: typography.sizes.xl,
@@ -184,11 +184,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   streakCard: {
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.background,
     borderRadius: radius.lg,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
   streakCardComplete: {
     borderWidth: 2,
@@ -196,45 +197,45 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success + '10',
   },
   streakEmoji: {
-    fontSize: 48,
-    marginBottom: spacing.sm,
+    fontSize: 32,
+    marginRight: spacing.sm,
   },
   streakNumber: {
-    fontSize: 64,
+    fontSize: 40,
     fontWeight: typography.weights.bold,
     color: colors.primary,
-    lineHeight: 72,
+    lineHeight: 44,
   },
   streakLabel: {
-    fontSize: typography.sizes.lg,
+    fontSize: typography.sizes.md,
     color: colors.textSecondary,
-    marginTop: -spacing.xs,
+    marginLeft: spacing.xs,
   },
   bestStreak: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.textLight,
-    marginTop: spacing.sm,
+    marginLeft: 'auto',
   },
   bestStreakCurrent: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.success,
     fontWeight: typography.weights.semibold,
-    marginTop: spacing.sm,
+    marginLeft: 'auto',
   },
   sectionTitle: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   progressCard: {
     backgroundColor: colors.background,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
   },
   progressItem: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   progressHeader: {
     flexDirection: 'row',
@@ -280,8 +281,8 @@ const styles = StyleSheet.create({
   messageCard: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
     alignItems: 'center',
   },
   messageCardComplete: {
@@ -295,8 +296,8 @@ const styles = StyleSheet.create({
   rulesCard: {
     backgroundColor: colors.background,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
   },
   ruleText: {
     fontSize: typography.sizes.sm,
