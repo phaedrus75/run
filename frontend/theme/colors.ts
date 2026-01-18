@@ -47,7 +47,8 @@ export const colors = {
     '5k': '#4ECDC4',   // Teal
     '10k': '#A29BFE',  // Purple
     '15k': '#FDCB6E',  // Yellow
-    '20k': '#1A1A1A',  // Deep Black
+    '18k': '#FF7F50',  // Coral Orange
+    '21k': '#1A1A1A',  // Deep Black (Half Marathon)
   } as Record<string, string>,
   
   // 🌊 Gradients (for LinearGradient)

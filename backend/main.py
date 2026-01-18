@@ -423,7 +423,7 @@ def get_personal_records(db: Session = Depends(get_db)):
     """
     🏆 Get personal records for each distance
     
-    Returns fastest time for 3k, 5k, 10k, 15k, 20k
+    Returns fastest time for 3k, 5k, 10k, 15k, 18k, 21k
     """
     from achievements import get_personal_records
     return get_personal_records(db)

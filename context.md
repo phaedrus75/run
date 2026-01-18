@@ -17,7 +17,7 @@ As a user
 
 I want to plan my runs each week
 
-Runs are in the following types - 3k, 5k, 10k, 15k, 20k
+Runs are in the following types - 3k, 5k, 10k, 15k, 18k, 21k
 
 For each run I want to capture the time I took - so I should be able to tap the screen, start a timer and close the timer when I have hit the required distance
 

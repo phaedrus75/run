@@ -208,13 +208,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.startButtonText}>▶️ Start a Run</Text>
         </TouchableOpacity>
         
-        {/* ⚖️ Weight Tracker */}
-        {weightProgress && (
-          <WeightTracker 
-            progress={weightProgress} 
-            chartData={weightChart}
-            onUpdate={fetchData}
-          />
+        {/* 🎯 Goals Progress */}
+        {goals && (
+          <GoalsProgressComponent goals={goals} />
         )}
         
         {/* 👟 Steps Tracker */}
@@ -223,9 +219,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onUpdate={fetchData}
         />
         
-        {/* 🎯 Goals Progress */}
-        {goals && (
-          <GoalsProgressComponent goals={goals} />
+        {/* ⚖️ Weight Tracker */}
+        {weightProgress && (
+          <WeightTracker 
+            progress={weightProgress} 
+            chartData={weightChart}
+            onUpdate={fetchData}
+          />
         )}
         
         {/* 🏆 Personal Records */}

@@ -9,7 +9,7 @@ This document tracks the product roadmap for RunTracker - a mobile app for track
 ## ✅ Completed Features
 
 ### v1.0 - Core Features (Done)
-- [x] **Run Tracking** - Timer for 3k, 5k, 10k, 15k, 20k distances
+- [x] **Run Tracking** - Timer for 3k, 5k, 10k, 15k, 18k, 21k distances
 - [x] **Run History** - View and edit past runs
 - [x] **Backdated Runs** - Add runs from past dates
 - [x] **Weekly/Monthly Stats** - Charts and summaries

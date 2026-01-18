@@ -21,7 +21,7 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from '../components/RunTypeButton';
 import { runApi } from '../services/api';
 
-const RUN_TYPES = ['3k', '5k', '10k', '15k', '20k'];
+const RUN_TYPES = ['3k', '5k', '10k', '15k', '18k', '21k'];
 
 interface AddRunScreenProps {
   navigation: any;

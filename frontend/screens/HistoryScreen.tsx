@@ -25,7 +25,7 @@ import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
 import { runApi, type Run } from '../services/api';
 
-const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '20k'];
+const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '18k', '21k'];
 
 interface HistoryScreenProps {
   navigation: any;

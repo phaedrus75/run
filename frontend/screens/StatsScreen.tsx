@@ -17,12 +17,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
-import { StatCard, StatsChart, PaceTrendChart } from '../components';
+import { StatCard, StatsChart, PaceTrendChart, WeightTracker } from '../components';
 import { 
   runApi, 
   statsApi, 
+  weightApi,
   type Run, 
   type Stats,
+  type WeightProgress,
+  type WeightChartData,
 } from '../services/api';
 
 type ViewMode = 'week' | 'month' | 'all';
@@ -36,15 +39,21 @@ export function StatsScreen() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
+  const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
 
   // 📡 Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, runsData] = await Promise.all([
+      const [statsData, runsData, weightProgressData, weightChartData] = await Promise.all([
         statsApi.get(),
         runApi.getAll({ limit: 1000 }),
+        weightApi.getProgress(),
+        weightApi.getChartData(),
       ]);
       setStats(statsData);
+      setWeightProgress(weightProgressData);
+      setWeightChart(weightChartData);
       
       // Filter runs to only include 2026+
       const filteredRuns = runsData.filter(run => {
@@ -348,10 +357,10 @@ export function StatsScreen() {
         {/* Run Type Breakdown */}
         <Text style={styles.sectionTitle}>Runs by Distance</Text>
         <View style={styles.typeGrid}>
-          {['3k', '5k', '10k', '15k', '20k'].map(type => {
+          {['3k', '5k', '10k', '15k', '18k', '21k'].map(type => {
             const count = allStats.byType[type] || 0;
             const totalForType = count * (
-              type === '3k' ? 3 : type === '5k' ? 5 : type === '10k' ? 10 : type === '15k' ? 15 : 20
+              type === '3k' ? 3 : type === '5k' ? 5 : type === '10k' ? 10 : type === '15k' ? 15 : type === '18k' ? 18 : 21
             );
             return (
               <View key={type} style={[styles.typeCard, shadows.small]}>
@@ -365,6 +374,19 @@ export function StatsScreen() {
             );
           })}
         </View>
+        
+        {/* Weight Tracking */}
+        {weightProgress && (
+          <View style={{ marginTop: spacing.md }}>
+            <Text style={styles.sectionTitle}>⚖️ Weight Journey</Text>
+            <WeightTracker 
+              progress={weightProgress}
+              chartData={weightChart}
+              onUpdate={fetchData}
+              showChart={true}
+            />
+          </View>
+        )}
         
         {/* All Time Details */}
         <Text style={styles.sectionTitle}>Summary</Text>

@@ -19,7 +19,7 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from './RunTypeButton';
 import type { Run } from '../services/api';
 
-const RUN_TYPES = ['3k', '5k', '10k', '15k', '20k'];
+const RUN_TYPES = ['3k', '5k', '10k', '15k', '18k', '21k'];
 
 interface EditRunModalProps {
   visible: boolean;

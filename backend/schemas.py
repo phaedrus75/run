@@ -50,7 +50,7 @@ class RunCreate(BaseModel):
     This is what the frontend sends when you complete a run.
     The completed_at field is optional - defaults to now if not provided.
     """
-    run_type: str = Field(..., description="Type of run: 3k, 5k, 10k, 15k, or 20k")
+    run_type: str = Field(..., description="Type of run: 3k, 5k, 10k, 15k, 18k, or 21k")
     duration_seconds: int = Field(..., ge=0, description="How long the run took in seconds")
     notes: Optional[str] = Field(None, description="Optional notes about your run")
     completed_at: Optional[datetime] = Field(None, description="When the run was completed (for backdating)")
@@ -73,7 +73,7 @@ class RunUpdate(BaseModel):
     
     All fields are optional - only provided fields are updated.
     """
-    run_type: Optional[str] = Field(None, description="Type of run: 3k, 5k, 10k, 15k, or 20k")
+    run_type: Optional[str] = Field(None, description="Type of run: 3k, 5k, 10k, 15k, 18k, or 21k")
     duration_seconds: Optional[int] = Field(None, ge=0, description="How long the run took in seconds")
     notes: Optional[str] = Field(None, description="Optional notes about your run")
     

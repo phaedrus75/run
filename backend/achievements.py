@@ -211,7 +211,7 @@ def get_personal_records(db: Session) -> dict:
     min_date = datetime(2026, 1, 1)
     
     records = {}
-    for run_type in ["3k", "5k", "10k", "15k", "20k"]:
+    for run_type in ["3k", "5k", "10k", "15k", "18k", "21k"]:
         # Get fastest run for this distance
         fastest = db.query(Run).filter(
             Run.run_type == run_type,
@@ -223,7 +223,7 @@ def get_personal_records(db: Session) -> dict:
             secs = fastest.duration_seconds % 60
             
             # Calculate pace
-            distance = {"3k": 3, "5k": 5, "10k": 10, "15k": 15, "20k": 20}[run_type]
+            distance = {"3k": 3, "5k": 5, "10k": 10, "15k": 15, "18k": 18, "21k": 21}[run_type]
             pace_seconds = fastest.duration_seconds / distance
             pace_mins = int(pace_seconds // 60)
             pace_secs = int(pace_seconds % 60)

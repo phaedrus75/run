@@ -15,7 +15,7 @@ interface PersonalRecordsProps {
 }
 
 export function PersonalRecords({ records }: PersonalRecordsProps) {
-  const distances = ['3k', '5k', '10k', '15k', '20k'];
+  const distances = ['3k', '5k', '10k', '15k', '18k', '21k'];
 
   return (
     <View style={[styles.container, shadows.small]}>

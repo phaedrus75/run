@@ -24,9 +24,10 @@ interface WeightTrackerProps {
   progress: WeightProgress;
   chartData: WeightChartData[];
   onUpdate: () => void;
+  showChart?: boolean;
 }
 
-export function WeightTracker({ progress, chartData, onUpdate }: WeightTrackerProps) {
+export function WeightTracker({ progress, chartData, onUpdate, showChart = false }: WeightTrackerProps) {
   const [showModal, setShowModal] = useState(false);
   const [newWeight, setNewWeight] = useState('');
   const [notes, setNotes] = useState('');
@@ -139,7 +140,7 @@ export function WeightTracker({ progress, chartData, onUpdate }: WeightTrackerPr
       </View>
 
       {/* Mini Chart - Last 5 entries */}
-      {chartData.length > 1 && (
+      {showChart && chartData.length > 1 && (
         <View style={styles.miniChart}>
           <Text style={styles.chartTitle}>Recent Trend</Text>
           <View style={styles.chartDots}>
