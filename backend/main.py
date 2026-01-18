@@ -20,6 +20,7 @@ You'll see interactive API documentation!
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List, Optional
 import json
 
