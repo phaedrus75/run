@@ -175,29 +175,54 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </Text>
             <Text style={styles.title}>RunTracker</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.profileButton}
-            onPress={() => setShowProfile(true)}
-          >
-            <View style={styles.profileAvatar}>
-              <Text style={styles.profileAvatarText}>
-                {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            {/* 🔥 Streak Badge */}
+            {streakProgress && (
+              <View style={styles.streakBadge}>
+                <Text style={styles.streakEmoji}>🔥</Text>
+                <Text style={styles.streakCount}>{streakProgress.current_streak}</Text>
+              </View>
+            )}
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={() => setShowProfile(true)}
+            >
+              <View style={styles.profileAvatar}>
+                <Text style={styles.profileAvatarText}>
+                  {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
         
-        {/* 📊 This Week Summary + Motivation */}
+        {/* 📊 Lifetime Stats */}
+        <View style={[styles.lifetimeCard, shadows.medium]}>
+          <Text style={styles.lifetimeTitle}>📊 Lifetime Stats</Text>
+          <View style={styles.lifetimeRow}>
+            <View style={styles.lifetimeStat}>
+              <Text style={styles.lifetimeValue}>{stats?.total_runs || 0}</Text>
+              <Text style={styles.lifetimeLabel}>runs</Text>
+            </View>
+            <View style={styles.lifetimeDivider} />
+            <View style={styles.lifetimeStat}>
+              <Text style={styles.lifetimeValue}>{stats?.total_km?.toFixed(0) || 0}</Text>
+              <Text style={styles.lifetimeLabel}>km</Text>
+            </View>
+            <View style={styles.lifetimeDivider} />
+            <View style={styles.lifetimeStat}>
+              <Text style={styles.lifetimeValue}>{stepsSummary?.all_time?.total_entries || 0}</Text>
+              <Text style={styles.lifetimeLabel}>step days</Text>
+            </View>
+          </View>
+        </View>
+        
+        {/* 📅 This Week / Month */}
         <WeekSummaryCard
           runsThisWeek={stats?.runs_this_week || 0}
           kmThisWeek={stats?.km_this_week || 0}
           motivation={motivation || undefined}
         />
-        
-        {/* 🔥 Weekly Streak (Compact) */}
-        {streakProgress && (
-          <StreakProgress progress={streakProgress} />
-        )}
         
         {/* 🚀 Quick Start Button */}
         <TouchableOpacity
@@ -301,6 +326,28 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+  },
+  streakEmoji: {
+    fontSize: 14,
+  },
+  streakCount: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    marginLeft: 2,
+  },
   profileButton: {
     padding: spacing.xs,
   },
@@ -343,6 +390,43 @@ const styles = StyleSheet.create({
     width: '48%',
     marginHorizontal: '1%',
     marginBottom: spacing.sm,
+  },
+  lifetimeCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  lifetimeTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  lifetimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  lifetimeStat: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  lifetimeValue: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
+  lifetimeLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  lifetimeDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.background,
   },
   startButton: {
     backgroundColor: colors.primary,
