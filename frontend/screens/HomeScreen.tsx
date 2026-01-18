@@ -26,7 +26,6 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   StatCard, 
-  MotivationBanner, 
   RunHistoryCard, 
   StreakProgress,
   PersonalRecords,
@@ -35,6 +34,7 @@ import {
   WeightTracker,
   ProfileModal,
   StepsTracker,
+  WeekSummaryCard,
 } from '../components';
 import { 
   runApi, 
@@ -187,16 +187,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </TouchableOpacity>
         </View>
         
-        {/* 🎉 Motivation Banner */}
-        {motivation && (
-          <MotivationBanner
-            message={motivation.message}
-            emoji={motivation.emoji}
-            achievement={motivation.achievement}
-          />
-        )}
+        {/* 📊 This Week Summary + Motivation */}
+        <WeekSummaryCard
+          runsThisWeek={stats?.runs_this_week || 0}
+          kmThisWeek={stats?.km_this_week || 0}
+          motivation={motivation || undefined}
+        />
         
-        {/* 🔥 Weekly Streak Progress */}
+        {/* 🔥 Weekly Streak (Compact) */}
         {streakProgress && (
           <StreakProgress progress={streakProgress} />
         )}

@@ -1,9 +1,10 @@
 /**
- * 🔥 STREAK PROGRESS COMPONENT
- * =============================
+ * 🔥 STREAK PROGRESS COMPONENT (COMPACT)
+ * =======================================
  * 
  * Shows weekly progress toward maintaining the streak.
  * Goal: 1 long run (10k+) + 2 short runs
+ * Compact design with checkmarks instead of progress bars.
  */
 
 import React from 'react';
@@ -24,83 +25,52 @@ export function StreakProgress({ progress }: StreakProgressProps) {
     is_complete,
     current_streak,
     longest_streak,
-    message,
   } = progress;
 
+  const longComplete = long_runs_completed >= long_runs_needed;
+  const shortComplete = short_runs_completed >= short_runs_needed;
+
   return (
-    <View style={[styles.container, shadows.medium, is_complete && styles.containerComplete]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>🔥 Weekly Streak</Text>
-        <View style={styles.streakBadge}>
+    <View style={[styles.container, shadows.small, is_complete && styles.containerComplete]}>
+      {/* Left: Streak Count */}
+      <View style={styles.streakSection}>
+        <Text style={styles.fireEmoji}>🔥</Text>
+        <View style={styles.streakInfo}>
           <Text style={styles.streakNumber}>{current_streak}</Text>
-          <Text style={styles.streakLabel}>weeks</Text>
+          <Text style={styles.streakLabel}>week{current_streak !== 1 ? 's' : ''}</Text>
         </View>
       </View>
 
-      {/* Progress Bars */}
-      <View style={styles.progressSection}>
-        {/* Long Run */}
-        <View style={styles.progressRow}>
-          <View style={styles.progressInfo}>
-            <Text style={styles.progressLabel}>Long Run (10k+)</Text>
-            <Text style={styles.progressCount}>
-              {long_runs_completed}/{long_runs_needed}
-            </Text>
-          </View>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill,
-                { 
-                  width: `${Math.min(100, (long_runs_completed / long_runs_needed) * 100)}%`,
-                  backgroundColor: long_runs_completed >= long_runs_needed ? colors.success : colors.primary,
-                }
-              ]} 
-            />
-          </View>
-          {long_runs_completed >= long_runs_needed && (
-            <Text style={styles.checkmark}>✓</Text>
-          )}
-        </View>
+      {/* Divider */}
+      <View style={styles.divider} />
 
-        {/* Short Runs */}
-        <View style={styles.progressRow}>
-          <View style={styles.progressInfo}>
-            <Text style={styles.progressLabel}>Short Runs</Text>
-            <Text style={styles.progressCount}>
-              {short_runs_completed}/{short_runs_needed}
-            </Text>
-          </View>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill,
-                { 
-                  width: `${Math.min(100, (short_runs_completed / short_runs_needed) * 100)}%`,
-                  backgroundColor: short_runs_completed >= short_runs_needed ? colors.success : colors.secondary,
-                }
-              ]} 
-            />
-          </View>
-          {short_runs_completed >= short_runs_needed && (
-            <Text style={styles.checkmark}>✓</Text>
-          )}
+      {/* Right: Requirements */}
+      <View style={styles.requirementsSection}>
+        <View style={styles.requirementRow}>
+          <Text style={[styles.checkIcon, longComplete && styles.checkComplete]}>
+            {longComplete ? '✓' : '○'}
+          </Text>
+          <Text style={[styles.requirementText, longComplete && styles.requirementComplete]}>
+            Long run (10k+)
+          </Text>
+          <Text style={styles.requirementCount}>{long_runs_completed}/{long_runs_needed}</Text>
+        </View>
+        <View style={styles.requirementRow}>
+          <Text style={[styles.checkIcon, shortComplete && styles.checkComplete]}>
+            {shortComplete ? '✓' : '○'}
+          </Text>
+          <Text style={[styles.requirementText, shortComplete && styles.requirementComplete]}>
+            Short runs
+          </Text>
+          <Text style={styles.requirementCount}>{short_runs_completed}/{short_runs_needed}</Text>
         </View>
       </View>
 
-      {/* Message */}
-      <View style={[styles.messageContainer, is_complete && styles.messageComplete]}>
-        <Text style={[styles.message, is_complete && styles.messageTextComplete]}>
-          {message}
-        </Text>
-      </View>
-
-      {/* Best Streak */}
-      {longest_streak > 0 && (
-        <Text style={styles.bestStreak}>
-          🏆 Best: {longest_streak} week{longest_streak !== 1 ? 's' : ''}
-        </Text>
+      {/* Best Streak Badge */}
+      {longest_streak > current_streak && (
+        <View style={styles.bestBadge}>
+          <Text style={styles.bestText}>Best: {longest_streak}</Text>
+        </View>
       )}
     </View>
   );
@@ -109,100 +79,91 @@ export function StreakProgress({ progress }: StreakProgressProps) {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   containerComplete: {
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.success,
+    backgroundColor: colors.success + '08',
   },
-  header: {
+  streakSection: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
   },
-  title: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
+  fireEmoji: {
+    fontSize: 20,
+    marginRight: spacing.xs,
   },
-  streakBadge: {
+  streakInfo: {
     alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.md,
   },
   streakNumber: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
-    color: colors.textOnPrimary,
+    color: colors.primary,
+    lineHeight: typography.sizes.xl,
   },
   streakLabel: {
     fontSize: typography.sizes.xs,
-    color: colors.textOnPrimary,
-    opacity: 0.8,
+    color: colors.textSecondary,
+    marginTop: -2,
   },
-  progressSection: {
-    gap: spacing.sm,
+  divider: {
+    width: 1,
+    height: 36,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.md,
   },
-  progressRow: {
+  requirementsSection: {
+    flex: 1,
+    gap: 2,
+  },
+  requirementRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  progressInfo: {
-    width: 110,
+  checkIcon: {
+    fontSize: 12,
+    color: colors.textLight,
+    width: 16,
+    textAlign: 'center',
   },
-  progressLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.text,
-    fontWeight: typography.weights.medium,
-  },
-  progressCount: {
-    fontSize: typography.sizes.xs,
-    color: colors.textSecondary,
-  },
-  progressBar: {
-    flex: 1,
-    height: 8,
-    backgroundColor: colors.background,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  checkmark: {
-    fontSize: 16,
+  checkComplete: {
     color: colors.success,
-    marginLeft: spacing.sm,
     fontWeight: typography.weights.bold,
   },
-  messageContainer: {
-    marginTop: spacing.md,
-    padding: spacing.sm,
-    backgroundColor: colors.background,
-    borderRadius: radius.sm,
-  },
-  messageComplete: {
-    backgroundColor: colors.success + '20',
-  },
-  message: {
-    fontSize: typography.sizes.sm,
+  requirementText: {
+    fontSize: typography.sizes.xs,
     color: colors.textSecondary,
-    textAlign: 'center',
+    flex: 1,
+    marginLeft: spacing.xs,
   },
-  messageTextComplete: {
-    color: colors.success,
-    fontWeight: typography.weights.semibold,
+  requirementComplete: {
+    color: colors.text,
+    textDecorationLine: 'line-through',
   },
-  bestStreak: {
-    marginTop: spacing.sm,
+  requirementCount: {
     fontSize: typography.sizes.xs,
     color: colors.textLight,
-    textAlign: 'center',
+    fontWeight: typography.weights.medium,
+  },
+  bestBadge: {
+    position: 'absolute',
+    top: -6,
+    right: spacing.sm,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 1,
+    borderRadius: radius.sm,
+  },
+  bestText: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
   },
 });
