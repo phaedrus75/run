@@ -181,12 +181,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </TouchableOpacity>
         </View>
         
-        {/* 👤 Profile Modal */}
-        <ProfileModal 
-          visible={showProfile} 
-          onClose={() => setShowProfile(false)} 
-        />
-        
         {/* 🎉 Motivation Banner */}
         {motivation && (
           <MotivationBanner
@@ -258,6 +252,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           )}
         </View>
       </ScrollView>
+      
+      {/* 👤 Profile Modal */}
+      <ProfileModal 
+        visible={showProfile} 
+        onClose={() => setShowProfile(false)} 
+      />
     </SafeAreaView>
   );
 }
