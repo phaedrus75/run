@@ -714,6 +714,7 @@ def format_run_response(run: Run) -> dict:
         "distance_km": run.distance_km,
         "completed_at": run.completed_at,
         "notes": run.notes,
+        "category": getattr(run, 'category', None) or "outdoor",
         "pace_per_km": pace,
         "formatted_duration": formatted,
     }
