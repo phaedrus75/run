@@ -171,13 +171,15 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
                   <View style={styles.lineContainer}>
                     {recentData.map((entry, index) => {
                       const y = chartHeight - ((entry.weight - minWeight) / range) * chartHeight;
-                      const x = (index / (recentData.length - 1)) * 100;
+                      const x = recentData.length > 1 
+                        ? 5 + (index / (recentData.length - 1)) * 90
+                        : 50;
                       
                       // Draw line segment to next point
                       if (index < recentData.length - 1) {
                         const nextEntry = recentData[index + 1];
                         const nextY = chartHeight - ((nextEntry.weight - minWeight) / range) * chartHeight;
-                        const nextX = ((index + 1) / (recentData.length - 1)) * 100;
+                        const nextX = 5 + ((index + 1) / (recentData.length - 1)) * 90;
                         const lineLength = Math.sqrt(Math.pow((nextX - x) * 2.5, 2) + Math.pow(nextY - y, 2));
                         const angle = Math.atan2(nextY - y, (nextX - x) * 2.5) * (180 / Math.PI);
                         
@@ -203,8 +205,10 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
                   {/* Dots with labels */}
                   {recentData.map((entry, index) => {
                     const y = chartHeight - ((entry.weight - minWeight) / range) * chartHeight;
-                    const x = (index / (recentData.length - 1)) * 100;
-                    const isLast = index === recentData.length - 1;
+                    // Add padding to prevent first point from bleeding into Y-axis
+                    const xPercent = recentData.length > 1 
+                      ? 5 + (index / (recentData.length - 1)) * 90  // 5% to 95% range
+                      : 50;
                     
                     return (
                       <View
@@ -212,16 +216,13 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
                         style={[
                           styles.chartDotContainer,
                           {
-                            left: `${x}%`,
+                            left: `${xPercent}%`,
                             top: y - 5,
                           }
                         ]}
                       >
                         {/* Weight label above dot */}
-                        <Text style={[
-                          styles.dotLabel,
-                          isLast && styles.dotLabelLast
-                        ]}>
+                        <Text style={styles.dotLabel}>
                           {entry.weight.toFixed(0)}
                         </Text>
                         {/* Dot */}
@@ -229,9 +230,9 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
                           style={[
                             styles.chartDot,
                             {
-                              backgroundColor: isLast ? colors.secondary : colors.primary,
-                              width: isLast ? 10 : 6,
-                              height: isLast ? 10 : 6,
+                              backgroundColor: colors.primary,
+                              width: 6,
+                              height: 6,
                             }
                           ]}
                         />
@@ -474,19 +475,14 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     marginBottom: 2,
   },
-  dotLabelLast: {
-    color: colors.secondary,
-    fontWeight: typography.weights.bold,
-    fontSize: 10,
-  },
   chartDot: {
     borderRadius: 6,
   },
   xAxisLabels: {
     position: 'absolute',
     bottom: -16,
-    left: 30,
-    right: 0,
+    left: '5%',
+    right: '5%',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
