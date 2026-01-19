@@ -327,6 +327,37 @@ export function StatsScreen() {
           title="Monthly Overview (2026+)" 
         />
         
+        {/* This Month's Steps */}
+        {stepsSummary?.current_month && (
+          <View style={{ marginTop: spacing.md }}>
+            <Text style={styles.sectionTitle}>👟 {stepsSummary.current_month.month} Steps</Text>
+            <View style={[styles.monthlyStepsCard, shadows.small]}>
+              <View style={styles.monthlyStepsRow}>
+                <View style={styles.monthlyStepItem}>
+                  <Text style={styles.monthlyStepValue}>{stepsSummary.current_month.days_15k}</Text>
+                  <Text style={styles.monthlyStepLabel}>15K+ days</Text>
+                </View>
+                <View style={styles.monthlyStepItem}>
+                  <Text style={styles.monthlyStepValue}>{stepsSummary.current_month.days_20k}</Text>
+                  <Text style={styles.monthlyStepLabel}>20K+ days</Text>
+                </View>
+                <View style={styles.monthlyStepItem}>
+                  <Text style={styles.monthlyStepValue}>{stepsSummary.current_month.days_25k}</Text>
+                  <Text style={styles.monthlyStepLabel}>25K+ days</Text>
+                </View>
+              </View>
+              {stepsSummary.current_month.highest > 0 && (
+                <View style={styles.monthlyStepsHighest}>
+                  <Text style={styles.monthlyStepsHighestLabel}>🏆 Highest this month:</Text>
+                  <Text style={styles.monthlyStepsHighestValue}>
+                    {stepsSummary.current_month.highest.toLocaleString()} steps
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+        
         {/* Monthly Details */}
         <Text style={styles.sectionTitle}>Month Details</Text>
         {chartData.slice().reverse().slice(0, 6).map((month, index) => (
@@ -737,5 +768,47 @@ const styles = StyleSheet.create({
   stepDaysTotal: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
+  },
+  monthlyStepsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  monthlyStepsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  monthlyStepItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  monthlyStepValue: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
+  monthlyStepLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  monthlyStepsHighest: {
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  monthlyStepsHighestLabel: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+  },
+  monthlyStepsHighestValue: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
   },
 });
