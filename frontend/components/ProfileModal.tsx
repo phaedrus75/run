@@ -103,11 +103,20 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
       } else {
         const errorText = await response.text();
         console.error('Save goals error:', response.status, errorText);
-        throw new Error(`Failed to save: ${response.status}`);
+        // Try to parse JSON error detail
+        let errorDetail = `Status: ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.detail || errorText;
+        } catch {
+          errorDetail = errorText || `HTTP ${response.status}`;
+        }
+        Alert.alert('Error', `Failed to save goals: ${errorDetail}`);
+        return;
       }
     } catch (error: any) {
       console.error('Save goals exception:', error);
-      Alert.alert('Error', `Failed to save goals: ${error.message || 'Unknown error'}`);
+      Alert.alert('Error', `Network error: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }

@@ -122,6 +122,39 @@ def read_root():
     }
 
 
+@app.get("/debug/tables")
+def debug_tables(db: Session = Depends(get_db)):
+    """
+    🔍 Debug endpoint to check database tables
+    """
+    try:
+        # Check what tables exist
+        if 'postgresql' in str(engine.url):
+            result = db.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
+            tables = [row[0] for row in result]
+        else:
+            result = db.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            tables = [row[0] for row in result]
+        
+        # Check user_goals table structure if it exists
+        user_goals_columns = []
+        if 'user_goals' in tables:
+            if 'postgresql' in str(engine.url):
+                result = db.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'user_goals'"))
+                user_goals_columns = [row[0] for row in result]
+            else:
+                result = db.execute(text("PRAGMA table_info(user_goals)"))
+                user_goals_columns = [row[1] for row in result]
+        
+        return {
+            "tables": tables,
+            "user_goals_exists": "user_goals" in tables,
+            "user_goals_columns": user_goals_columns,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ==========================================
 # 🔐 AUTHENTICATION ENDPOINTS
 # ==========================================
