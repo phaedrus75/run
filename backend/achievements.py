@@ -241,10 +241,19 @@ def get_personal_records(db: Session) -> dict:
     return records
 
 
-def get_goals_progress(db: Session) -> dict:
+def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: float = None) -> dict:
     """
     🎯 Get progress toward yearly and monthly goals
+    
+    Args:
+        db: Database session
+        yearly_goal: User's yearly goal (defaults to YEARLY_GOAL_KM if not provided)
+        monthly_goal: User's monthly goal (defaults to MONTHLY_GOAL_KM if not provided)
     """
+    # Use user goals or defaults
+    yearly_target = yearly_goal if yearly_goal is not None else YEARLY_GOAL_KM
+    monthly_target = monthly_goal if monthly_goal is not None else MONTHLY_GOAL_KM
+    
     min_date = datetime(2026, 1, 1)
     now = datetime.now()
     
@@ -255,7 +264,7 @@ def get_goals_progress(db: Session) -> dict:
         Run.completed_at >= min_date
     ).all()
     yearly_km = sum(r.distance_km for r in year_runs)
-    yearly_percent = min(100, (yearly_km / YEARLY_GOAL_KM) * 100)
+    yearly_percent = min(100, (yearly_km / yearly_target) * 100) if yearly_target > 0 else 0
     
     # Monthly progress
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -264,9 +273,9 @@ def get_goals_progress(db: Session) -> dict:
         Run.completed_at >= min_date
     ).all()
     monthly_km = sum(r.distance_km for r in month_runs)
-    monthly_percent = min(100, (monthly_km / MONTHLY_GOAL_KM) * 100)
+    monthly_percent = min(100, (monthly_km / monthly_target) * 100) if monthly_target > 0 else 0
     
-    # Count months where goal was hit
+    # Count months where goal was hit (uses default for historical comparison)
     monthly_goals_hit = 0
     for month in range(1, now.month + 1):
         m_start = datetime(2026, month, 1)
@@ -280,7 +289,7 @@ def get_goals_progress(db: Session) -> dict:
             Run.completed_at < m_end
         ).all()
         m_km = sum(r.distance_km for r in m_runs)
-        if m_km >= MONTHLY_GOAL_KM:
+        if m_km >= monthly_target:
             monthly_goals_hit += 1
     
     # Days remaining calculations
@@ -289,21 +298,21 @@ def get_goals_progress(db: Session) -> dict:
     
     return {
         "yearly": {
-            "goal_km": YEARLY_GOAL_KM,
+            "goal_km": yearly_target,
             "current_km": round(yearly_km, 1),
-            "remaining_km": round(max(0, YEARLY_GOAL_KM - yearly_km), 1),
+            "remaining_km": round(max(0, yearly_target - yearly_km), 1),
             "percent": round(yearly_percent, 1),
             "days_remaining": days_left_in_year,
-            "on_track": yearly_km >= (YEARLY_GOAL_KM * (now.timetuple().tm_yday / 365)),
+            "on_track": yearly_km >= (yearly_target * (now.timetuple().tm_yday / 365)),
         },
         "monthly": {
-            "goal_km": MONTHLY_GOAL_KM,
+            "goal_km": monthly_target,
             "current_km": round(monthly_km, 1),
-            "remaining_km": round(max(0, MONTHLY_GOAL_KM - monthly_km), 1),
+            "remaining_km": round(max(0, monthly_target - monthly_km), 1),
             "percent": round(monthly_percent, 1),
             "days_remaining": days_left_in_month,
             "month_name": now.strftime("%B"),
-            "is_complete": monthly_km >= MONTHLY_GOAL_KM,
+            "is_complete": monthly_km >= monthly_target,
         },
         "monthly_goals_hit": monthly_goals_hit,
     }

@@ -520,15 +520,28 @@ def get_personal_records(db: Session = Depends(get_db)):
 
 
 @app.get("/goals")
-def get_goals(db: Session = Depends(get_db)):
+def get_goals(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
     🎯 Get progress toward yearly and monthly goals
     
-    - Yearly goal: 1000km
-    - Monthly goal: 100km
+    Uses user's personal goals if logged in, otherwise defaults.
     """
     from achievements import get_goals_progress
-    return get_goals_progress(db)
+    
+    # Get user's personal goals if logged in
+    yearly_goal = 1000.0
+    monthly_goal = 100.0
+    
+    if current_user:
+        user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+        if user_goals:
+            yearly_goal = user_goals.yearly_km_goal or 1000.0
+            monthly_goal = user_goals.monthly_km_goal or 100.0
+    
+    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal)
 
 
 @app.get("/achievements")
