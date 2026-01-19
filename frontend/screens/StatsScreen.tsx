@@ -22,11 +22,13 @@ import {
   runApi, 
   statsApi, 
   weightApi,
+  stepsApi,
   type Run, 
   type Stats,
   type WeightProgress,
   type WeightChartData,
   type WeeklyStreakProgress,
+  type StepsSummary,
 } from '../services/api';
 
 type ViewMode = 'week' | 'month' | 'all';
@@ -43,21 +45,24 @@ export function StatsScreen() {
   const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
   const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
+  const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
 
   // 📡 Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, runsData, weightProgressData, weightChartData, streakData] = await Promise.all([
+      const [statsData, runsData, weightProgressData, weightChartData, streakData, stepsData] = await Promise.all([
         statsApi.get(),
         runApi.getAll({ limit: 1000 }),
         weightApi.getProgress(),
         weightApi.getChartData(),
         statsApi.getStreakProgress(),
+        stepsApi.getSummary(),
       ]);
       setStats(statsData);
       setWeightProgress(weightProgressData);
       setWeightChart(weightChartData);
       setStreakProgress(streakData);
+      setStepsSummary(stepsData);
       
       // Filter runs to only include 2026+
       const filteredRuns = runsData.filter(run => {
@@ -399,6 +404,39 @@ export function StatsScreen() {
           })}
         </View>
         
+        {/* High Step Days */}
+        {stepsSummary && (
+          <View style={{ marginTop: spacing.lg }}>
+            <Text style={styles.sectionTitle}>👟 High Step Days</Text>
+            <View style={[styles.stepDaysCard, shadows.small]}>
+              <View style={styles.stepDaysRow}>
+                <View style={styles.stepDayItem}>
+                  <Text style={styles.stepDayEmoji}>🚶</Text>
+                  <Text style={styles.stepDayValue}>{stepsSummary.all_time?.days_15k || 0}</Text>
+                  <Text style={styles.stepDayLabel}>15K+ days</Text>
+                </View>
+                <View style={styles.stepDayDivider} />
+                <View style={styles.stepDayItem}>
+                  <Text style={styles.stepDayEmoji}>🏃</Text>
+                  <Text style={styles.stepDayValue}>{stepsSummary.all_time?.days_20k || 0}</Text>
+                  <Text style={styles.stepDayLabel}>20K+ days</Text>
+                </View>
+                <View style={styles.stepDayDivider} />
+                <View style={styles.stepDayItem}>
+                  <Text style={styles.stepDayEmoji}>🔥</Text>
+                  <Text style={styles.stepDayValue}>{stepsSummary.all_time?.days_25k || 0}</Text>
+                  <Text style={styles.stepDayLabel}>25K+ days</Text>
+                </View>
+              </View>
+              <View style={styles.stepDaysFooter}>
+                <Text style={styles.stepDaysTotal}>
+                  {stepsSummary.all_time?.total_entries || 0} total step entries logged
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+        
         {/* Weight Tracking */}
         {weightProgress && (
           <View style={{ marginTop: spacing.md }}>
@@ -411,23 +449,6 @@ export function StatsScreen() {
             />
           </View>
         )}
-        
-        {/* All Time Details */}
-        <Text style={styles.sectionTitle}>Summary</Text>
-        <View style={[styles.detailCard, shadows.small]}>
-          <View style={styles.detailHeader}>
-            <Text style={styles.detailTitle}>2026 Progress</Text>
-            <Text style={styles.detailBadge}>{runs.length} runs</Text>
-          </View>
-          <View style={styles.detailStats}>
-            <Text style={styles.detailStat}>
-              <Text style={styles.detailValue}>{allStats.totalKm.toFixed(1)}</Text> km total
-            </Text>
-            <Text style={styles.detailStat}>
-              <Text style={styles.detailValue}>{allStats.avgPace}</Text> avg pace
-            </Text>
-          </View>
-        </View>
       </View>
     );
   };
@@ -672,5 +693,49 @@ const styles = StyleSheet.create({
     width: 1,
     height: 30,
     backgroundColor: colors.border,
+  },
+  stepDaysCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  stepDaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  stepDayItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stepDayEmoji: {
+    fontSize: 24,
+    marginBottom: spacing.xs,
+  },
+  stepDayValue: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
+  stepDayLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  stepDayDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+  },
+  stepDaysFooter: {
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    alignItems: 'center',
+  },
+  stepDaysTotal: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
   },
 });
