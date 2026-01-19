@@ -203,9 +203,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           {getGreeting()} {user?.name || 'Runner'}
         </Text>
         
-        {/* 📊 Lifetime Stats */}
+        {/* 📊 Overall Stats */}
         <View style={[styles.lifetimeCard, shadows.medium]}>
-          <Text style={styles.lifetimeTitle}>📊 Lifetime Stats</Text>
+          <Text style={styles.lifetimeTitle}>📊 Overall Stats</Text>
           <View style={styles.lifetimeRow}>
             <View style={styles.lifetimeStat}>
               <Text style={styles.lifetimeValue}>{stats?.total_runs || 0}</Text>
