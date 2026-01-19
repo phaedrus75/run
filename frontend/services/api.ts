@@ -10,6 +10,8 @@
  * - We wrap everything in try/catch for error handling
  */
 
+import { getToken } from './auth';
+
 // 🔧 API Configuration
 // Production URL (Railway deployment)
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
@@ -19,6 +21,7 @@ const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
 /**
  * 🔧 Generic fetch wrapper with error handling
+ * Now includes auth token automatically when available
  */
 async function apiFetch<T>(
   endpoint: string,
@@ -26,10 +29,22 @@ async function apiFetch<T>(
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   
+  // Get auth token if available
+  let authHeader: Record<string, string> = {};
+  try {
+    const token = await getToken();
+    if (token) {
+      authHeader = { 'Authorization': `Bearer ${token}` };
+    }
+  } catch (e) {
+    // No token available, continue without auth
+  }
+  
   const config: RequestInit = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeader,
       ...options.headers,
     },
   };
