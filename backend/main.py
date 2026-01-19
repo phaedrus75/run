@@ -65,18 +65,26 @@ app.add_middleware(
 # This runs when the app starts - creates tables if they don't exist
 Base.metadata.create_all(bind=engine)
 
-# 🔧 Run migrations - add missing columns to existing tables
+# 🔧 Run migrations - add missing columns and tables
 def run_migrations():
-    """Add new columns to existing tables if they don't exist."""
+    """Add new columns and tables if they don't exist."""
     from database import engine
+    
+    # First, ensure all tables exist (including user_goals)
+    print("Ensuring all tables exist...")
+    Base.metadata.create_all(bind=engine)
+    print("All tables created/verified")
+    
     with engine.connect() as conn:
         try:
             # PostgreSQL syntax
             if 'postgresql' in str(engine.url):
+                # Add category column to runs table
                 conn.execute(text("""
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'outdoor'
                 """))
                 conn.commit()
+                print("Migration completed: category column added to runs table")
             else:
                 # SQLite - check if column exists first
                 result = conn.execute(text("PRAGMA table_info(runs)"))
@@ -84,7 +92,7 @@ def run_migrations():
                 if 'category' not in columns:
                     conn.execute(text("ALTER TABLE runs ADD COLUMN category VARCHAR DEFAULT 'outdoor'"))
                     conn.commit()
-            print("Migration completed: category column added")
+                    print("Migration completed: category column added to runs table")
         except Exception as e:
             print(f"Migration note: {e}")
 

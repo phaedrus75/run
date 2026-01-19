@@ -189,3 +189,4 @@ async def require_auth(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return current_user
+

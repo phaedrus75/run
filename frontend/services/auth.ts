@@ -166,3 +166,4 @@ export async function authFetch(endpoint: string, options: RequestInit = {}): Pr
     headers,
   });
 }
+
