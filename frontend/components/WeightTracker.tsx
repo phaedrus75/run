@@ -145,17 +145,19 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
           <Text style={styles.chartTitle}>Weight Trend</Text>
           {(() => {
             const recentData = chartData.slice(-7);
-            const minWeight = Math.min(...recentData.map(e => e.weight));
-            const maxWeight = Math.max(...recentData.map(e => e.weight));
-            const range = maxWeight - minWeight || 1;
+            // Fixed scale from 180 to 210 lbs
+            const minWeight = 180;
+            const maxWeight = 210;
+            const range = maxWeight - minWeight;
             const chartHeight = 50;
             
             return (
               <View style={styles.lineChartContainer}>
                 {/* Y-axis labels */}
                 <View style={styles.yAxisLabels}>
-                  <Text style={styles.yAxisLabel}>{maxWeight.toFixed(0)}</Text>
-                  <Text style={styles.yAxisLabel}>{minWeight.toFixed(0)}</Text>
+                  <Text style={styles.yAxisLabel}>{maxWeight}</Text>
+                  <Text style={styles.yAxisLabel}>{(minWeight + maxWeight) / 2}</Text>
+                  <Text style={styles.yAxisLabel}>{minWeight}</Text>
                 </View>
                 
                 {/* Chart area */}
