@@ -79,28 +79,35 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
     setIsSaving(true);
     try {
       const token = await getToken();
+      const payload = {
+        start_weight_lbs: startWeight ? parseFloat(startWeight) : null,
+        goal_weight_lbs: goalWeight ? parseFloat(goalWeight) : null,
+        yearly_km_goal: parseFloat(yearlyGoal) || 1000,
+        monthly_km_goal: parseFloat(monthlyGoal) || 100,
+      };
+      
+      console.log('Saving goals:', payload);
+      
       const response = await fetch(`${API_BASE_URL}/user/goals`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          start_weight_lbs: startWeight ? parseFloat(startWeight) : null,
-          goal_weight_lbs: goalWeight ? parseFloat(goalWeight) : null,
-          yearly_km_goal: parseFloat(yearlyGoal) || 1000,
-          monthly_km_goal: parseFloat(monthlyGoal) || 100,
-        }),
+        body: JSON.stringify(payload),
       });
       
       if (response.ok) {
         Alert.alert('Success', 'Goals updated!');
         onClose();
       } else {
-        throw new Error('Failed to save');
+        const errorText = await response.text();
+        console.error('Save goals error:', response.status, errorText);
+        throw new Error(`Failed to save: ${response.status}`);
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save goals. Please try again.');
+    } catch (error: any) {
+      console.error('Save goals exception:', error);
+      Alert.alert('Error', `Failed to save goals: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
