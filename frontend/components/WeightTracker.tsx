@@ -139,35 +139,101 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
         </View>
       </View>
 
-      {/* Mini Chart - Last 5 entries */}
+      {/* Mini Line Chart - Last 7 entries */}
       {showChart && chartData.length > 1 && (
         <View style={styles.miniChart}>
-          <Text style={styles.chartTitle}>Recent Trend</Text>
-          <View style={styles.chartDots}>
-            {chartData.slice(-7).map((entry, index) => {
-              const minWeight = Math.min(...chartData.slice(-7).map(e => e.weight));
-              const maxWeight = Math.max(...chartData.slice(-7).map(e => e.weight));
-              const range = maxWeight - minWeight || 1;
-              const height = ((entry.weight - minWeight) / range) * 30 + 10;
-              
-              return (
-                <View key={index} style={styles.chartColumn}>
-                  <View 
-                    style={[
-                      styles.chartBar, 
-                      { 
-                        height,
-                        backgroundColor: index === chartData.slice(-7).length - 1 
-                          ? colors.secondary 
-                          : colors.textLight,
-                      }
-                    ]} 
-                  />
-                  <Text style={styles.chartLabel}>{entry.label.split(' ')[1]}</Text>
+          <Text style={styles.chartTitle}>Weight Trend</Text>
+          {(() => {
+            const recentData = chartData.slice(-7);
+            const minWeight = Math.min(...recentData.map(e => e.weight));
+            const maxWeight = Math.max(...recentData.map(e => e.weight));
+            const range = maxWeight - minWeight || 1;
+            const chartHeight = 50;
+            
+            return (
+              <View style={styles.lineChartContainer}>
+                {/* Y-axis labels */}
+                <View style={styles.yAxisLabels}>
+                  <Text style={styles.yAxisLabel}>{maxWeight.toFixed(0)}</Text>
+                  <Text style={styles.yAxisLabel}>{minWeight.toFixed(0)}</Text>
                 </View>
-              );
-            })}
-          </View>
+                
+                {/* Chart area */}
+                <View style={styles.lineChartArea}>
+                  {/* Grid lines */}
+                  <View style={[styles.gridLine, { top: 0 }]} />
+                  <View style={[styles.gridLine, { top: chartHeight / 2 }]} />
+                  <View style={[styles.gridLine, { top: chartHeight }]} />
+                  
+                  {/* Line connecting dots */}
+                  <View style={styles.lineContainer}>
+                    {recentData.map((entry, index) => {
+                      const y = chartHeight - ((entry.weight - minWeight) / range) * chartHeight;
+                      const x = (index / (recentData.length - 1)) * 100;
+                      
+                      // Draw line segment to next point
+                      if (index < recentData.length - 1) {
+                        const nextEntry = recentData[index + 1];
+                        const nextY = chartHeight - ((nextEntry.weight - minWeight) / range) * chartHeight;
+                        const nextX = ((index + 1) / (recentData.length - 1)) * 100;
+                        const lineLength = Math.sqrt(Math.pow((nextX - x) * 2.5, 2) + Math.pow(nextY - y, 2));
+                        const angle = Math.atan2(nextY - y, (nextX - x) * 2.5) * (180 / Math.PI);
+                        
+                        return (
+                          <View
+                            key={`line-${index}`}
+                            style={[
+                              styles.lineSegment,
+                              {
+                                left: `${x}%`,
+                                top: y,
+                                width: lineLength,
+                                transform: [{ rotate: `${angle}deg` }],
+                              }
+                            ]}
+                          />
+                        );
+                      }
+                      return null;
+                    })}
+                  </View>
+                  
+                  {/* Dots */}
+                  {recentData.map((entry, index) => {
+                    const y = chartHeight - ((entry.weight - minWeight) / range) * chartHeight;
+                    const x = (index / (recentData.length - 1)) * 100;
+                    const isLast = index === recentData.length - 1;
+                    
+                    return (
+                      <View
+                        key={`dot-${index}`}
+                        style={[
+                          styles.chartDot,
+                          {
+                            left: `${x}%`,
+                            top: y - 5,
+                            backgroundColor: isLast ? colors.secondary : colors.primary,
+                            width: isLast ? 12 : 8,
+                            height: isLast ? 12 : 8,
+                            marginLeft: isLast ? -6 : -4,
+                          }
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+                
+                {/* X-axis labels */}
+                <View style={styles.xAxisLabels}>
+                  {recentData.map((entry, index) => (
+                    <Text key={index} style={styles.xAxisLabel}>
+                      {entry.label.split(' ')[1]}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            );
+          })()}
         </View>
       )}
 
@@ -331,6 +397,7 @@ const styles = StyleSheet.create({
   miniChart: {
     marginTop: spacing.md,
     paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.background,
   },
@@ -339,24 +406,61 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
-  chartDots: {
+  lineChartContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+  },
+  yAxisLabels: {
+    width: 30,
+    justifyContent: 'space-between',
     alignItems: 'flex-end',
+    paddingRight: spacing.xs,
     height: 50,
   },
-  chartColumn: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  chartBar: {
-    width: 8,
-    borderRadius: 4,
-    marginBottom: 4,
-  },
-  chartLabel: {
-    fontSize: 10,
+  yAxisLabel: {
+    fontSize: 9,
     color: colors.textLight,
+  },
+  lineChartArea: {
+    flex: 1,
+    height: 50,
+    position: 'relative',
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: colors.background,
+  },
+  lineContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  lineSegment: {
+    position: 'absolute',
+    height: 2,
+    backgroundColor: colors.primary,
+    transformOrigin: 'left center',
+  },
+  chartDot: {
+    position: 'absolute',
+    borderRadius: 6,
+  },
+  xAxisLabels: {
+    position: 'absolute',
+    bottom: -16,
+    left: 30,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  xAxisLabel: {
+    fontSize: 9,
+    color: colors.textLight,
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
