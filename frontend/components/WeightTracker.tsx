@@ -149,7 +149,7 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
             const minWeight = 180;
             const maxWeight = 210;
             const range = maxWeight - minWeight;
-            const chartHeight = 50;
+            const chartHeight = 60;
             
             return (
               <View style={styles.lineChartContainer}>
@@ -164,8 +164,8 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
                 <View style={styles.lineChartArea}>
                   {/* Grid lines */}
                   <View style={[styles.gridLine, { top: 0 }]} />
-                  <View style={[styles.gridLine, { top: chartHeight / 2 }]} />
-                  <View style={[styles.gridLine, { top: chartHeight }]} />
+                  <View style={[styles.gridLine, { top: 30 }]} />
+                  <View style={[styles.gridLine, { top: 60 }]} />
                   
                   {/* Line connecting dots */}
                   <View style={styles.lineContainer}>
@@ -200,7 +200,7 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
                     })}
                   </View>
                   
-                  {/* Dots */}
+                  {/* Dots with labels */}
                   {recentData.map((entry, index) => {
                     const y = chartHeight - ((entry.weight - minWeight) / range) * chartHeight;
                     const x = (index / (recentData.length - 1)) * 100;
@@ -210,17 +210,32 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
                       <View
                         key={`dot-${index}`}
                         style={[
-                          styles.chartDot,
+                          styles.chartDotContainer,
                           {
                             left: `${x}%`,
                             top: y - 5,
-                            backgroundColor: isLast ? colors.secondary : colors.primary,
-                            width: isLast ? 12 : 8,
-                            height: isLast ? 12 : 8,
-                            marginLeft: isLast ? -6 : -4,
                           }
                         ]}
-                      />
+                      >
+                        {/* Weight label above dot */}
+                        <Text style={[
+                          styles.dotLabel,
+                          isLast && styles.dotLabelLast
+                        ]}>
+                          {entry.weight.toFixed(0)}
+                        </Text>
+                        {/* Dot */}
+                        <View
+                          style={[
+                            styles.chartDot,
+                            {
+                              backgroundColor: isLast ? colors.secondary : colors.primary,
+                              width: isLast ? 10 : 6,
+                              height: isLast ? 10 : 6,
+                            }
+                          ]}
+                        />
+                      </View>
                     );
                   })}
                 </View>
@@ -416,7 +431,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     paddingRight: spacing.xs,
-    height: 50,
+    height: 60,
   },
   yAxisLabel: {
     fontSize: 9,
@@ -424,7 +439,7 @@ const styles = StyleSheet.create({
   },
   lineChartArea: {
     flex: 1,
-    height: 50,
+    height: 60,
     position: 'relative',
   },
   gridLine: {
@@ -447,8 +462,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     transformOrigin: 'left center',
   },
-  chartDot: {
+  chartDotContainer: {
     position: 'absolute',
+    alignItems: 'center',
+    marginLeft: -15,
+    width: 30,
+  },
+  dotLabel: {
+    fontSize: 9,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+    marginBottom: 2,
+  },
+  dotLabelLast: {
+    color: colors.secondary,
+    fontWeight: typography.weights.bold,
+    fontSize: 10,
+  },
+  chartDot: {
     borderRadius: 6,
   },
   xAxisLabels: {
