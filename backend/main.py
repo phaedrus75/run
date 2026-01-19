@@ -70,31 +70,42 @@ def run_migrations():
     """Add new columns and tables if they don't exist."""
     from database import engine
     
-    # First, ensure all tables exist (including user_goals)
-    print("Ensuring all tables exist...")
-    Base.metadata.create_all(bind=engine)
-    print("All tables created/verified")
-    
     with engine.connect() as conn:
         try:
             # PostgreSQL syntax
             if 'postgresql' in str(engine.url):
+                # Add onboarding_complete column to users table
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT false
+                """))
                 # Add category column to runs table
                 conn.execute(text("""
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'outdoor'
                 """))
                 conn.commit()
-                print("Migration completed: category column added to runs table")
+                print("Migration completed: columns added")
             else:
-                # SQLite - check if column exists first
+                # SQLite - check if columns exist first
+                result = conn.execute(text("PRAGMA table_info(users)"))
+                user_columns = [row[1] for row in result]
+                if 'onboarding_complete' not in user_columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_complete BOOLEAN DEFAULT 0"))
+                    conn.commit()
+                    print("Migration: onboarding_complete added to users")
+                
                 result = conn.execute(text("PRAGMA table_info(runs)"))
-                columns = [row[1] for row in result]
-                if 'category' not in columns:
+                run_columns = [row[1] for row in result]
+                if 'category' not in run_columns:
                     conn.execute(text("ALTER TABLE runs ADD COLUMN category VARCHAR DEFAULT 'outdoor'"))
                     conn.commit()
-                    print("Migration completed: category column added to runs table")
+                    print("Migration: category added to runs")
         except Exception as e:
             print(f"Migration note: {e}")
+    
+    # Now ensure all tables exist (including user_goals)
+    print("Ensuring all tables exist...")
+    Base.metadata.create_all(bind=engine)
+    print("All tables created/verified")
 
 run_migrations()
 
