@@ -87,6 +87,22 @@ def run_migrations():
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS user_id INTEGER
                 """))
                 conn.commit()
+                
+                # Assign orphaned data to the first user (aseem.munshi@gmail.com)
+                # This is a one-time migration for existing data
+                result = conn.execute(text("SELECT id FROM users WHERE email = 'aseem.munshi@gmail.com' LIMIT 1"))
+                row = result.fetchone()
+                if row:
+                    main_user_id = row[0]
+                    # Update runs with NULL user_id
+                    conn.execute(text(f"UPDATE runs SET user_id = {main_user_id} WHERE user_id IS NULL"))
+                    # Update weights with NULL user_id
+                    conn.execute(text(f"UPDATE weights SET user_id = {main_user_id} WHERE user_id IS NULL"))
+                    # Update step_entries with NULL user_id
+                    conn.execute(text(f"UPDATE step_entries SET user_id = {main_user_id} WHERE user_id IS NULL"))
+                    conn.commit()
+                    print(f"Migration: Assigned orphaned data to user {main_user_id}")
+                
                 print("Migration completed: columns added")
             else:
                 # SQLite - check if columns exist first
