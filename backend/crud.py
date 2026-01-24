@@ -511,7 +511,7 @@ MILESTONE_MESSAGES = {
     100: {"message": "100 RUNS! You're a legend!", "emoji": "👑", "achievement": "Century Club"},
 }
 
-def get_motivational_message(db: Session) -> dict:
+def get_motivational_message(db: Session, user_id: Optional[int] = None) -> dict:
     """
     🎉 Get a motivational message based on user's progress
     
@@ -519,11 +519,13 @@ def get_motivational_message(db: Session) -> dict:
     """
     import random
     
-    stats = get_or_create_stats(db)
+    # Get user-specific stats
+    user_stats = get_stats_summary(db, user_id=user_id)
+    total_runs = user_stats.get("total_runs", 0)
     
     # Check for milestone
-    if stats.total_runs in MILESTONE_MESSAGES:
-        return MILESTONE_MESSAGES[stats.total_runs]
+    if total_runs in MILESTONE_MESSAGES:
+        return MILESTONE_MESSAGES[total_runs]
     
     # Return random motivation
     return random.choice(MOTIVATIONAL_MESSAGES)

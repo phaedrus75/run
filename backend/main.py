@@ -507,14 +507,18 @@ def get_stats(
 
 
 @app.get("/motivation", response_model=MotivationalMessage)
-def get_motivation(db: Session = Depends(get_db)):
+def get_motivation(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
     🎉 Get a motivational message
     
     Returns encouragement based on your progress!
     Milestone achievements when you hit certain numbers.
     """
-    return crud.get_motivational_message(db)
+    user_id = current_user.id if current_user else None
+    return crud.get_motivational_message(db, user_id=user_id)
 
 
 @app.get("/streak", response_model=WeeklyStreakProgress)
@@ -580,13 +584,17 @@ def get_goals(
 
 
 @app.get("/achievements")
-def get_achievements(db: Session = Depends(get_db)):
+def get_achievements(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    🎖️ Get all achievements and their unlock status
+    🎖️ Get all achievements and their unlock status for current user
     """
     from achievements import get_achievements
-    stats = crud.get_stats_summary(db)
-    return get_achievements(db, stats)
+    user_id = current_user.id if current_user else None
+    stats = crud.get_stats_summary(db, user_id=user_id)
+    return get_achievements(db, stats, user_id=user_id)
 
 
 # ==========================================

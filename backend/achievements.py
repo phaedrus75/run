@@ -329,20 +329,23 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     }
 
 
-def get_achievements(db: Session, stats: dict) -> dict:
+def get_achievements(db: Session, stats: dict, user_id: int = None) -> dict:
     """
-    🎖️ Get all achievements and their unlock status
+    🎖️ Get all achievements and their unlock status for a specific user
     """
     min_date = datetime(2026, 1, 1)
     
-    # Build extended stats for achievement checking
-    all_runs = db.query(Run).filter(Run.completed_at >= min_date).all()
+    # Build extended stats for achievement checking - filter by user
+    query = db.query(Run).filter(Run.completed_at >= min_date)
+    if user_id is not None:
+        query = query.filter(Run.user_id == user_id)
+    all_runs = query.all()
     
     runs_by_type = {}
     for run in all_runs:
         runs_by_type[run.run_type] = runs_by_type.get(run.run_type, 0) + 1
     
-    goals = get_goals_progress(db)
+    goals = get_goals_progress(db, user_id=user_id)
     
     extended_stats = {
         **stats,
