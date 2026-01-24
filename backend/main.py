@@ -82,6 +82,10 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'outdoor'
                 """))
+                # Add user_id column to runs table
+                conn.execute(text("""
+                    ALTER TABLE runs ADD COLUMN IF NOT EXISTS user_id INTEGER
+                """))
                 conn.commit()
                 print("Migration completed: columns added")
             else:
@@ -99,6 +103,10 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE runs ADD COLUMN category VARCHAR DEFAULT 'outdoor'"))
                     conn.commit()
                     print("Migration: category added to runs")
+                if 'user_id' not in run_columns:
+                    conn.execute(text("ALTER TABLE runs ADD COLUMN user_id INTEGER"))
+                    conn.commit()
+                    print("Migration: user_id added to runs")
         except Exception as e:
             print(f"Migration note: {e}")
     
@@ -333,7 +341,11 @@ def complete_onboarding(current_user: User = Depends(require_auth), db: Session 
 # ==========================================
 
 @app.post("/runs", response_model=RunResponse)
-def create_run(run: RunCreate, db: Session = Depends(get_db)):
+def create_run(
+    run: RunCreate, 
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
     ✨ Create a new run
     
@@ -352,7 +364,10 @@ def create_run(run: RunCreate, db: Session = Depends(get_db)):
             detail=f"Invalid run type. Must be one of: {list(RUN_DISTANCES.keys())}"
         )
     
-    db_run = crud.create_run(db=db, run=run)
+    # Get user_id if logged in
+    user_id = current_user.id if current_user else None
+    
+    db_run = crud.create_run(db=db, run=run, user_id=user_id)
     
     # 🏆 Check if this is a personal best!
     is_pr, pr_type = check_personal_best(db, db_run)
@@ -365,17 +380,19 @@ def get_runs(
     skip: int = 0, 
     limit: int = 100,
     run_type: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
-    📖 Get all runs
+    📖 Get all runs for the current user
     
     Optional filters:
     - skip: For pagination (skip first N records)
     - limit: Maximum records to return
     - run_type: Filter by type (3k, 5k, etc.)
     """
-    runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type)
+    user_id = current_user.id if current_user else None
+    runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type, user_id=user_id)
     return [format_run_response(run) for run in runs]
 
 
@@ -476,13 +493,17 @@ def get_weekly_plan(week_id: str, db: Session = Depends(get_db)):
 # ==========================================
 
 @app.get("/stats", response_model=StatsResponse)
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
     📊 Get your running statistics
     
     Returns totals, weekly stats, monthly stats, and more!
     """
-    return crud.get_stats_summary(db)
+    user_id = current_user.id if current_user else None
+    return crud.get_stats_summary(db, user_id=user_id)
 
 
 @app.get("/motivation", response_model=MotivationalMessage)
@@ -497,15 +518,19 @@ def get_motivation(db: Session = Depends(get_db)):
 
 
 @app.get("/streak", response_model=WeeklyStreakProgress)
-def get_streak_progress(db: Session = Depends(get_db)):
+def get_streak_progress(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    🔥 Get weekly streak progress
+    🔥 Get weekly streak progress for current user
     
     Shows progress toward this week's streak goal:
     - 1 long run (10k+)
     - 2 short runs (any distance)
     """
-    return crud.get_weekly_streak_progress(db)
+    user_id = current_user.id if current_user else None
+    return crud.get_weekly_streak_progress(db, user_id=user_id)
 
 
 # ==========================================
@@ -513,14 +538,18 @@ def get_streak_progress(db: Session = Depends(get_db)):
 # ==========================================
 
 @app.get("/personal-records")
-def get_personal_records(db: Session = Depends(get_db)):
+def get_personal_records(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    🏆 Get personal records for each distance
+    🏆 Get personal records for each distance for current user
     
     Returns fastest time for 3k, 5k, 10k, 15k, 18k, 21k
     """
     from achievements import get_personal_records
-    return get_personal_records(db)
+    user_id = current_user.id if current_user else None
+    return get_personal_records(db, user_id=user_id)
 
 
 @app.get("/goals")
@@ -538,14 +567,16 @@ def get_goals(
     # Get user's personal goals if logged in
     yearly_goal = 1000.0
     monthly_goal = 100.0
+    user_id = None
     
     if current_user:
+        user_id = current_user.id
         user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
         if user_goals:
             yearly_goal = user_goals.yearly_km_goal or 1000.0
             monthly_goal = user_goals.monthly_km_goal or 100.0
     
-    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal)
+    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id)
 
 
 @app.get("/achievements")
@@ -563,7 +594,11 @@ def get_achievements(db: Session = Depends(get_db)):
 # ==========================================
 
 @app.post("/weights")
-def create_weight(weight_data: dict, db: Session = Depends(get_db)):
+def create_weight(
+    weight_data: dict, 
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
     ⚖️ Log a new weight entry
     """
@@ -581,11 +616,13 @@ def create_weight(weight_data: dict, db: Session = Depends(get_db)):
         except:
             recorded_at = None
     
+    user_id = current_user.id if current_user else None
     entry = create_weight_entry(
         db,
         weight_lbs=weight_lbs,
         recorded_at=recorded_at,
-        notes=weight_data.get("notes")
+        notes=weight_data.get("notes"),
+        user_id=user_id
     )
     
     return {
@@ -597,12 +634,17 @@ def create_weight(weight_data: dict, db: Session = Depends(get_db)):
 
 
 @app.get("/weights")
-def get_weights(limit: int = 100, db: Session = Depends(get_db)):
+def get_weights(
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    📋 Get all weight entries
+    📋 Get weight entries for current user
     """
     from weight import get_all_weights
-    weights = get_all_weights(db, limit=limit)
+    user_id = current_user.id if current_user else None
+    weights = get_all_weights(db, limit=limit, user_id=user_id)
     return [
         {
             "id": w.id,
@@ -627,23 +669,31 @@ def delete_weight(weight_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/weight-progress")
-def get_weight_progress(db: Session = Depends(get_db)):
+def get_weight_progress(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    📊 Get weight progress toward goal
+    📊 Get weight progress toward goal for current user
     
     Goal: 209lb (Jan 7) → 180lb (Dec 31)
     """
     from weight import get_weight_progress
-    return get_weight_progress(db)
+    user_id = current_user.id if current_user else None
+    return get_weight_progress(db, user_id=user_id)
 
 
 @app.get("/weight-chart")
-def get_weight_chart(db: Session = Depends(get_db)):
+def get_weight_chart(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    📈 Get weight data for charting
+    📈 Get weight data for charting for current user
     """
     from weight import get_weight_chart_data
-    return get_weight_chart_data(db)
+    user_id = current_user.id if current_user else None
+    return get_weight_chart_data(db, user_id=user_id)
 
 
 # ==========================================
@@ -651,7 +701,11 @@ def get_weight_chart(db: Session = Depends(get_db)):
 # ==========================================
 
 @app.post("/steps")
-def create_step_entry(step_data: dict, db: Session = Depends(get_db)):
+def create_step_entry(
+    step_data: dict, 
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
     👟 Log a step count for a day
     """
@@ -671,11 +725,13 @@ def create_step_entry(step_data: dict, db: Session = Depends(get_db)):
     else:
         recorded_date = datetime.now()
     
-    # Create entry
+    # Create entry with user_id
+    user_id = current_user.id if current_user else None
     entry = StepEntry(
         step_count=step_count,
         recorded_date=recorded_date,
-        notes=step_data.get("notes")
+        notes=step_data.get("notes"),
+        user_id=user_id
     )
     db.add(entry)
     db.commit()
@@ -690,11 +746,18 @@ def create_step_entry(step_data: dict, db: Session = Depends(get_db)):
 
 
 @app.get("/steps")
-def get_step_entries(limit: int = 100, db: Session = Depends(get_db)):
+def get_step_entries(
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    📋 Get all step entries
+    📋 Get step entries for current user
     """
-    entries = db.query(StepEntry).order_by(StepEntry.recorded_date.desc()).limit(limit).all()
+    query = db.query(StepEntry)
+    if current_user:
+        query = query.filter(StepEntry.user_id == current_user.id)
+    entries = query.order_by(StepEntry.recorded_date.desc()).limit(limit).all()
     return [
         {
             "id": e.id,
@@ -720,19 +783,25 @@ def delete_step_entry(entry_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/steps/summary")
-def get_steps_summary(db: Session = Depends(get_db)):
+def get_steps_summary(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    📊 Get monthly high step day counts
+    📊 Get monthly high step day counts for current user
     
     Returns counts of 15k+, 20k+, 25k+ days per month.
     """
     from datetime import datetime
     from sqlalchemy import extract
     
-    # Get all step entries from 2026
-    entries = db.query(StepEntry).filter(
+    # Get all step entries from 2026 for this user
+    query = db.query(StepEntry).filter(
         StepEntry.recorded_date >= datetime(2026, 1, 1)
-    ).all()
+    )
+    if current_user:
+        query = query.filter(StepEntry.user_id == current_user.id)
+    entries = query.all()
     
     # Group by month
     monthly_data = {}
@@ -830,7 +899,7 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
 
 def check_personal_best(db: Session, new_run: Run) -> tuple:
     """
-    🏆 Check if a new run is a personal best.
+    🏆 Check if a new run is a personal best for the same user.
     
     Returns (is_pr, pr_type) tuple.
     PR types: "fastest_3k", "fastest_5k", etc.
@@ -838,12 +907,16 @@ def check_personal_best(db: Session, new_run: Run) -> tuple:
     from datetime import datetime
     min_date = datetime(2026, 1, 1)
     
-    # Get all previous runs of the same type (excluding the new run)
-    previous_runs = db.query(Run).filter(
+    # Get all previous runs of the same type for the same user (excluding the new run)
+    query = db.query(Run).filter(
         Run.run_type == new_run.run_type,
         Run.id != new_run.id,
         Run.completed_at >= min_date
-    ).all()
+    )
+    # Filter by user if the run has a user_id
+    if new_run.user_id is not None:
+        query = query.filter(Run.user_id == new_run.user_id)
+    previous_runs = query.all()
     
     # If no previous runs of this type, it's automatically a PR!
     if not previous_runs:

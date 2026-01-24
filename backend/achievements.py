@@ -202,9 +202,9 @@ ACHIEVEMENTS = {
 }
 
 
-def get_personal_records(db: Session) -> dict:
+def get_personal_records(db: Session, user_id: int = None) -> dict:
     """
-    🏆 Get personal records for each distance
+    🏆 Get personal records for each distance for a specific user
     
     Returns fastest time for 3k, 5k, 10k, 15k, 20k
     """
@@ -213,10 +213,13 @@ def get_personal_records(db: Session) -> dict:
     records = {}
     for run_type in ["3k", "5k", "10k", "15k", "18k", "21k"]:
         # Get fastest run for this distance
-        fastest = db.query(Run).filter(
+        query = db.query(Run).filter(
             Run.run_type == run_type,
             Run.completed_at >= min_date
-        ).order_by(Run.duration_seconds.asc()).first()
+        )
+        if user_id is not None:
+            query = query.filter(Run.user_id == user_id)
+        fastest = query.order_by(Run.duration_seconds.asc()).first()
         
         if fastest:
             mins = fastest.duration_seconds // 60
@@ -241,14 +244,15 @@ def get_personal_records(db: Session) -> dict:
     return records
 
 
-def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: float = None) -> dict:
+def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: float = None, user_id: int = None) -> dict:
     """
-    🎯 Get progress toward yearly and monthly goals
+    🎯 Get progress toward yearly and monthly goals for a specific user
     
     Args:
         db: Database session
         yearly_goal: User's yearly goal (defaults to YEARLY_GOAL_KM if not provided)
         monthly_goal: User's monthly goal (defaults to MONTHLY_GOAL_KM if not provided)
+        user_id: Filter runs by this user ID
     """
     # Use user goals or defaults
     yearly_target = yearly_goal if yearly_goal is not None else YEARLY_GOAL_KM
@@ -257,9 +261,16 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     min_date = datetime(2026, 1, 1)
     now = datetime.now()
     
+    # Base query helper - filter by user if logged in
+    def base_query():
+        q = db.query(Run)
+        if user_id is not None:
+            q = q.filter(Run.user_id == user_id)
+        return q
+    
     # Yearly progress
     year_start = datetime(2026, 1, 1)
-    year_runs = db.query(Run).filter(
+    year_runs = base_query().filter(
         Run.completed_at >= year_start,
         Run.completed_at >= min_date
     ).all()
@@ -268,7 +279,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     
     # Monthly progress
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    month_runs = db.query(Run).filter(
+    month_runs = base_query().filter(
         Run.completed_at >= month_start,
         Run.completed_at >= min_date
     ).all()
@@ -284,7 +295,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
         else:
             m_end = datetime(2026, month + 1, 1)
         
-        m_runs = db.query(Run).filter(
+        m_runs = base_query().filter(
             Run.completed_at >= m_start,
             Run.completed_at < m_end
         ).all()

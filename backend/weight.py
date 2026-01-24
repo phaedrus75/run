@@ -22,14 +22,15 @@ START_DATE = datetime(2026, 1, 7)
 END_DATE = datetime(2026, 12, 31)
 
 
-def create_weight_entry(db: Session, weight_lbs: float, recorded_at: Optional[datetime] = None, notes: Optional[str] = None) -> Weight:
+def create_weight_entry(db: Session, weight_lbs: float, recorded_at: Optional[datetime] = None, notes: Optional[str] = None, user_id: Optional[int] = None) -> Weight:
     """
     ⚖️ Create a new weight entry
     """
     entry = Weight(
         weight_lbs=weight_lbs,
         recorded_at=recorded_at or datetime.now(),
-        notes=notes
+        notes=notes,
+        user_id=user_id
     )
     db.add(entry)
     db.commit()
@@ -37,11 +38,14 @@ def create_weight_entry(db: Session, weight_lbs: float, recorded_at: Optional[da
     return entry
 
 
-def get_all_weights(db: Session, limit: int = 100) -> List[Weight]:
+def get_all_weights(db: Session, limit: int = 100, user_id: Optional[int] = None) -> List[Weight]:
     """
-    📋 Get all weight entries, most recent first
+    📋 Get all weight entries for a user, most recent first
     """
-    return db.query(Weight).order_by(desc(Weight.recorded_at)).limit(limit).all()
+    query = db.query(Weight)
+    if user_id is not None:
+        query = query.filter(Weight.user_id == user_id)
+    return query.order_by(desc(Weight.recorded_at)).limit(limit).all()
 
 
 def get_latest_weight(db: Session) -> Optional[Weight]:
@@ -63,9 +67,9 @@ def delete_weight_entry(db: Session, weight_id: int) -> bool:
     return False
 
 
-def get_weight_progress(db: Session) -> dict:
+def get_weight_progress(db: Session, user_id: Optional[int] = None) -> dict:
     """
-    📊 Get weight progress summary
+    📊 Get weight progress summary for a specific user
     
     Calculates:
     - How much weight lost
@@ -75,10 +79,13 @@ def get_weight_progress(db: Session) -> dict:
     """
     now = datetime.now()
     
-    # Get all weights for 2026
-    weights = db.query(Weight).filter(
+    # Get all weights for 2026 for this user
+    query = db.query(Weight).filter(
         Weight.recorded_at >= datetime(2026, 1, 1)
-    ).order_by(Weight.recorded_at).all()
+    )
+    if user_id is not None:
+        query = query.filter(Weight.user_id == user_id)
+    weights = query.order_by(Weight.recorded_at).all()
     
     if not weights:
         return {
@@ -141,15 +148,18 @@ def get_weight_progress(db: Session) -> dict:
     }
 
 
-def get_weight_chart_data(db: Session) -> List[dict]:
+def get_weight_chart_data(db: Session, user_id: Optional[int] = None) -> List[dict]:
     """
-    📈 Get weight data for charting
+    📈 Get weight data for charting for a specific user
     
     Returns list of {date, weight} for the last 30 entries
     """
-    weights = db.query(Weight).filter(
+    query = db.query(Weight).filter(
         Weight.recorded_at >= datetime(2026, 1, 1)
-    ).order_by(Weight.recorded_at).limit(100).all()
+    )
+    if user_id is not None:
+        query = query.filter(Weight.user_id == user_id)
+    weights = query.order_by(Weight.recorded_at).limit(100).all()
     
     return [
         {

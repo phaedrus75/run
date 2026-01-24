@@ -50,6 +50,9 @@ class Run(Base):
     # autoincrement means the database assigns this automatically
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     
+    # 👤 User who logged this run
+    user_id = Column(Integer, nullable=True, index=True)
+    
     # 🏃 Type of run (3k, 5k, 10k, 15k, 20k)
     run_type = Column(String, nullable=False)
     
@@ -81,6 +84,9 @@ class WeeklyPlan(Base):
     __tablename__ = "weekly_plans"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 👤 User who logged this run
+    user_id = Column(Integer, nullable=True, index=True)
     
     # 📅 Week identifier (e.g., "2024-W01" for first week of 2024)
     week_id = Column(String, nullable=False, unique=True)
@@ -131,6 +137,9 @@ class Weight(Base):
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     
+    # 👤 User who logged this run
+    user_id = Column(Integer, nullable=True, index=True)
+    
     # ⚖️ Weight in pounds
     weight_lbs = Column(Float, nullable=False)
     
@@ -153,6 +162,9 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 👤 User who logged this run
+    user_id = Column(Integer, nullable=True, index=True)
     
     # 📧 Email (unique identifier for login)
     email = Column(String, unique=True, index=True, nullable=False)
@@ -183,6 +195,9 @@ class StepEntry(Base):
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     
+    # 👤 User who logged this run
+    user_id = Column(Integer, nullable=True, index=True)
+    
     # 👤 User who logged this
     user_id = Column(Integer, nullable=True, index=True)
     
@@ -208,6 +223,9 @@ class UserGoals(Base):
     __tablename__ = "user_goals"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 👤 User who logged this run
+    user_id = Column(Integer, nullable=True, index=True)
     
     # 👤 User this goal belongs to
     user_id = Column(Integer, nullable=False, unique=True, index=True)

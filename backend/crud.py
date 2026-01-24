@@ -29,13 +29,14 @@ from schemas import RunCreate, WeeklyPlanCreate, RUN_DISTANCES
 # 🏃 RUN OPERATIONS
 # ==========================================
 
-def create_run(db: Session, run: RunCreate) -> Run:
+def create_run(db: Session, run: RunCreate, user_id: int = None) -> Run:
     """
     ✨ Create a new run record
     
     Args:
         db: Database session
         run: Run data from the API request
+        user_id: ID of the user creating the run
     
     Returns:
         The created Run object with all fields filled in
@@ -55,7 +56,8 @@ def create_run(db: Session, run: RunCreate) -> Run:
         duration_seconds=run.duration_seconds,
         distance_km=distance,
         notes=run.notes,
-        category=run.category or "outdoor"
+        category=run.category or "outdoor",
+        user_id=user_id
     )
     
     # Set completed_at if provided (for backdating)
@@ -77,15 +79,17 @@ def get_runs(
     db: Session, 
     skip: int = 0, 
     limit: int = 100,
-    run_type: Optional[str] = None
+    run_type: Optional[str] = None,
+    user_id: Optional[int] = None
 ) -> List[Run]:
     """
-    📖 Get a list of runs
+    📖 Get a list of runs for a specific user
     
     Args:
         skip: Number of records to skip (for pagination)
         limit: Maximum number of records to return
         run_type: Optional filter by run type
+        user_id: Filter by user ID (only show their runs)
     
     🎓 LEARNING:
     - query() starts building a database query
@@ -94,6 +98,10 @@ def get_runs(
     - all() executes and returns results as a list
     """
     query = db.query(Run)
+    
+    # Filter by user if logged in
+    if user_id is not None:
+        query = query.filter(Run.user_id == user_id)
     
     if run_type:
         query = query.filter(Run.run_type == run_type)
@@ -242,9 +250,9 @@ def get_week_boundaries_for_date(date: datetime) -> tuple:
     return (sunday, saturday)
 
 
-def calculate_streaks(db: Session) -> tuple:
+def calculate_streaks(db: Session, user_id: Optional[int] = None) -> tuple:
     """
-    🔥 Calculate current and longest weekly streaks
+    🔥 Calculate current and longest weekly streaks for a specific user
     
     Returns (current_streak, longest_streak)
     """
@@ -252,7 +260,10 @@ def calculate_streaks(db: Session) -> tuple:
     
     # Get all runs from 2026 onwards, ordered by date
     min_date = datetime(2026, 1, 1)
-    all_runs = db.query(Run).filter(Run.completed_at >= min_date).order_by(Run.completed_at.desc()).all()
+    query = db.query(Run).filter(Run.completed_at >= min_date)
+    if user_id is not None:
+        query = query.filter(Run.user_id == user_id)
+    all_runs = query.order_by(Run.completed_at.desc()).all()
     
     if not all_runs:
         return (0, 0)
@@ -342,9 +353,9 @@ def update_stats_after_run(db: Session, distance_km: float) -> UserStats:
     return stats
 
 
-def get_stats_summary(db: Session) -> dict:
+def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
     """
-    📊 Get comprehensive stats summary
+    📊 Get comprehensive stats summary for a specific user
     
     Calculates:
     - Total runs and km
@@ -359,12 +370,19 @@ def get_stats_summary(db: Session) -> dict:
     # Only count runs from 2026+
     min_date = datetime(2026, 1, 1)
     
+    # Base query - filter by user if logged in
+    def base_query():
+        q = db.query(Run)
+        if user_id is not None:
+            q = q.filter(Run.user_id == user_id)
+        return q
+    
     # This week's stats (Sunday-Saturday weeks)
     days_since_sunday = (now.weekday() + 1) % 7
     week_start = now - timedelta(days=days_since_sunday)
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    week_runs = db.query(Run).filter(
+    week_runs = base_query().filter(
         Run.completed_at >= week_start,
         Run.completed_at >= min_date
     ).all()
@@ -374,7 +392,7 @@ def get_stats_summary(db: Session) -> dict:
     # This month's stats
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
-    month_runs = db.query(Run).filter(
+    month_runs = base_query().filter(
         Run.completed_at >= month_start,
         Run.completed_at >= min_date
     ).all()
@@ -382,7 +400,7 @@ def get_stats_summary(db: Session) -> dict:
     km_this_month = sum(r.distance_km for r in month_runs)
     
     # All runs from 2026+
-    all_runs = db.query(Run).filter(Run.completed_at >= min_date).all()
+    all_runs = base_query().filter(Run.completed_at >= min_date).all()
     total_runs = len(all_runs)
     total_km = sum(r.distance_km for r in all_runs)
     
@@ -397,7 +415,7 @@ def get_stats_summary(db: Session) -> dict:
         average_pace = "0:00"
     
     # Calculate streaks using new logic
-    current_streak, longest_streak = calculate_streaks(db)
+    current_streak, longest_streak = calculate_streaks(db, user_id=user_id)
     
     return {
         "total_runs": total_runs,
@@ -412,9 +430,9 @@ def get_stats_summary(db: Session) -> dict:
     }
 
 
-def get_weekly_streak_progress(db: Session) -> dict:
+def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> dict:
     """
-    🔥 Get progress toward this week's streak goal
+    🔥 Get progress toward this week's streak goal for a specific user
     
     Goal: 1 long run (10k+) + 2 short runs (any)
     """
@@ -424,12 +442,15 @@ def get_weekly_streak_progress(db: Session) -> dict:
     # Get this week's boundaries
     week_start, week_end = get_week_boundaries_for_date(now)
     
-    # Get this week's runs
-    week_runs = db.query(Run).filter(
+    # Get this week's runs for this user
+    query = db.query(Run).filter(
         Run.completed_at >= week_start,
         Run.completed_at <= week_end,
         Run.completed_at >= min_date
-    ).all()
+    )
+    if user_id is not None:
+        query = query.filter(Run.user_id == user_id)
+    week_runs = query.all()
     
     long_runs = [r for r in week_runs if r.distance_km >= 10]
     short_runs = [r for r in week_runs if r.distance_km < 10]
@@ -440,7 +461,7 @@ def get_weekly_streak_progress(db: Session) -> dict:
     is_complete = long_runs_completed >= 1 and short_runs_completed >= 2
     
     # Get current and longest streak
-    current_streak, longest_streak = calculate_streaks(db)
+    current_streak, longest_streak = calculate_streaks(db, user_id=user_id)
     
     # Generate message
     if is_complete:
