@@ -249,13 +249,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.lifetimeLabel}>step days</Text>
             </View>
           </View>
+          
+          {/* Motivation Banner */}
+          {motivation && (
+            <View style={styles.motivationBanner}>
+              <Text style={styles.motivationEmoji}>{motivation.emoji}</Text>
+              <Text style={styles.motivationText}>{motivation.message}</Text>
+            </View>
+          )}
         </View>
         
         {/* 📅 This Week / Month */}
         <WeekSummaryCard
           runsThisWeek={stats?.runs_this_week || 0}
           kmThisWeek={stats?.km_this_week || 0}
-          motivation={motivation || undefined}
         />
         
         {/* 🚀 Quick Start Button */}
@@ -479,6 +486,24 @@ const styles = StyleSheet.create({
     width: 1,
     height: 30,
     backgroundColor: colors.background,
+  },
+  motivationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginTop: spacing.md,
+  },
+  motivationEmoji: {
+    fontSize: 24,
+    marginRight: spacing.sm,
+  },
+  motivationText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    lineHeight: 18,
   },
   startButton: {
     backgroundColor: colors.primary,
