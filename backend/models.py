@@ -163,9 +163,6 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     
-    # 👤 User who logged this run
-    user_id = Column(Integer, nullable=True, index=True)
-    
     # 📧 Email (unique identifier for login)
     email = Column(String, unique=True, index=True, nullable=False)
     
@@ -223,9 +220,6 @@ class UserGoals(Base):
     __tablename__ = "user_goals"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    
-    # 👤 User who logged this run
-    user_id = Column(Integer, nullable=True, index=True)
     
     # 👤 User this goal belongs to
     user_id = Column(Integer, nullable=False, unique=True, index=True)
