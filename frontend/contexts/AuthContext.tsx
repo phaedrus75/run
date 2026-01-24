@@ -25,6 +25,7 @@ interface AuthContextType {
   signup: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
   completeOnboarding: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -77,6 +78,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshUser() {
+    try {
+      const token = await getToken();
+      if (token) {
+        // Fetch fresh user data from API
+        const response = await fetch('https://run-production-83ca.up.railway.app/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+          setStoredUser(userData);
+        }
+      }
+    } catch (error) {
+      console.log('Failed to refresh user:', error);
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -88,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         logout,
         completeOnboarding,
+        refreshUser,
       }}
     >
       {children}

@@ -1,49 +1,129 @@
 /**
- * 🎯 ONBOARDING SCREEN
- * =====================
+ * 🎓 ONBOARDING SCREEN
+ * ====================
  * 
- * Multi-step onboarding to set up user goals.
- * Steps: Welcome → Weight Goals → Running Goals → Done
+ * Beautiful onboarding flow to introduce users to RunZen.
+ * Shows after signup, before entering the main app.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  FlatList,
+  Animated,
+  TextInput,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Alert,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, shadows, radius, spacing, typography } from '../theme/colors';
+import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
+
+const { width, height } = Dimensions.get('window');
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
-interface OnboardingScreenProps {
-  onComplete: () => void;
-  userName?: string;
+interface OnboardingSlide {
+  id: string;
+  emoji: string;
+  title: string;
+  description: string;
+  tips?: string[];
 }
 
-export default function OnboardingScreen({ onComplete, userName }: OnboardingScreenProps) {
-  const [step, setStep] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // Weight goals
-  const [startWeight, setStartWeight] = useState('');
-  const [goalWeight, setGoalWeight] = useState('');
-  
-  // Running goals
+const ONBOARDING_SLIDES: OnboardingSlide[] = [
+  {
+    id: '1',
+    emoji: '🏃',
+    title: 'Welcome to RunZen',
+    description: 'Your personal running companion for tracking runs, setting goals, and crushing your fitness journey.',
+    tips: [
+      'Track every run with precision',
+      'Set and achieve your goals',
+      'Watch your progress grow',
+    ],
+  },
+  {
+    id: '2',
+    emoji: '📝',
+    title: 'Log Your Runs',
+    description: 'After each run, log your distance and time. Choose from 3K to 21K distances.',
+    tips: [
+      'Tap "Log a Run" on the home screen',
+      'Select your distance (3K, 5K, 10K, etc.)',
+      'Enter your time and save!',
+    ],
+  },
+  {
+    id: '3',
+    emoji: '🎯',
+    title: 'Set Your Goals',
+    description: 'Stay motivated with yearly and monthly distance goals. We\'ll track your progress automatically.',
+    tips: [
+      'Default: 1000km/year, 100km/month',
+      'Customize in your profile settings',
+      'Watch your progress bars fill up!',
+    ],
+  },
+  {
+    id: '4',
+    emoji: '🏆',
+    title: 'Earn Achievements',
+    description: 'Unlock badges as you hit milestones. Personal bests trigger confetti celebrations!',
+    tips: [
+      'First run, streak milestones, distance goals',
+      'Beat your best time = 🎊 Confetti!',
+      'Track all achievements in Stats',
+    ],
+  },
+  {
+    id: '5',
+    emoji: '📊',
+    title: 'Track Everything',
+    description: 'Beyond runs, track your weight journey and high step days. See trends over time.',
+    tips: [
+      'Log weight to track fitness progress',
+      'Record 15K+ step days',
+      'View charts and trends in Stats',
+    ],
+  },
+];
+
+interface OnboardingScreenProps {
+  navigation: any;
+}
+
+export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
+  const { refreshUser } = useAuth();
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [showGoalSetup, setShowGoalSetup] = useState(false);
   const [yearlyGoal, setYearlyGoal] = useState('1000');
   const [monthlyGoal, setMonthlyGoal] = useState('100');
+  const [saving, setSaving] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
-  async function saveGoals() {
-    setIsLoading(true);
+  const handleNext = () => {
+    if (currentIndex < ONBOARDING_SLIDES.length - 1) {
+      flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      setShowGoalSetup(true);
+    }
+  };
+
+  const handleSkip = () => {
+    setShowGoalSetup(true);
+  };
+
+  const handleComplete = async () => {
+    setSaving(true);
     try {
       const token = await getToken();
       
@@ -55,14 +135,11 @@ export default function OnboardingScreen({ onComplete, userName }: OnboardingScr
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          start_weight_lbs: startWeight ? parseFloat(startWeight) : null,
-          goal_weight_lbs: goalWeight ? parseFloat(goalWeight) : null,
-          weight_goal_date: '2026-12-31T00:00:00',
           yearly_km_goal: parseFloat(yearlyGoal) || 1000,
           monthly_km_goal: parseFloat(monthlyGoal) || 100,
         }),
       });
-
+      
       // Mark onboarding complete
       await fetch(`${API_BASE_URL}/user/complete-onboarding`, {
         method: 'POST',
@@ -70,229 +147,185 @@ export default function OnboardingScreen({ onComplete, userName }: OnboardingScr
           'Authorization': `Bearer ${token}`,
         },
       });
-
-      onComplete();
-    } catch (error: any) {
-      Alert.alert('Error', 'Failed to save goals. Please try again.');
+      
+      // Refresh user data
+      await refreshUser();
+      
+    } catch (error) {
+      console.error('Failed to complete onboarding:', error);
     } finally {
-      setIsLoading(false);
+      setSaving(false);
     }
-  }
+  };
 
-  function nextStep() {
-    if (step < 3) {
-      setStep(step + 1);
-    } else {
-      saveGoals();
-    }
-  }
-
-  function prevStep() {
-    if (step > 0) {
-      setStep(step - 1);
-    }
-  }
-
-  // Step 0: Welcome
-  const renderWelcome = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.emoji}>🏃</Text>
-      <Text style={styles.stepTitle}>
-        Welcome{userName ? `, ${userName}` : ''}!
-      </Text>
-      <Text style={styles.stepDescription}>
-        Let's set up your personal goals to help you track your running journey.
-      </Text>
-      <View style={styles.featureList}>
-        <Text style={styles.feature}>📊 Track your runs</Text>
-        <Text style={styles.feature}>🎯 Set personalized goals</Text>
-        <Text style={styles.feature}>⚖️ Monitor weight progress</Text>
-        <Text style={styles.feature}>🏆 Earn achievements</Text>
-      </View>
-    </View>
-  );
-
-  // Step 1: Weight Goals
-  const renderWeightGoals = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.emoji}>⚖️</Text>
-      <Text style={styles.stepTitle}>Weight Goals</Text>
-      <Text style={styles.stepDescription}>
-        Track your weight loss journey. Leave blank if you don't want to track weight.
-      </Text>
-      
-      <View style={styles.inputRow}>
-        <View style={styles.inputHalf}>
-          <Text style={styles.label}>Current Weight (lbs)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g., 200"
-            placeholderTextColor={colors.textLight}
-            value={startWeight}
-            onChangeText={setStartWeight}
-            keyboardType="numeric"
-          />
-        </View>
-        <View style={styles.inputHalf}>
-          <Text style={styles.label}>Goal Weight (lbs)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g., 180"
-            placeholderTextColor={colors.textLight}
-            value={goalWeight}
-            onChangeText={setGoalWeight}
-            keyboardType="numeric"
-          />
-        </View>
+  const renderSlide = ({ item, index }: { item: OnboardingSlide; index: number }) => (
+    <View style={styles.slide}>
+      <View style={styles.emojiContainer}>
+        <Text style={styles.emoji}>{item.emoji}</Text>
       </View>
       
-      <Text style={styles.hint}>
-        💡 Your goal date will be set to end of 2026
-      </Text>
-    </View>
-  );
-
-  // Step 2: Running Goals
-  const renderRunningGoals = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.emoji}>🎯</Text>
-      <Text style={styles.stepTitle}>Running Goals</Text>
-      <Text style={styles.stepDescription}>
-        Set your distance goals to stay motivated throughout the year.
-      </Text>
+      <Text style={styles.title}>{item.title}</Text>
+      <Text style={styles.description}>{item.description}</Text>
       
-      <View style={styles.inputContainer}>
-        <Text style={styles.label}>Yearly Goal (km)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="1000"
-          placeholderTextColor={colors.textLight}
-          value={yearlyGoal}
-          onChangeText={setYearlyGoal}
-          keyboardType="numeric"
-        />
-        <Text style={styles.inputHint}>
-          That's about {Math.round(parseFloat(yearlyGoal || '0') / 52)} km per week
-        </Text>
-      </View>
-      
-      <View style={styles.inputContainer}>
-        <Text style={styles.label}>Monthly Goal (km)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="100"
-          placeholderTextColor={colors.textLight}
-          value={monthlyGoal}
-          onChangeText={setMonthlyGoal}
-          keyboardType="numeric"
-        />
-        <Text style={styles.inputHint}>
-          That's about {Math.round(parseFloat(monthlyGoal || '0') / 4)} km per week
-        </Text>
-      </View>
-    </View>
-  );
-
-  // Step 3: Ready
-  const renderReady = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.emoji}>🚀</Text>
-      <Text style={styles.stepTitle}>You're All Set!</Text>
-      <Text style={styles.stepDescription}>
-        Here's a summary of your goals:
-      </Text>
-      
-      <View style={[styles.summaryCard, shadows.small]}>
-        {startWeight && goalWeight && (
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>⚖️ Weight Goal</Text>
-            <Text style={styles.summaryValue}>
-              {startWeight} → {goalWeight} lbs
-            </Text>
-          </View>
-        )}
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>📅 Yearly Goal</Text>
-          <Text style={styles.summaryValue}>{yearlyGoal} km</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>📆 Monthly Goal</Text>
-          <Text style={styles.summaryValue}>{monthlyGoal} km</Text>
-        </View>
-      </View>
-      
-      <Text style={styles.hint}>
-        💡 You can change these anytime in Settings
-      </Text>
-    </View>
-  );
-
-  const steps = [renderWelcome, renderWeightGoals, renderRunningGoals, renderReady];
-  const stepTitles = ['Welcome', 'Weight', 'Running', 'Ready'];
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {/* Progress indicator */}
-        <View style={styles.progressContainer}>
-          {stepTitles.map((title, index) => (
-            <View key={index} style={styles.progressStep}>
-              <View
-                style={[
-                  styles.progressDot,
-                  index <= step && styles.progressDotActive,
-                ]}
-              />
-              <Text
-                style={[
-                  styles.progressLabel,
-                  index <= step && styles.progressLabelActive,
-                ]}
-              >
-                {title}
-              </Text>
+      {item.tips && (
+        <View style={styles.tipsContainer}>
+          {item.tips.map((tip, i) => (
+            <View key={i} style={styles.tipRow}>
+              <Text style={styles.tipBullet}>•</Text>
+              <Text style={styles.tipText}>{tip}</Text>
             </View>
           ))}
         </View>
+      )}
+    </View>
+  );
 
-        {/* Step content */}
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+  const renderDots = () => (
+    <View style={styles.dotsContainer}>
+      {ONBOARDING_SLIDES.map((_, index) => {
+        const inputRange = [
+          (index - 1) * width,
+          index * width,
+          (index + 1) * width,
+        ];
+        
+        const dotWidth = scrollX.interpolate({
+          inputRange,
+          outputRange: [8, 24, 8],
+          extrapolate: 'clamp',
+        });
+        
+        const opacity = scrollX.interpolate({
+          inputRange,
+          outputRange: [0.3, 1, 0.3],
+          extrapolate: 'clamp',
+        });
+        
+        return (
+          <Animated.View
+            key={index}
+            style={[
+              styles.dot,
+              { width: dotWidth, opacity },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+
+  if (showGoalSetup) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.goalSetupContainer}
         >
-          {steps[step]()}
-        </ScrollView>
-
-        {/* Navigation buttons */}
-        <View style={styles.buttonContainer}>
-          {step > 0 && (
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={prevStep}
-            >
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-          )}
+          <ScrollView 
+            contentContainerStyle={styles.goalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.emojiContainer}>
+              <Text style={styles.emoji}>🎯</Text>
+            </View>
+            
+            <Text style={styles.title}>Set Your Goals</Text>
+            <Text style={styles.description}>
+              What are your running goals for this year? You can always change these later.
+            </Text>
+            
+            <View style={styles.goalInputContainer}>
+              <View style={styles.goalInputRow}>
+                <Text style={styles.goalLabel}>Yearly Goal</Text>
+                <View style={styles.goalInputWrapper}>
+                  <TextInput
+                    style={styles.goalInput}
+                    value={yearlyGoal}
+                    onChangeText={setYearlyGoal}
+                    keyboardType="number-pad"
+                    placeholder="1000"
+                    placeholderTextColor={colors.textLight}
+                  />
+                  <Text style={styles.goalUnit}>km</Text>
+                </View>
+              </View>
+              
+              <View style={styles.goalInputRow}>
+                <Text style={styles.goalLabel}>Monthly Goal</Text>
+                <View style={styles.goalInputWrapper}>
+                  <TextInput
+                    style={styles.goalInput}
+                    value={monthlyGoal}
+                    onChangeText={setMonthlyGoal}
+                    keyboardType="number-pad"
+                    placeholder="100"
+                    placeholderTextColor={colors.textLight}
+                  />
+                  <Text style={styles.goalUnit}>km</Text>
+                </View>
+              </View>
+            </View>
+            
+            <View style={styles.goalTips}>
+              <Text style={styles.goalTipTitle}>💡 Quick Tips:</Text>
+              <Text style={styles.goalTipText}>
+                • 1000km/year = ~20km/week{'\n'}
+                • Start small and adjust as you go{'\n'}
+                • Consistency beats intensity!
+              </Text>
+            </View>
+          </ScrollView>
           
           <TouchableOpacity
-            style={[styles.nextButton, isLoading && styles.buttonDisabled]}
-            onPress={nextStep}
-            disabled={isLoading}
+            style={[styles.completeButton, saving && styles.buttonDisabled]}
+            onPress={handleComplete}
+            disabled={saving}
           >
-            {isLoading ? (
-              <ActivityIndicator color={colors.surface} />
-            ) : (
-              <Text style={styles.nextButtonText}>
-                {step === 3 ? "Let's Go! 🏃" : 'Continue'}
-              </Text>
-            )}
+            <Text style={styles.completeButtonText}>
+              {saving ? 'Setting up...' : "Let's Go! 🚀"}
+            </Text>
           </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
+      </View>
+      
+      <FlatList
+        ref={flatListRef}
+        data={ONBOARDING_SLIDES}
+        renderItem={renderSlide}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: false }
+        )}
+        onMomentumScrollEnd={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / width);
+          setCurrentIndex(index);
+        }}
+        scrollEventThrottle={16}
+      />
+      
+      {renderDots()}
+      
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <Text style={styles.nextButtonText}>
+            {currentIndex === ONBOARDING_SLIDES.length - 1 ? 'Set Goals' : 'Next'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -302,169 +335,175 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  keyboardView: {
-    flex: 1,
-  },
-  progressContainer: {
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-end',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.sm,
   },
-  progressStep: {
+  skipButton: {
+    padding: spacing.sm,
+  },
+  skipText: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.md,
+  },
+  slide: {
+    width,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xxl,
     alignItems: 'center',
   },
-  progressDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.textLight,
-    marginBottom: spacing.xs,
-  },
-  progressDotActive: {
-    backgroundColor: colors.primary,
-  },
-  progressLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.textLight,
-  },
-  progressLabelActive: {
-    color: colors.primary,
-    fontWeight: typography.weights.semibold,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: spacing.lg,
-  },
-  stepContent: {
-    flex: 1,
-    alignItems: 'center',
+  emojiContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.primaryLight + '30',
     justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.xl,
   },
   emoji: {
-    fontSize: 80,
-    marginBottom: spacing.lg,
+    fontSize: 56,
   },
-  stepTitle: {
-    fontSize: typography.sizes.xl,
+  title: {
+    fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
     color: colors.text,
-    marginBottom: spacing.md,
     textAlign: 'center',
+    marginBottom: spacing.md,
   },
-  stepDescription: {
+  description: {
     fontSize: typography.sizes.md,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
     lineHeight: 24,
+    marginBottom: spacing.xl,
   },
-  featureList: {
-    alignSelf: 'stretch',
+  tipsContainer: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,
-  },
-  feature: {
-    fontSize: typography.sizes.md,
-    color: colors.text,
-    paddingVertical: spacing.sm,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
     width: '100%',
-    marginBottom: spacing.md,
+    ...shadows.small,
   },
-  inputHalf: {
+  tipRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+  },
+  tipBullet: {
+    color: colors.primary,
+    fontSize: typography.sizes.md,
+    marginRight: spacing.sm,
+    fontWeight: typography.weights.bold,
+  },
+  tipText: {
+    color: colors.text,
+    fontSize: typography.sizes.sm,
     flex: 1,
+    lineHeight: 20,
   },
-  inputContainer: {
-    width: '100%',
-    marginBottom: spacing.lg,
-  },
-  label: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  input: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: typography.sizes.lg,
-    color: colors.text,
-    textAlign: 'center',
-  },
-  inputHint: {
-    fontSize: typography.sizes.sm,
-    color: colors.textLight,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  hint: {
-    fontSize: typography.sizes.sm,
-    color: colors.textLight,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-  },
-  summaryCard: {
-    width: '100%',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-  },
-  summaryRow: {
+  dotsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.background,
-  },
-  summaryLabel: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-  },
-  summaryValue: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-    color: colors.text,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  backButton: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginVertical: spacing.lg,
   },
-  backButtonText: {
-    color: colors.textSecondary,
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
+  dot: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginHorizontal: 4,
+  },
+  footer: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   nextButton: {
-    flex: 2,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.lg,
     alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
+    ...shadows.medium,
   },
   nextButtonText: {
-    color: colors.surface,
-    fontSize: typography.sizes.md,
+    color: colors.textOnPrimary,
+    fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
   },
+  // Goal Setup Styles
+  goalSetupContainer: {
+    flex: 1,
+  },
+  goalScrollContent: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  goalInputContainer: {
+    width: '100%',
+    marginTop: spacing.lg,
+  },
+  goalInputRow: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.small,
+  },
+  goalLabel: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  goalInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  goalInput: {
+    flex: 1,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    padding: 0,
+  },
+  goalUnit: {
+    fontSize: typography.sizes.lg,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
+  },
+  goalTips: {
+    backgroundColor: colors.primaryLight + '20',
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    width: '100%',
+    marginTop: spacing.lg,
+  },
+  goalTipTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  goalTipText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    lineHeight: 22,
+  },
+  completeButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.xl,
+    ...shadows.medium,
+  },
+  completeButtonText: {
+    color: colors.textOnPrimary,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
 });
-
