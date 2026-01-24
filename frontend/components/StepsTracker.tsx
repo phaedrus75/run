@@ -19,6 +19,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
+import { getToken } from '../services/auth';
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
@@ -59,10 +60,14 @@ export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
 
     setIsLoading(true);
     try {
+      const token = await getToken();
       const dateStr = selectedDate.toISOString().split('T')[0];
       const response = await fetch(`${API_BASE_URL}/steps`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           step_count: selectedSteps,
           recorded_date: `${dateStr}T12:00:00`,
