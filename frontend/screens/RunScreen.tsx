@@ -83,13 +83,20 @@ export function RunScreen({ navigation }: RunScreenProps) {
       const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
       
       // Show celebration alert
+      const prMessage = run.is_personal_best 
+        ? `\n\n🏆 NEW PERSONAL BEST!` 
+        : '';
+      
       Alert.alert(
-        '🎉 Run Logged!',
-        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km`,
+        run.is_personal_best ? '🏆 PERSONAL BEST!' : '🎉 Run Logged!',
+        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${prMessage}`,
         [
           {
-            text: 'Done',
-            onPress: () => navigation.navigate('Home'),
+            text: run.is_personal_best ? 'Celebrate! 🎉' : 'Done',
+            onPress: () => navigation.navigate('Home', { 
+              newPR: run.is_personal_best, 
+              prType: run.pr_type 
+            }),
           },
           {
             text: 'Log Another',
@@ -130,13 +137,20 @@ export function RunScreen({ navigation }: RunScreenProps) {
       const paceSecs = Math.floor(paceSeconds % 60);
       const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
       
+      const prMessage = run.is_personal_best 
+        ? `\n\n🏆 NEW PERSONAL BEST!` 
+        : '';
+      
       Alert.alert(
-        '🎉 Run Logged!',
-        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km`,
+        run.is_personal_best ? '🏆 PERSONAL BEST!' : '🎉 Run Logged!',
+        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${prMessage}`,
         [
           {
-            text: 'Done',
-            onPress: () => navigation.navigate('Home'),
+            text: run.is_personal_best ? 'Celebrate! 🎉' : 'Done',
+            onPress: () => navigation.navigate('Home', { 
+              newPR: run.is_personal_best, 
+              prType: run.pr_type 
+            }),
           },
           {
             text: 'Log Another',

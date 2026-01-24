@@ -78,6 +78,8 @@ export interface Run {
   category: string | null;
   pace_per_km: string;
   formatted_duration: string;
+  is_personal_best?: boolean;
+  pr_type?: string | null;
 }
 
 export interface WeeklyPlan {

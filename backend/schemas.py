@@ -108,6 +108,10 @@ class RunResponse(BaseModel):
     pace_per_km: str = ""  # e.g., "6:30"
     formatted_duration: str = ""  # e.g., "32:30"
     
+    # 🏆 Personal best tracking
+    is_personal_best: bool = False  # True if this is a new PR
+    pr_type: Optional[str] = None  # e.g., "fastest_5k", "longest_run"
+    
     class Config:
         from_attributes = True  # Allows converting from database model
 

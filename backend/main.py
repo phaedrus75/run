@@ -353,7 +353,11 @@ def create_run(run: RunCreate, db: Session = Depends(get_db)):
         )
     
     db_run = crud.create_run(db=db, run=run)
-    return format_run_response(db_run)
+    
+    # 🏆 Check if this is a personal best!
+    is_pr, pr_type = check_personal_best(db, db_run)
+    
+    return format_run_response(db_run, is_personal_best=is_pr, pr_type=pr_type)
 
 
 @app.get("/runs", response_model=List[RunResponse])
@@ -789,7 +793,7 @@ def get_steps_summary(db: Session = Depends(get_db)):
 # 🛠️ HELPER FUNCTIONS
 # ==========================================
 
-def format_run_response(run: Run) -> dict:
+def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None) -> dict:
     """
     Format a Run object for the API response.
     
@@ -819,7 +823,39 @@ def format_run_response(run: Run) -> dict:
         "category": getattr(run, 'category', None) or "outdoor",
         "pace_per_km": pace,
         "formatted_duration": formatted,
+        "is_personal_best": is_personal_best,
+        "pr_type": pr_type,
     }
+
+
+def check_personal_best(db: Session, new_run: Run) -> tuple:
+    """
+    🏆 Check if a new run is a personal best.
+    
+    Returns (is_pr, pr_type) tuple.
+    PR types: "fastest_3k", "fastest_5k", etc.
+    """
+    from datetime import datetime
+    min_date = datetime(2026, 1, 1)
+    
+    # Get all previous runs of the same type (excluding the new run)
+    previous_runs = db.query(Run).filter(
+        Run.run_type == new_run.run_type,
+        Run.id != new_run.id,
+        Run.completed_at >= min_date
+    ).all()
+    
+    # If no previous runs of this type, it's automatically a PR!
+    if not previous_runs:
+        return True, f"fastest_{new_run.run_type}"
+    
+    # Check if this is the fastest time for this distance
+    best_previous_time = min(r.duration_seconds for r in previous_runs)
+    
+    if new_run.duration_seconds < best_previous_time:
+        return True, f"fastest_{new_run.run_type}"
+    
+    return False, None
 
 
 def format_plan_response(plan: WeeklyPlan) -> dict:

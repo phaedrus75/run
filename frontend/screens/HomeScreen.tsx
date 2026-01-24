@@ -10,7 +10,7 @@
  * - We fetch data from the API and display it
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,12 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import ConfettiCannon from 'react-native-confetti-cannon';
+import { useRoute } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -61,6 +64,14 @@ interface HomeScreenProps {
 export function HomeScreen({ navigation }: HomeScreenProps) {
   // 🔐 Auth context
   const { user } = useAuth();
+  
+  // 🎯 Route params for PR celebration
+  const route = useRoute();
+  const { newPR, prType } = (route.params as { newPR?: boolean; prType?: string }) || {};
+  
+  // 🎊 Confetti ref
+  const confettiRef = useRef<any>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
   
   // 👤 Profile modal state
   const [showProfile, setShowProfile] = useState(false);
@@ -136,6 +147,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+  
+  // 🎊 Trigger confetti for new PR
+  useEffect(() => {
+    if (newPR) {
+      setShowConfetti(true);
+      // Clear the params so confetti doesn't show again on re-render
+      navigation.setParams({ newPR: undefined, prType: undefined });
+    }
+  }, [newPR, navigation]);
   
   // 🔄 Pull to refresh
   const onRefresh = useCallback(() => {
@@ -307,6 +327,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onClose={() => setShowStreak(false)}
         progress={streakProgress}
       />
+      
+      {/* 🎊 Confetti for Personal Bests! */}
+      {showConfetti && (
+        <ConfettiCannon
+          count={200}
+          origin={{ x: Dimensions.get('window').width / 2, y: -10 }}
+          autoStart={true}
+          fadeOut={true}
+          fallSpeed={3000}
+          explosionSpeed={350}
+          colors={['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7']}
+          onAnimationEnd={() => setShowConfetti(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
