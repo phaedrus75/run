@@ -105,6 +105,8 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   const [showGoalSetup, setShowGoalSetup] = useState(false);
   const [yearlyGoal, setYearlyGoal] = useState('1000');
   const [monthlyGoal, setMonthlyGoal] = useState('100');
+  const [startWeight, setStartWeight] = useState('');
+  const [goalWeight, setGoalWeight] = useState('');
   const [saving, setSaving] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -127,7 +129,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
     try {
       const token = await getToken();
       
-      // Save goals
+      // Save goals (including weight goals)
       await fetch(`${API_BASE_URL}/user/goals`, {
         method: 'POST',
         headers: {
@@ -137,6 +139,8 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
         body: JSON.stringify({
           yearly_km_goal: parseFloat(yearlyGoal) || 1000,
           monthly_km_goal: parseFloat(monthlyGoal) || 100,
+          start_weight_lbs: startWeight ? parseFloat(startWeight) : null,
+          goal_weight_lbs: goalWeight ? parseFloat(goalWeight) : null,
         }),
       });
       
@@ -235,6 +239,9 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
             </Text>
             
             <View style={styles.goalInputContainer}>
+              {/* Running Goals */}
+              <Text style={styles.sectionLabel}>🏃 Running Goals</Text>
+              
               <View style={styles.goalInputRow}>
                 <Text style={styles.goalLabel}>Yearly Goal</Text>
                 <View style={styles.goalInputWrapper}>
@@ -262,6 +269,39 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
                     placeholderTextColor={colors.textLight}
                   />
                   <Text style={styles.goalUnit}>km</Text>
+                </View>
+              </View>
+              
+              {/* Weight Goals */}
+              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>⚖️ Weight Tracking (Optional)</Text>
+              
+              <View style={styles.goalInputRow}>
+                <Text style={styles.goalLabel}>Current Weight</Text>
+                <View style={styles.goalInputWrapper}>
+                  <TextInput
+                    style={styles.goalInput}
+                    value={startWeight}
+                    onChangeText={setStartWeight}
+                    keyboardType="decimal-pad"
+                    placeholder="—"
+                    placeholderTextColor={colors.textLight}
+                  />
+                  <Text style={styles.goalUnit}>lbs</Text>
+                </View>
+              </View>
+              
+              <View style={styles.goalInputRow}>
+                <Text style={styles.goalLabel}>Goal Weight</Text>
+                <View style={styles.goalInputWrapper}>
+                  <TextInput
+                    style={styles.goalInput}
+                    value={goalWeight}
+                    onChangeText={setGoalWeight}
+                    keyboardType="decimal-pad"
+                    placeholder="—"
+                    placeholderTextColor={colors.textLight}
+                  />
+                  <Text style={styles.goalUnit}>lbs</Text>
                 </View>
               </View>
             </View>
@@ -454,6 +494,13 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     marginBottom: spacing.sm,
+  },
+  sectionLabel: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
+    alignSelf: 'flex-start',
   },
   goalInputWrapper: {
     flexDirection: 'row',

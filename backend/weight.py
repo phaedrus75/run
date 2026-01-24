@@ -77,7 +77,23 @@ def get_weight_progress(db: Session, user_id: Optional[int] = None) -> dict:
     - Whether on track
     - Trend (up/down/stable)
     """
+    from models import UserGoals
+    
     now = datetime.now()
+    
+    # Get user's personal weight goals if available
+    user_start_weight = None
+    user_goal_weight = None
+    
+    if user_id is not None:
+        user_goals = db.query(UserGoals).filter(UserGoals.user_id == user_id).first()
+        if user_goals:
+            user_start_weight = user_goals.start_weight_lbs
+            user_goal_weight = user_goals.goal_weight_lbs
+    
+    # Use user's goals or defaults
+    start_weight = user_start_weight if user_start_weight else START_WEIGHT
+    goal_weight = user_goal_weight if user_goal_weight else GOAL_WEIGHT
     
     # Get all weights for 2026 for this user
     query = db.query(Weight).filter(
@@ -87,39 +103,60 @@ def get_weight_progress(db: Session, user_id: Optional[int] = None) -> dict:
         query = query.filter(Weight.user_id == user_id)
     weights = query.order_by(Weight.recorded_at).all()
     
+    # If no weights logged yet, return based on user's settings
     if not weights:
+        # If user hasn't set goals yet, return empty state
+        if user_start_weight is None:
+            return {
+                "start_weight": None,
+                "current_weight": None,
+                "goal_weight": user_goal_weight,
+                "weight_lost": 0,
+                "weight_to_lose": 0,
+                "percent_complete": 0,
+                "on_track": False,
+                "trend": "stable",
+                "entries_count": 0,
+                "needs_setup": True,
+            }
         return {
-            "start_weight": START_WEIGHT,
-            "current_weight": START_WEIGHT,
-            "goal_weight": GOAL_WEIGHT,
+            "start_weight": start_weight,
+            "current_weight": start_weight,
+            "goal_weight": goal_weight,
             "weight_lost": 0,
-            "weight_to_lose": START_WEIGHT - GOAL_WEIGHT,
+            "weight_to_lose": start_weight - goal_weight if goal_weight else 0,
             "percent_complete": 0,
             "on_track": False,
             "trend": "stable",
             "entries_count": 0,
+            "needs_setup": False,
         }
     
     # Current weight is the most recent entry
     current_weight = weights[-1].weight_lbs
     
     # Weight lost from start
-    weight_lost = START_WEIGHT - current_weight
-    total_to_lose = START_WEIGHT - GOAL_WEIGHT  # 29 lbs total
-    weight_to_lose = max(0, current_weight - GOAL_WEIGHT)
+    weight_lost = start_weight - current_weight if start_weight else 0
+    total_to_lose = start_weight - goal_weight if (start_weight and goal_weight) else 0
+    weight_to_lose = max(0, current_weight - goal_weight) if goal_weight else 0
     
     # Progress percentage
     if total_to_lose > 0:
         percent_complete = min(100, max(0, (weight_lost / total_to_lose) * 100))
+    elif goal_weight and current_weight <= goal_weight:
+        percent_complete = 100
     else:
-        percent_complete = 100 if current_weight <= GOAL_WEIGHT else 0
+        percent_complete = 0
     
     # Calculate if on track
-    # Linear progression: should lose ~0.56 lbs/week (29 lbs over 52 weeks)
+    # Linear progression from start date to end date
     days_elapsed = (now - START_DATE).days
     total_days = (END_DATE - START_DATE).days
-    expected_weight = START_WEIGHT - (total_to_lose * (days_elapsed / total_days))
-    on_track = current_weight <= expected_weight + 2  # 2lb buffer
+    if start_weight and total_to_lose > 0 and total_days > 0:
+        expected_weight = start_weight - (total_to_lose * (days_elapsed / total_days))
+        on_track = current_weight <= expected_weight + 2  # 2lb buffer
+    else:
+        on_track = False
     
     # Calculate trend (compare last 3 entries)
     trend = "stable"
@@ -136,15 +173,16 @@ def get_weight_progress(db: Session, user_id: Optional[int] = None) -> dict:
             trend = "up"
     
     return {
-        "start_weight": START_WEIGHT,
+        "start_weight": start_weight,
         "current_weight": round(current_weight, 1),
-        "goal_weight": GOAL_WEIGHT,
-        "weight_lost": round(weight_lost, 1),
-        "weight_to_lose": round(weight_to_lose, 1),
+        "goal_weight": goal_weight,
+        "weight_lost": round(weight_lost, 1) if weight_lost else 0,
+        "weight_to_lose": round(weight_to_lose, 1) if weight_to_lose else 0,
         "percent_complete": round(percent_complete, 1),
         "on_track": on_track,
         "trend": trend,
         "entries_count": len(weights),
+        "needs_setup": user_start_weight is None,
     }
 
 
