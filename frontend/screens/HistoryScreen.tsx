@@ -20,6 +20,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
@@ -60,6 +61,13 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   useEffect(() => {
     fetchRuns();
   }, [fetchRuns]);
+  
+  // 🔄 Refetch when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchRuns();
+    }, [fetchRuns])
+  );
   
   // 🔄 Pull to refresh
   const onRefresh = () => {

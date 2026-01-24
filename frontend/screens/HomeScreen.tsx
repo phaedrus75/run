@@ -24,7 +24,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import ConfettiCannon from 'react-native-confetti-cannon';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -147,6 +147,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+  
+  // 🔄 Refetch when screen comes into focus (e.g., after deleting a run)
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
   
   // 🎊 Trigger confetti for new PR
   useEffect(() => {

@@ -16,6 +16,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { StatCard, StatsChart, PaceTrendChart, WeightTracker, StreakProgress } from '../components';
 import { 
@@ -81,6 +82,13 @@ export function StatsScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+  
+  // 🔄 Refetch when screen comes into focus (e.g., after deleting a run)
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
