@@ -40,12 +40,19 @@ interface StepsSummary {
   };
 }
 
+interface Celebration {
+  type: string;
+  title: string;
+  message: string;
+}
+
 interface StepsTrackerProps {
   summary: StepsSummary | null;
   onUpdate: () => void;
+  onCelebrate?: (celebrations: Celebration[]) => void;
 }
 
-export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
+export function StepsTracker({ summary, onUpdate, onCelebrate }: StepsTrackerProps) {
   const [showModal, setShowModal] = useState(false);
   const [selectedSteps, setSelectedSteps] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -75,11 +82,20 @@ export function StepsTracker({ summary, onUpdate }: StepsTrackerProps) {
       });
 
       if (response.ok) {
+        const data = await response.json();
         setShowModal(false);
         setSelectedSteps(null);
         setSelectedDate(new Date());
         onUpdate();
-        Alert.alert('Success', `Logged ${(selectedSteps / 1000).toFixed(0)}k steps! 👟`);
+        
+        // Check for celebrations
+        if (data.celebrations && data.celebrations.length > 0 && onCelebrate) {
+          const celebration = data.celebrations[0];
+          Alert.alert(celebration.title, celebration.message);
+          onCelebrate(data.celebrations);
+        } else {
+          Alert.alert('Success', `Logged ${(selectedSteps / 1000).toFixed(0)}k steps! 👟`);
+        }
       } else {
         throw new Error('Failed to save');
       }

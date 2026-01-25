@@ -393,10 +393,14 @@ def create_run(
     
     db_run = crud.create_run(db=db, run=run, user_id=user_id)
     
-    # 🏆 Check if this is a personal best!
-    is_pr, pr_type = check_personal_best(db, db_run)
+    # 🎉 Check for all celebrations!
+    celebrations = check_all_celebrations(db, db_run, current_user)
     
-    return format_run_response(db_run, is_personal_best=is_pr, pr_type=pr_type)
+    # Legacy PR check for backwards compatibility
+    is_pr = any(c["type"] == "personal_best" for c in celebrations)
+    pr_type = next((c["type"] for c in celebrations if c["type"] == "personal_best"), None)
+    
+    return format_run_response(db_run, is_personal_best=is_pr, pr_type=pr_type, celebrations=celebrations)
 
 
 @app.get("/runs", response_model=List[RunResponse])
@@ -769,11 +773,33 @@ def create_step_entry(
     db.commit()
     db.refresh(entry)
     
+    # 🎉 Check for high step day celebration
+    celebrations = []
+    if step_count >= 25000:
+        celebrations.append({
+            "type": "high_steps",
+            "title": "🚀 25K+ Steps!",
+            "message": "Incredible! You crushed it today!"
+        })
+    elif step_count >= 20000:
+        celebrations.append({
+            "type": "high_steps",
+            "title": "🔥 20K+ Steps!",
+            "message": "Amazing step count! Keep moving!"
+        })
+    elif step_count >= 15000:
+        celebrations.append({
+            "type": "high_steps",
+            "title": "👟 15K+ Steps!",
+            "message": "Great job staying active today!"
+        })
+    
     return {
         "id": entry.id,
         "step_count": entry.step_count,
         "recorded_date": entry.recorded_date.isoformat(),
         "notes": entry.notes,
+        "celebrations": celebrations,
     }
 
 
@@ -894,7 +920,7 @@ def get_steps_summary(
 # 🛠️ HELPER FUNCTIONS
 # ==========================================
 
-def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None) -> dict:
+def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None, celebrations: list = None) -> dict:
     """
     Format a Run object for the API response.
     
@@ -926,6 +952,7 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
         "formatted_duration": formatted,
         "is_personal_best": is_personal_best,
         "pr_type": pr_type,
+        "celebrations": celebrations or [],
     }
 
 
@@ -961,6 +988,93 @@ def check_personal_best(db: Session, new_run: Run) -> tuple:
         return True, f"fastest_{new_run.run_type}"
     
     return False, None
+
+
+def check_all_celebrations(db: Session, new_run: Run, current_user) -> list:
+    """
+    🎉 Check for ALL celebration-worthy achievements after a run.
+    
+    Returns a list of celebration dicts with type, title, and message.
+    """
+    from datetime import datetime
+    from models import UserGoals
+    
+    celebrations = []
+    min_date = datetime(2026, 1, 1)
+    
+    if not current_user:
+        return celebrations
+    
+    user_id = current_user.id
+    
+    # 1. 🏆 Personal Best Check
+    is_pr, pr_type = check_personal_best(db, new_run)
+    if is_pr:
+        celebrations.append({
+            "type": "personal_best",
+            "title": "🏆 Personal Best!",
+            "message": f"New fastest {new_run.run_type.upper()} time!"
+        })
+    
+    # 2. 🔥 Streak Maintained Check
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=1)
+    
+    # Check if user had runs on previous days (streak was active before this run)
+    runs_before_today = db.query(Run).filter(
+        Run.user_id == user_id,
+        Run.id != new_run.id,
+        Run.completed_at >= min_date
+    ).all()
+    
+    if runs_before_today:
+        # Get unique run dates before today
+        run_dates = set(r.completed_at.date() for r in runs_before_today if r.completed_at.date() < today)
+        
+        if yesterday in run_dates:
+            # User ran yesterday and today - streak continues!
+            # Count the streak length
+            streak = 1
+            check_date = yesterday
+            while check_date in run_dates:
+                streak += 1
+                check_date = check_date - timedelta(days=1)
+            
+            # Only celebrate if streak is 3+ days
+            if streak >= 3:
+                celebrations.append({
+                    "type": "streak",
+                    "title": "🔥 Streak Extended!",
+                    "message": f"{streak} day streak! Keep it going!"
+                })
+    
+    # 3. 🎯 Monthly Goal Met Check
+    now = datetime.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get user's monthly goal
+    user_goals = db.query(UserGoals).filter(UserGoals.user_id == user_id).first()
+    monthly_goal = user_goals.monthly_km_goal if user_goals else 100.0
+    
+    # Get all runs this month (including the new one)
+    monthly_runs = db.query(Run).filter(
+        Run.user_id == user_id,
+        Run.completed_at >= month_start,
+        Run.completed_at >= min_date
+    ).all()
+    
+    total_monthly_km = sum(r.distance_km for r in monthly_runs)
+    km_before_this_run = total_monthly_km - new_run.distance_km
+    
+    # Check if this run pushed us over the goal
+    if km_before_this_run < monthly_goal <= total_monthly_km:
+        celebrations.append({
+            "type": "monthly_goal",
+            "title": "🎯 Monthly Goal Crushed!",
+            "message": f"You hit {monthly_goal}km for {now.strftime('%B')}!"
+        })
+    
+    return celebrations
 
 
 def format_plan_response(plan: WeeklyPlan) -> dict:

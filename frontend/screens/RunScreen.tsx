@@ -82,20 +82,30 @@ export function RunScreen({ navigation }: RunScreenProps) {
       const paceSecs = Math.floor(paceSeconds % 60);
       const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
       
-      // Show celebration alert
-      const prMessage = run.is_personal_best 
-        ? `\n\n🏆 NEW PERSONAL BEST!` 
-        : '';
+      // Check for celebrations
+      const celebrations = run.celebrations || [];
+      const hasCelebration = celebrations.length > 0;
+      
+      // Build celebration message
+      let celebrationText = '';
+      if (hasCelebration) {
+        celebrationText = '\n\n' + celebrations.map(c => `${c.title}`).join('\n');
+      }
+      
+      // Determine alert title
+      let alertTitle = '🎉 Run Logged!';
+      if (celebrations.length > 0) {
+        alertTitle = celebrations[0].title;
+      }
       
       Alert.alert(
-        run.is_personal_best ? '🏆 PERSONAL BEST!' : '🎉 Run Logged!',
-        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${prMessage}`,
+        alertTitle,
+        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${celebrationText}`,
         [
           {
-            text: run.is_personal_best ? 'Celebrate! 🎉' : 'Done',
+            text: hasCelebration ? 'Celebrate! 🎉' : 'Done',
             onPress: () => navigation.navigate('Home', { 
-              newPR: run.is_personal_best, 
-              prType: run.pr_type 
+              celebrations: celebrations,
             }),
           },
           {
@@ -137,19 +147,30 @@ export function RunScreen({ navigation }: RunScreenProps) {
       const paceSecs = Math.floor(paceSeconds % 60);
       const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
       
-      const prMessage = run.is_personal_best 
-        ? `\n\n🏆 NEW PERSONAL BEST!` 
-        : '';
+      // Check for celebrations
+      const celebrations = run.celebrations || [];
+      const hasCelebration = celebrations.length > 0;
+      
+      // Build celebration message
+      let celebrationText = '';
+      if (hasCelebration) {
+        celebrationText = '\n\n' + celebrations.map(c => `${c.title}`).join('\n');
+      }
+      
+      // Determine alert title
+      let alertTitle = '🎉 Run Logged!';
+      if (celebrations.length > 0) {
+        alertTitle = celebrations[0].title;
+      }
       
       Alert.alert(
-        run.is_personal_best ? '🏆 PERSONAL BEST!' : '🎉 Run Logged!',
-        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${prMessage}`,
+        alertTitle,
+        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${celebrationText}`,
         [
           {
-            text: run.is_personal_best ? 'Celebrate! 🎉' : 'Done',
+            text: hasCelebration ? 'Celebrate! 🎉' : 'Done',
             onPress: () => navigation.navigate('Home', { 
-              newPR: run.is_personal_best, 
-              prType: run.pr_type 
+              celebrations: celebrations,
             }),
           },
           {

@@ -68,6 +68,12 @@ async function apiFetch<T>(
 // 📊 TYPE DEFINITIONS
 // ==========================================
 
+export interface Celebration {
+  type: 'personal_best' | 'streak' | 'monthly_goal' | 'high_steps';
+  title: string;
+  message: string;
+}
+
 export interface Run {
   id: number;
   run_type: string;
@@ -80,6 +86,7 @@ export interface Run {
   formatted_duration: string;
   is_personal_best?: boolean;
   pr_type?: string | null;
+  celebrations?: Celebration[];
 }
 
 export interface WeeklyPlan {

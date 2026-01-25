@@ -65,9 +65,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   // 🔐 Auth context
   const { user } = useAuth();
   
-  // 🎯 Route params for PR celebration
+  // 🎯 Route params for celebration
   const route = useRoute();
-  const { newPR, prType } = (route.params as { newPR?: boolean; prType?: string }) || {};
+  const { celebrations } = (route.params as { celebrations?: Array<{type: string; title: string; message: string}> }) || {};
   
   // 🎊 Confetti ref
   const confettiRef = useRef<any>(null);
@@ -155,14 +155,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     }, [fetchData])
   );
   
-  // 🎊 Trigger confetti for new PR
+  // 🎊 Trigger confetti for celebrations
   useEffect(() => {
-    if (newPR) {
+    if (celebrations && celebrations.length > 0) {
       setShowConfetti(true);
       // Clear the params so confetti doesn't show again on re-render
-      navigation.setParams({ newPR: undefined, prType: undefined });
+      navigation.setParams({ celebrations: undefined });
     }
-  }, [newPR, navigation]);
+  }, [celebrations, navigation]);
   
   // 🔄 Pull to refresh
   const onRefresh = useCallback(() => {
@@ -283,6 +283,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <StepsTracker 
           summary={stepsSummary}
           onUpdate={fetchData}
+          onCelebrate={() => setShowConfetti(true)}
         />
         
         {/* ⚖️ Weight Tracker */}

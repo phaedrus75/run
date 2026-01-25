@@ -91,6 +91,15 @@ class RunUpdate(BaseModel):
         }
 
 
+class Celebration(BaseModel):
+    """
+    🎉 Schema for celebration events
+    """
+    type: str  # "personal_best", "streak", "monthly_goal", "high_steps"
+    title: str  # "Personal Best!"
+    message: str  # "You beat your 5k record!"
+
+
 class RunResponse(BaseModel):
     """
     📤 Schema for RETURNING run data
@@ -108,9 +117,12 @@ class RunResponse(BaseModel):
     pace_per_km: str = ""  # e.g., "6:30"
     formatted_duration: str = ""  # e.g., "32:30"
     
-    # 🏆 Personal best tracking
+    # 🏆 Personal best tracking (legacy, kept for compatibility)
     is_personal_best: bool = False  # True if this is a new PR
     pr_type: Optional[str] = None  # e.g., "fastest_5k", "longest_run"
+    
+    # 🎉 Celebrations - all achievements unlocked by this run
+    celebrations: List[Celebration] = []
     
     class Config:
         from_attributes = True  # Allows converting from database model
