@@ -996,7 +996,7 @@ def check_all_celebrations(db: Session, new_run: Run, current_user) -> list:
     
     Returns a list of celebration dicts with type, title, and message.
     """
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from models import UserGoals
     
     celebrations = []
