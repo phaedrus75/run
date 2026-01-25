@@ -37,9 +37,15 @@ interface UserGoals {
 }
 
 export function ProfileModal({ visible, onClose }: ProfileModalProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Handle state
+  const [handle, setHandle] = useState('');
+  const [existingHandle, setExistingHandle] = useState<string | null>(null);
+  const [handleError, setHandleError] = useState('');
+  const [isSavingHandle, setIsSavingHandle] = useState(false);
   
   // Goals state
   const [startWeight, setStartWeight] = useState('');
@@ -47,10 +53,11 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
   const [yearlyGoal, setYearlyGoal] = useState('1000');
   const [monthlyGoal, setMonthlyGoal] = useState('100');
 
-  // Fetch current goals when modal opens
+  // Fetch current goals and handle when modal opens
   useEffect(() => {
     if (visible) {
       fetchGoals();
+      fetchHandle();
     }
   }, [visible]);
 
@@ -72,6 +79,68 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
       console.log('Failed to fetch goals:', error);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function fetchHandle() {
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_BASE_URL}/user/me`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const userData = await response.json();
+        if (userData.handle) {
+          setExistingHandle(userData.handle);
+          setHandle(userData.handle);
+        } else {
+          setExistingHandle(null);
+          setHandle('');
+        }
+      }
+    } catch (error) {
+      console.log('Failed to fetch handle:', error);
+    }
+  }
+
+  async function saveHandle() {
+    const cleanHandle = handle.trim().toLowerCase();
+    
+    if (!cleanHandle || cleanHandle.length < 3) {
+      setHandleError('Handle must be at least 3 characters');
+      return;
+    }
+    if (!/^[a-z0-9_]+$/.test(cleanHandle)) {
+      setHandleError('Only letters, numbers, and underscores allowed');
+      return;
+    }
+    
+    setIsSavingHandle(true);
+    setHandleError('');
+    
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_BASE_URL}/user/handle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ handle: cleanHandle }),
+      });
+      
+      if (response.ok) {
+        setExistingHandle(cleanHandle);
+        Alert.alert('Success', 'Handle set! This cannot be changed.');
+        await refreshUser();
+      } else {
+        const error = await response.json();
+        setHandleError(error.detail || 'Handle not available');
+      }
+    } catch (error) {
+      setHandleError('Failed to save handle');
+    } finally {
+      setIsSavingHandle(false);
     }
   }
 
@@ -174,9 +243,52 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                 <View style={styles.userInfo}>
                   <Text style={styles.userName}>{user?.name || 'Runner'}</Text>
                   <Text style={styles.userEmail}>{user?.email}</Text>
+                  {existingHandle && (
+                    <Text style={styles.userHandle}>@{existingHandle}</Text>
+                  )}
                 </View>
               </View>
             </View>
+
+            {/* Handle Section - Only show if not set */}
+            {!existingHandle && (
+              <View style={[styles.section, shadows.small]}>
+                <Text style={styles.sectionTitle}>🏷️ Set Your Handle</Text>
+                <Text style={styles.handleWarning}>
+                  ⚠️ Choose carefully - this cannot be changed later!
+                </Text>
+                <View style={styles.handleInputRow}>
+                  <Text style={styles.handlePrefix}>@</Text>
+                  <TextInput
+                    style={styles.handleInput}
+                    value={handle}
+                    onChangeText={(text) => {
+                      setHandle(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                      setHandleError('');
+                    }}
+                    placeholder="yourhandle"
+                    placeholderTextColor={colors.textLight}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={20}
+                  />
+                </View>
+                {handleError ? (
+                  <Text style={styles.handleError}>{handleError}</Text>
+                ) : null}
+                <TouchableOpacity
+                  style={[styles.handleSaveButton, isSavingHandle && styles.buttonDisabled]}
+                  onPress={saveHandle}
+                  disabled={isSavingHandle}
+                >
+                  {isSavingHandle ? (
+                    <ActivityIndicator color={colors.surface} size="small" />
+                  ) : (
+                    <Text style={styles.handleSaveButtonText}>Set Handle</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Weight Goals */}
             <View style={[styles.section, shadows.small]}>
@@ -336,6 +448,54 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
+  },
+  userHandle: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    fontWeight: typography.weights.semibold,
+    marginTop: 2,
+  },
+  handleWarning: {
+    fontSize: typography.sizes.sm,
+    color: colors.warning || '#F39C12',
+    marginBottom: spacing.md,
+    fontStyle: 'italic',
+  },
+  handleInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  handlePrefix: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+    marginRight: spacing.xs,
+  },
+  handleInput: {
+    flex: 1,
+    fontSize: typography.sizes.md,
+    color: colors.text,
+    paddingVertical: spacing.md,
+  },
+  handleError: {
+    fontSize: typography.sizes.sm,
+    color: colors.error || '#FF6B6B',
+    marginBottom: spacing.sm,
+  },
+  handleSaveButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    alignItems: 'center',
+  },
+  handleSaveButtonText: {
+    color: colors.surface,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
   },
   inputRow: {
     flexDirection: 'row',

@@ -1201,6 +1201,22 @@ def get_circle_details(
     }
 
 
+@app.get("/user/me")
+def get_current_user_info(
+    current_user: User = Depends(require_auth)
+):
+    """
+    👤 Get current user's info including handle
+    """
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "handle": current_user.handle,
+        "onboarding_complete": current_user.onboarding_complete,
+    }
+
+
 @app.post("/user/handle")
 def set_user_handle(
     handle_data: dict,
