@@ -26,6 +26,7 @@ import { RunScreen } from './screens/RunScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { AddRunScreen } from './screens/AddRunScreen';
 import { StatsScreen } from './screens/StatsScreen';
+import { CirclesScreen } from './screens/CirclesScreen';
 import AuthScreen from './screens/AuthScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 
@@ -110,6 +111,9 @@ function MainTabs() {
             case 'Run':
               iconName = focused ? 'play-circle' : 'play-circle-outline';
               break;
+            case 'Circles':
+              iconName = focused ? 'people' : 'people-outline';
+              break;
             case 'Stats':
               iconName = focused ? 'bar-chart' : 'bar-chart-outline';
               break;
@@ -134,6 +138,13 @@ function MainTabs() {
         name="Run" 
         component={RunScreen}
         options={{ tabBarLabel: 'Run' }}
+      />
+      
+      {/* 👥 Circles Tab */}
+      <Tab.Screen 
+        name="Circles" 
+        component={CirclesScreen}
+        options={{ tabBarLabel: 'Circles' }}
       />
       
       {/* 📊 Stats Tab */}

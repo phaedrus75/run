@@ -172,6 +172,9 @@ class User(Base):
     # 👤 Display name
     name = Column(String, nullable=True)
     
+    # 🏷️ Unique handle for social features (e.g., @runner123)
+    handle = Column(String, unique=True, index=True, nullable=True)
+    
     # ✅ Is the account active?
     is_active = Column(Boolean, default=True)
     
@@ -236,3 +239,50 @@ class UserGoals(Base):
     # 📅 Timestamps
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class Circle(Base):
+    """
+    👥 Circle Model - A group of friends competing together
+    
+    Max 10 users per circle. Users can be in multiple circles.
+    """
+    __tablename__ = "circles"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 📛 Circle name (e.g., "Office Runners", "Weekend Warriors")
+    name = Column(String, nullable=False)
+    
+    # 🔑 Unique invite code for joining
+    invite_code = Column(String, unique=True, index=True, nullable=False)
+    
+    # 👤 Who created this circle
+    created_by = Column(Integer, nullable=False, index=True)
+    
+    # 📅 When created
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class CircleMembership(Base):
+    """
+    🤝 Circle Membership - Tracks which users are in which circles
+    """
+    __tablename__ = "circle_memberships"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 👥 Circle ID
+    circle_id = Column(Integer, nullable=False, index=True)
+    
+    # 👤 User ID
+    user_id = Column(Integer, nullable=False, index=True)
+    
+    # 📅 When they joined
+    joined_at = Column(DateTime, server_default=func.now())
+    
+    # Ensure unique membership per circle
+    __table_args__ = (
+        # Composite unique constraint
+        {'sqlite_autoincrement': True},
+    )

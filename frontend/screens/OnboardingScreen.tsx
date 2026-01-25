@@ -103,6 +103,8 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   const { refreshUser } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showGoalSetup, setShowGoalSetup] = useState(false);
+  const [handle, setHandle] = useState('');
+  const [handleError, setHandleError] = useState('');
   const [yearlyGoal, setYearlyGoal] = useState('1000');
   const [monthlyGoal, setMonthlyGoal] = useState('100');
   const [startWeight, setStartWeight] = useState('');
@@ -125,9 +127,39 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   };
 
   const handleComplete = async () => {
+    // Validate handle
+    const cleanHandle = handle.trim().toLowerCase();
+    if (!cleanHandle || cleanHandle.length < 3) {
+      setHandleError('Handle must be at least 3 characters');
+      return;
+    }
+    if (!/^[a-z0-9_]+$/.test(cleanHandle)) {
+      setHandleError('Only letters, numbers, and underscores allowed');
+      return;
+    }
+    
     setSaving(true);
+    setHandleError('');
+    
     try {
       const token = await getToken();
+      
+      // Save handle first
+      const handleResponse = await fetch(`${API_BASE_URL}/user/handle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ handle: cleanHandle }),
+      });
+      
+      if (!handleResponse.ok) {
+        const error = await handleResponse.json();
+        setHandleError(error.detail || 'Handle not available');
+        setSaving(false);
+        return;
+      }
       
       // Save goals (including weight goals)
       await fetch(`${API_BASE_URL}/user/goals`, {
@@ -233,14 +265,40 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
               <Text style={styles.emoji}>🎯</Text>
             </View>
             
-            <Text style={styles.title}>Set Your Goals</Text>
+            <Text style={styles.title}>Set Up Your Profile</Text>
             <Text style={styles.description}>
-              What are your running goals for this year? You can always change these later.
+              Choose your unique handle and set your goals. You can always change these later.
             </Text>
             
             <View style={styles.goalInputContainer}>
+              {/* Handle */}
+              <Text style={styles.sectionLabel}>🏷️ Your Handle</Text>
+              
+              <View style={styles.goalInputRow}>
+                <Text style={styles.goalLabel}>Choose a unique username</Text>
+                <View style={styles.goalInputWrapper}>
+                  <Text style={styles.handlePrefix}>@</Text>
+                  <TextInput
+                    style={[styles.goalInput, styles.handleInput]}
+                    value={handle}
+                    onChangeText={(text) => {
+                      setHandle(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                      setHandleError('');
+                    }}
+                    placeholder="runner123"
+                    placeholderTextColor={colors.textLight}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={20}
+                  />
+                </View>
+                {handleError ? (
+                  <Text style={styles.handleError}>{handleError}</Text>
+                ) : null}
+              </View>
+              
               {/* Running Goals */}
-              <Text style={styles.sectionLabel}>🏃 Running Goals</Text>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>🏃 Running Goals</Text>
               
               <View style={styles.goalInputRow}>
                 <Text style={styles.goalLabel}>Yearly Goal</Text>
@@ -517,6 +575,20 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.lg,
     color: colors.textSecondary,
     marginLeft: spacing.sm,
+  },
+  handlePrefix: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+    marginRight: spacing.xs,
+  },
+  handleInput: {
+    fontSize: typography.sizes.xl,
+  },
+  handleError: {
+    fontSize: typography.sizes.sm,
+    color: colors.error || '#FF6B6B',
+    marginTop: spacing.xs,
   },
   goalTips: {
     backgroundColor: colors.primaryLight + '20',

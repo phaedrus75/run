@@ -78,6 +78,10 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT false
                 """))
+                # Add handle column to users table
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS handle VARCHAR UNIQUE
+                """))
                 # Add category column to runs table
                 conn.execute(text("""
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'outdoor'
@@ -112,6 +116,10 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_complete BOOLEAN DEFAULT 0"))
                     conn.commit()
                     print("Migration: onboarding_complete added to users")
+                if 'handle' not in user_columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN handle VARCHAR"))
+                    conn.commit()
+                    print("Migration: handle added to users")
                 
                 result = conn.execute(text("PRAGMA table_info(runs)"))
                 run_columns = [row[1] for row in result]
@@ -963,6 +971,278 @@ def format_plan_response(plan: WeeklyPlan) -> dict:
         "planned_runs": json.loads(plan.planned_runs),
         "created_at": plan.created_at,
     }
+
+
+# ==========================================
+# 👥 CIRCLES (SOCIAL FEATURES)
+# ==========================================
+
+from models import Circle, CircleMembership
+import secrets
+
+@app.post("/circles")
+def create_circle(
+    circle_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """
+    👥 Create a new circle
+    
+    Creates a circle and automatically adds the creator as a member.
+    """
+    name = circle_data.get("name")
+    if not name or len(name) < 2:
+        raise HTTPException(status_code=400, detail="Circle name must be at least 2 characters")
+    
+    # Generate unique invite code
+    invite_code = secrets.token_urlsafe(6).upper()[:8]
+    
+    # Create circle
+    circle = Circle(
+        name=name,
+        invite_code=invite_code,
+        created_by=current_user.id
+    )
+    db.add(circle)
+    db.commit()
+    db.refresh(circle)
+    
+    # Add creator as first member
+    membership = CircleMembership(
+        circle_id=circle.id,
+        user_id=current_user.id
+    )
+    db.add(membership)
+    db.commit()
+    
+    return {
+        "id": circle.id,
+        "name": circle.name,
+        "invite_code": circle.invite_code,
+        "created_by": current_user.id,
+        "member_count": 1,
+    }
+
+
+@app.get("/circles")
+def get_my_circles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """
+    👥 Get all circles the current user is a member of
+    """
+    memberships = db.query(CircleMembership).filter(
+        CircleMembership.user_id == current_user.id
+    ).all()
+    
+    circles = []
+    for membership in memberships:
+        circle = db.query(Circle).filter(Circle.id == membership.circle_id).first()
+        if circle:
+            member_count = db.query(CircleMembership).filter(
+                CircleMembership.circle_id == circle.id
+            ).count()
+            circles.append({
+                "id": circle.id,
+                "name": circle.name,
+                "invite_code": circle.invite_code,
+                "member_count": member_count,
+                "is_creator": circle.created_by == current_user.id,
+                "joined_at": membership.joined_at.isoformat(),
+            })
+    
+    return circles
+
+
+@app.post("/circles/join")
+def join_circle(
+    join_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """
+    🤝 Join a circle using invite code
+    """
+    invite_code = join_data.get("invite_code", "").upper().strip()
+    if not invite_code:
+        raise HTTPException(status_code=400, detail="Invite code is required")
+    
+    # Find circle
+    circle = db.query(Circle).filter(Circle.invite_code == invite_code).first()
+    if not circle:
+        raise HTTPException(status_code=404, detail="Circle not found. Check your invite code.")
+    
+    # Check if already a member
+    existing = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle.id,
+        CircleMembership.user_id == current_user.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="You're already a member of this circle")
+    
+    # Check member limit (max 10)
+    member_count = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle.id
+    ).count()
+    if member_count >= 10:
+        raise HTTPException(status_code=400, detail="This circle is full (max 10 members)")
+    
+    # Add member
+    membership = CircleMembership(
+        circle_id=circle.id,
+        user_id=current_user.id
+    )
+    db.add(membership)
+    db.commit()
+    
+    return {
+        "message": f"Welcome to {circle.name}!",
+        "circle_id": circle.id,
+        "circle_name": circle.name,
+    }
+
+
+@app.delete("/circles/{circle_id}/leave")
+def leave_circle(
+    circle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """
+    👋 Leave a circle
+    """
+    membership = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id,
+        CircleMembership.user_id == current_user.id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=404, detail="You're not a member of this circle")
+    
+    db.delete(membership)
+    db.commit()
+    
+    return {"message": "You've left the circle"}
+
+
+@app.get("/circles/{circle_id}")
+def get_circle_details(
+    circle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """
+    👥 Get circle details including members and leaderboard
+    """
+    # Verify membership
+    membership = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id,
+        CircleMembership.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="You're not a member of this circle")
+    
+    circle = db.query(Circle).filter(Circle.id == circle_id).first()
+    if not circle:
+        raise HTTPException(status_code=404, detail="Circle not found")
+    
+    # Get all members with their stats
+    memberships = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id
+    ).all()
+    
+    from datetime import datetime
+    min_date = datetime(2026, 1, 1)
+    now = datetime.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    members = []
+    for m in memberships:
+        user = db.query(User).filter(User.id == m.user_id).first()
+        if user:
+            # Get user's stats
+            user_runs = db.query(Run).filter(
+                Run.user_id == user.id,
+                Run.completed_at >= min_date
+            ).all()
+            
+            monthly_runs = [r for r in user_runs if r.completed_at >= month_start]
+            
+            total_km = sum(r.distance_km for r in user_runs)
+            monthly_km = sum(r.distance_km for r in monthly_runs)
+            
+            members.append({
+                "user_id": user.id,
+                "name": user.name or "Runner",
+                "handle": user.handle,
+                "total_runs": len(user_runs),
+                "total_km": round(total_km, 1),
+                "monthly_km": round(monthly_km, 1),
+                "monthly_runs": len(monthly_runs),
+                "is_you": user.id == current_user.id,
+            })
+    
+    # Sort by monthly km (leaderboard)
+    members.sort(key=lambda x: x["monthly_km"], reverse=True)
+    
+    # Add rank
+    for i, member in enumerate(members):
+        member["rank"] = i + 1
+    
+    return {
+        "id": circle.id,
+        "name": circle.name,
+        "invite_code": circle.invite_code,
+        "member_count": len(members),
+        "members": members,
+        "created_by": circle.created_by,
+    }
+
+
+@app.post("/user/handle")
+def set_user_handle(
+    handle_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """
+    🏷️ Set or update user's handle
+    """
+    handle = handle_data.get("handle", "").strip().lower()
+    
+    # Validate handle
+    if not handle or len(handle) < 3:
+        raise HTTPException(status_code=400, detail="Handle must be at least 3 characters")
+    if len(handle) > 20:
+        raise HTTPException(status_code=400, detail="Handle must be 20 characters or less")
+    if not handle.replace("_", "").isalnum():
+        raise HTTPException(status_code=400, detail="Handle can only contain letters, numbers, and underscores")
+    
+    # Check if handle is taken
+    existing = db.query(User).filter(User.handle == handle, User.id != current_user.id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="This handle is already taken")
+    
+    # Update handle
+    current_user.handle = handle
+    db.commit()
+    
+    return {"handle": handle, "message": "Handle updated!"}
+
+
+@app.get("/user/handle/{handle}")
+def check_handle_available(
+    handle: str,
+    db: Session = Depends(get_db)
+):
+    """
+    🔍 Check if a handle is available
+    """
+    handle = handle.strip().lower()
+    existing = db.query(User).filter(User.handle == handle).first()
+    return {"handle": handle, "available": existing is None}
 
 
 # ==========================================
