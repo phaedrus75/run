@@ -529,3 +529,226 @@ def get_motivational_message(db: Session, user_id: Optional[int] = None) -> dict
     
     # Return random motivation
     return random.choice(MOTIVATIONAL_MESSAGES)
+
+
+# ==========================================
+# 📅 MONTH IN REVIEW
+# ==========================================
+
+def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month: Optional[int] = None, target_year: Optional[int] = None) -> dict:
+    """
+    📅 Get comprehensive month in review data
+    
+    Shows from last day of month through first 7 days of next month.
+    If no target month specified, defaults to previous month if in first 7 days,
+    or current month if on last day.
+    """
+    from models import StepEntry, Weight
+    import calendar
+    
+    now = datetime.now()
+    today = now.date()
+    
+    # Determine which month to review
+    if target_month is None or target_year is None:
+        # Check if we should show (last day of current month OR first 7 days of month)
+        _, last_day = calendar.monthrange(now.year, now.month)
+        is_last_day_of_month = today.day == last_day
+        is_first_week = today.day <= 7
+        
+        if is_last_day_of_month:
+            # Show current month review
+            review_month = now.month
+            review_year = now.year
+            should_show = True
+        elif is_first_week:
+            # Show previous month review
+            if now.month == 1:
+                review_month = 12
+                review_year = now.year - 1
+            else:
+                review_month = now.month - 1
+                review_year = now.year
+            should_show = True
+        else:
+            # Don't show - return with should_show = False
+            return {
+                "should_show": False,
+                "month_name": "",
+                "year": now.year,
+                "month": now.month,
+                "total_runs": 0,
+                "total_km": 0,
+                "total_duration_seconds": 0,
+                "avg_pace": "0:00",
+                "outdoor_runs": 0,
+                "treadmill_runs": 0,
+                "runs_by_type": {},
+                "total_step_days": 0,
+                "total_steps": 0,
+                "avg_daily_steps": 0,
+                "high_step_days": 0,
+                "start_weight": None,
+                "end_weight": None,
+                "weight_change": None,
+                "best_streak_in_month": 0,
+                "monthly_km_goal": 0,
+                "monthly_km_achieved": 0,
+                "goal_percent": 0,
+                "goal_met": False,
+                "prs_achieved": [],
+                "km_vs_last_month": 0,
+                "runs_vs_last_month": 0,
+            }
+    else:
+        review_month = target_month
+        review_year = target_year
+        should_show = True
+    
+    # Get month boundaries
+    month_start = datetime(review_year, review_month, 1)
+    _, last_day = calendar.monthrange(review_year, review_month)
+    month_end = datetime(review_year, review_month, last_day, 23, 59, 59)
+    
+    # Month name
+    month_name = month_start.strftime("%B %Y")
+    
+    # Query runs for the month
+    runs_query = db.query(Run).filter(
+        Run.completed_at >= month_start,
+        Run.completed_at <= month_end
+    )
+    if user_id:
+        runs_query = runs_query.filter(Run.user_id == user_id)
+    runs = runs_query.all()
+    
+    # Calculate run stats
+    total_runs = len(runs)
+    total_km = sum(r.distance_km for r in runs)
+    total_duration = sum(r.duration_seconds for r in runs)
+    
+    # Average pace
+    if total_km > 0 and total_duration > 0:
+        pace_seconds = total_duration / total_km
+        pace_min = int(pace_seconds // 60)
+        pace_sec = int(pace_seconds % 60)
+        avg_pace = f"{pace_min}:{pace_sec:02d}"
+    else:
+        avg_pace = "0:00"
+    
+    # Run breakdown by category
+    outdoor_runs = len([r for r in runs if getattr(r, 'category', 'outdoor') == 'outdoor'])
+    treadmill_runs = len([r for r in runs if getattr(r, 'category', 'outdoor') == 'treadmill'])
+    
+    # Runs by type
+    runs_by_type = {}
+    for r in runs:
+        runs_by_type[r.run_type] = runs_by_type.get(r.run_type, 0) + 1
+    
+    # Query steps for the month
+    steps_query = db.query(StepEntry).filter(
+        StepEntry.date >= month_start.date(),
+        StepEntry.date <= month_end.date()
+    )
+    if user_id:
+        steps_query = steps_query.filter(StepEntry.user_id == user_id)
+    step_entries = steps_query.all()
+    
+    total_step_days = len(step_entries)
+    total_steps = sum(s.steps for s in step_entries)
+    avg_daily_steps = total_steps // total_step_days if total_step_days > 0 else 0
+    high_step_days = len([s for s in step_entries if s.steps >= 10000])
+    
+    # Weight progress for the month
+    weight_query = db.query(Weight).filter(
+        Weight.recorded_at >= month_start,
+        Weight.recorded_at <= month_end
+    )
+    if user_id:
+        weight_query = weight_query.filter(Weight.user_id == user_id)
+    weights = weight_query.order_by(Weight.recorded_at).all()
+    
+    start_weight = weights[0].weight_lbs if weights else None
+    end_weight = weights[-1].weight_lbs if weights else None
+    weight_change = round(end_weight - start_weight, 1) if start_weight and end_weight else None
+    
+    # Best streak calculation (simplified - count consecutive run days)
+    run_dates = sorted(set(r.completed_at.date() for r in runs))
+    best_streak = 0
+    current_streak = 0
+    prev_date = None
+    for d in run_dates:
+        if prev_date and (d - prev_date).days == 1:
+            current_streak += 1
+        else:
+            current_streak = 1
+        best_streak = max(best_streak, current_streak)
+        prev_date = d
+    
+    # Goals - get from user goals
+    from models import UserGoals
+    goals_query = db.query(UserGoals)
+    if user_id:
+        goals_query = goals_query.filter(UserGoals.user_id == user_id)
+    user_goals = goals_query.first()
+    monthly_km_goal = user_goals.monthly_km_goal if user_goals else 80.0
+    goal_percent = min((total_km / monthly_km_goal) * 100, 100) if monthly_km_goal > 0 else 0
+    goal_met = total_km >= monthly_km_goal
+    
+    # PRs achieved (simplified - would need to track actual PR dates)
+    prs_achieved = []  # TODO: Track actual PRs with dates
+    
+    # Compare to previous month
+    if review_month == 1:
+        prev_month = 12
+        prev_year = review_year - 1
+    else:
+        prev_month = review_month - 1
+        prev_year = review_year
+    
+    prev_month_start = datetime(prev_year, prev_month, 1)
+    _, prev_last_day = calendar.monthrange(prev_year, prev_month)
+    prev_month_end = datetime(prev_year, prev_month, prev_last_day, 23, 59, 59)
+    
+    prev_runs_query = db.query(Run).filter(
+        Run.completed_at >= prev_month_start,
+        Run.completed_at <= prev_month_end
+    )
+    if user_id:
+        prev_runs_query = prev_runs_query.filter(Run.user_id == user_id)
+    prev_runs = prev_runs_query.all()
+    
+    prev_total_runs = len(prev_runs)
+    prev_total_km = sum(r.distance_km for r in prev_runs)
+    
+    km_vs_last_month = round(total_km - prev_total_km, 1)
+    runs_vs_last_month = total_runs - prev_total_runs
+    
+    return {
+        "should_show": should_show,
+        "month_name": month_name,
+        "year": review_year,
+        "month": review_month,
+        "total_runs": total_runs,
+        "total_km": round(total_km, 1),
+        "total_duration_seconds": total_duration,
+        "avg_pace": avg_pace,
+        "outdoor_runs": outdoor_runs,
+        "treadmill_runs": treadmill_runs,
+        "runs_by_type": runs_by_type,
+        "total_step_days": total_step_days,
+        "total_steps": total_steps,
+        "avg_daily_steps": avg_daily_steps,
+        "high_step_days": high_step_days,
+        "start_weight": start_weight,
+        "end_weight": end_weight,
+        "weight_change": weight_change,
+        "best_streak_in_month": best_streak,
+        "monthly_km_goal": monthly_km_goal,
+        "monthly_km_achieved": round(total_km, 1),
+        "goal_percent": round(goal_percent, 1),
+        "goal_met": goal_met,
+        "prs_achieved": prs_achieved,
+        "km_vs_last_month": km_vs_last_month,
+        "runs_vs_last_month": runs_vs_last_month,
+    }

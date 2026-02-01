@@ -353,6 +353,17 @@ export const statsApi = {
   getWeightChart: (): Promise<WeightChartData[]> => {
     return apiFetch('/weight-chart');
   },
+
+  /**
+   * 📅 Get month in review data
+   */
+  getMonthReview: (month?: number, year?: number): Promise<MonthInReview> => {
+    const params = new URLSearchParams();
+    if (month !== undefined) params.append('month', month.toString());
+    if (year !== undefined) params.append('year', year.toString());
+    const query = params.toString();
+    return apiFetch(`/month-review${query ? '?' + query : ''}`);
+  },
 };
 
 // ==========================================
@@ -433,6 +444,35 @@ export interface StepsSummary {
     days_25k: number;
     total_entries: number;
   };
+}
+
+export interface MonthInReview {
+  should_show: boolean;
+  month_name: string;
+  year: number;
+  month: number;
+  total_runs: number;
+  total_km: number;
+  total_duration_seconds: number;
+  avg_pace: string;
+  outdoor_runs: number;
+  treadmill_runs: number;
+  runs_by_type: Record<string, number>;
+  total_step_days: number;
+  total_steps: number;
+  avg_daily_steps: number;
+  high_step_days: number;
+  start_weight: number | null;
+  end_weight: number | null;
+  weight_change: number | null;
+  best_streak_in_month: number;
+  monthly_km_goal: number;
+  monthly_km_achieved: number;
+  goal_percent: number;
+  goal_met: boolean;
+  prs_achieved: string[];
+  km_vs_last_month: number;
+  runs_vs_last_month: number;
 }
 
 export const stepsApi = {

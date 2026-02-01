@@ -39,6 +39,7 @@ import {
   ProfileModal,
   StepsTracker,
   WeekSummaryCard,
+  MonthInReview,
 } from '../components';
 import { 
   runApi, 
@@ -55,6 +56,7 @@ import {
   type WeightProgress,
   type WeightChartData,
   type StepsSummary,
+  type MonthInReview as MonthInReviewType,
 } from '../services/api';
 
 interface HomeScreenProps {
@@ -90,6 +92,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
   const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
   const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
+  const [monthReview, setMonthReview] = useState<MonthInReviewType | null>(null);
+  const [showMonthReview, setShowMonthReview] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -119,6 +123,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       setWeightProgress(weightProgressData);
       setWeightChart(weightChartData);
       setStepsSummary(stepsData);
+      
+      // Fetch month review separately (graceful failure if not deployed)
+      try {
+        const monthReviewData = await statsApi.getMonthReview();
+        if (monthReviewData && monthReviewData.should_show) {
+          setMonthReview(monthReviewData);
+          setShowMonthReview(true);
+        }
+      } catch (e) {
+        // Month review endpoint not available yet - that's ok
+        console.log('Month review not available');
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
       // For demo purposes, show mock data if API is unavailable
@@ -342,6 +358,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onClose={() => setShowStreak(false)}
         progress={streakProgress}
       />
+      
+      {/* 📅 Month in Review Modal */}
+      {monthReview && showMonthReview && (
+        <MonthInReview 
+          data={monthReview}
+          onDismiss={() => setShowMonthReview(false)}
+        />
+      )}
       
       {/* 🎊 Confetti for Personal Bests! */}
       {showConfetti && (

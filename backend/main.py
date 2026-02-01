@@ -625,6 +625,25 @@ def get_achievements(
     return get_achievements(db, stats, user_id=user_id)
 
 
+@app.get("/month-review")
+def get_month_review(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    """
+    📅 Get month in review data
+    
+    Shows comprehensive monthly stats. Visible from last day of month
+    through first 7 days of the next month.
+    
+    Optional params to view specific month (for testing/history).
+    """
+    user_id = current_user.id if current_user else None
+    return crud.get_month_in_review(db, user_id=user_id, target_month=month, target_year=year)
+
+
 # ==========================================
 # ⚖️ WEIGHT TRACKING ENDPOINTS
 # ==========================================

@@ -259,3 +259,60 @@ class WeightProgress(BaseModel):
     on_track: bool  # Are we on track to hit goal?
     trend: str  # "down", "up", "stable"
     entries_count: int  # Total weight entries
+
+
+# ==========================================
+# 📅 MONTH IN REVIEW SCHEMAS
+# ==========================================
+
+class MonthInReview(BaseModel):
+    """
+    📅 Month in Review Summary
+    
+    Comprehensive monthly stats shown at end of month / start of next.
+    """
+    # Month info
+    month_name: str  # "January 2026"
+    year: int
+    month: int
+    
+    # Running stats
+    total_runs: int
+    total_km: float
+    total_duration_seconds: int
+    avg_pace: str  # "6:30"
+    
+    # Run breakdown
+    outdoor_runs: int
+    treadmill_runs: int
+    runs_by_type: dict  # {"3k": 5, "5k": 10, "10k": 3}
+    
+    # Steps stats
+    total_step_days: int
+    total_steps: int
+    avg_daily_steps: int
+    high_step_days: int  # Days with 10k+ steps
+    
+    # Weight progress
+    start_weight: Optional[float]
+    end_weight: Optional[float]
+    weight_change: Optional[float]
+    
+    # Streaks
+    best_streak_in_month: int
+    
+    # Goals
+    monthly_km_goal: float
+    monthly_km_achieved: float
+    goal_percent: float
+    goal_met: bool
+    
+    # Personal bests achieved
+    prs_achieved: List[str]  # ["Fastest 5k", "Longest run"]
+    
+    # Comparison to previous month
+    km_vs_last_month: float  # +5.2 or -3.1
+    runs_vs_last_month: int  # +3 or -2
+    
+    # Should show (last day of month or first 7 days of next month)
+    should_show: bool
