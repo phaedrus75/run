@@ -647,17 +647,17 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
     
     # Query steps for the month
     steps_query = db.query(StepEntry).filter(
-        StepEntry.date >= month_start.date(),
-        StepEntry.date <= month_end.date()
+        StepEntry.recorded_date >= month_start,
+        StepEntry.recorded_date <= month_end
     )
     if user_id:
         steps_query = steps_query.filter(StepEntry.user_id == user_id)
     step_entries = steps_query.all()
     
     total_step_days = len(step_entries)
-    total_steps = sum(s.steps for s in step_entries)
+    total_steps = sum(s.step_count for s in step_entries)
     avg_daily_steps = total_steps // total_step_days if total_step_days > 0 else 0
-    high_step_days = len([s for s in step_entries if s.steps >= 10000])
+    high_step_days = len([s for s in step_entries if s.step_count >= 10000])
     
     # Weight progress for the month
     weight_query = db.query(Weight).filter(
