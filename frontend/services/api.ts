@@ -462,6 +462,9 @@ export interface MonthInReview {
   total_steps: number;
   avg_daily_steps: number;
   high_step_days: number;
+  days_15k: number;
+  days_20k: number;
+  days_25k: number;
   start_weight: number | null;
   end_weight: number | null;
   weight_change: number | null;

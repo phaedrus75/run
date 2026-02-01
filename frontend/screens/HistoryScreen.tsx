@@ -18,19 +18,45 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
-import { runApi, type Run } from '../services/api';
+import { MonthInReview } from '../components/MonthInReview';
+import { runApi, statsApi, type Run, type MonthInReview as MonthInReviewType } from '../services/api';
 
 const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '18k', '21k'];
 
 interface HistoryScreenProps {
   navigation: any;
 }
+
+// Generate available months (from Jan 2026 to current month)
+const getAvailableMonths = () => {
+  const months: { month: number; year: number; label: string }[] = [];
+  const now = new Date();
+  const startYear = 2026;
+  const startMonth = 1; // January
+  
+  for (let year = startYear; year <= now.getFullYear(); year++) {
+    const endMonth = year === now.getFullYear() ? now.getMonth() + 1 : 12;
+    const start = year === startYear ? startMonth : 1;
+    
+    for (let month = start; month <= endMonth; month++) {
+      const date = new Date(year, month - 1, 1);
+      months.push({
+        month,
+        year,
+        label: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      });
+    }
+  }
+  
+  return months.reverse(); // Most recent first
+};
 
 export function HistoryScreen({ navigation }: HistoryScreenProps) {
   // 📊 State
@@ -42,6 +68,25 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   // ✏️ Edit modal state
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
+  
+  // 📅 Month in Review state
+  const [monthReviewData, setMonthReviewData] = useState<MonthInReviewType | null>(null);
+  const [showMonthReview, setShowMonthReview] = useState(false);
+  const availableMonths = getAvailableMonths();
+  
+  // 📅 Fetch month review for a specific month
+  const fetchMonthReview = async (month: number, year: number) => {
+    try {
+      const data = await statsApi.getMonthReview(month, year);
+      if (data) {
+        // Force should_show to true when explicitly requested
+        setMonthReviewData({ ...data, should_show: true });
+        setShowMonthReview(true);
+      }
+    } catch (error) {
+      console.error('Failed to fetch month review:', error);
+    }
+  };
   
   // 📡 Fetch runs
   const fetchRuns = useCallback(async () => {
@@ -179,6 +224,26 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
         </View>
       </View>
       
+      {/* 📅 Month in Review Section */}
+      <View style={styles.monthReviewSection}>
+        <Text style={styles.monthReviewTitle}>📅 Month in Review</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.monthScrollContent}
+        >
+          {availableMonths.map(({ month, year, label }) => (
+            <TouchableOpacity
+              key={`${year}-${month}`}
+              style={[styles.monthChip, shadows.small]}
+              onPress={() => fetchMonthReview(month, year)}
+            >
+              <Text style={styles.monthChipText}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+      
       {/* 🔍 Filters */}
       <View style={styles.filterContainer}>
         {RUN_TYPES.map(renderFilterButton)}
@@ -216,6 +281,14 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
         onSave={handleSaveRun}
         onDelete={handleDeleteRun}
       />
+      
+      {/* 📅 Month in Review Modal */}
+      {monthReviewData && showMonthReview && (
+        <MonthInReview
+          data={monthReviewData}
+          onDismiss={() => setShowMonthReview(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -229,6 +302,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+  },
+  // Month in Review section
+  monthReviewSection: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  monthReviewTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  monthScrollContent: {
+    paddingHorizontal: spacing.lg,
+  },
+  monthChip: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    marginRight: spacing.sm,
+  },
+  monthChipText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.primary,
   },
   headerRow: {
     flexDirection: 'row',

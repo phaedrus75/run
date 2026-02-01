@@ -128,64 +128,90 @@ export function MonthInReview({ data, onDismiss }: Props) {
             </View>
           </View>
 
-          {/* Run Breakdown */}
+          {/* Runs by Distance */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🏃 Run Breakdown</Text>
-            <View style={styles.breakdownRow}>
-              <View style={styles.breakdownItem}>
-                <Text style={styles.breakdownValue}>{data.outdoor_runs}</Text>
-                <Text style={styles.breakdownLabel}>Outdoor</Text>
-              </View>
-              <View style={styles.breakdownDivider} />
-              <View style={styles.breakdownItem}>
-                <Text style={styles.breakdownValue}>{data.treadmill_runs}</Text>
-                <Text style={styles.breakdownLabel}>Treadmill</Text>
-              </View>
+            <Text style={styles.sectionTitle}>🏃 Runs by Distance</Text>
+            <View style={styles.typeGrid}>
+              {['3k', '5k', '10k', '15k', '18k', '21k'].map(type => {
+                const count = data.runs_by_type[type] || 0;
+                const totalForType = count * (
+                  type === '3k' ? 3 : type === '5k' ? 5 : type === '10k' ? 10 : type === '15k' ? 15 : type === '18k' ? 18 : 21
+                );
+                return (
+                  <View key={type} style={[styles.typeCard, shadows.small]}>
+                    <View style={[styles.typeIcon, { backgroundColor: colors.runTypes[type] }]}>
+                      <Text style={styles.typeIconText}>{type.toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.typeCount}>{count}</Text>
+                    <Text style={styles.typeLabel}>runs</Text>
+                    <Text style={styles.typeKm}>{totalForType} km</Text>
+                  </View>
+                );
+              })}
             </View>
             
-            {/* Runs by type */}
-            {Object.keys(data.runs_by_type).length > 0 && (
-              <View style={styles.typeBreakdown}>
-                {Object.entries(data.runs_by_type)
-                  .sort(([a], [b]) => {
-                    const numA = parseInt(a);
-                    const numB = parseInt(b);
-                    return numA - numB;
-                  })
-                  .map(([type, count]) => (
-                    <View key={type} style={styles.typeChip}>
-                      <Text style={styles.typeText}>{type}: {count}</Text>
-                    </View>
-                  ))
-                }
+            {/* Outdoor vs Treadmill */}
+            <View style={styles.categoryRow}>
+              <View style={styles.categoryItem}>
+                <Text style={styles.categoryEmoji}>🌳</Text>
+                <Text style={styles.categoryValue}>{data.outdoor_runs}</Text>
+                <Text style={styles.categoryLabel}>Outdoor</Text>
               </View>
-            )}
+              <View style={styles.categoryDivider} />
+              <View style={styles.categoryItem}>
+                <Text style={styles.categoryEmoji}>🏋️</Text>
+                <Text style={styles.categoryValue}>{data.treadmill_runs}</Text>
+                <Text style={styles.categoryLabel}>Treadmill</Text>
+              </View>
+            </View>
           </View>
 
           {/* Steps Summary */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>👟 Steps</Text>
-            <View style={styles.stepsGrid}>
-              <View style={styles.stepsStat}>
-                <Text style={styles.stepsValue}>{data.total_step_days}</Text>
-                <Text style={styles.stepsLabel}>Days Logged</Text>
+            <Text style={styles.sectionTitle}>👟 High Step Days</Text>
+            <View style={styles.stepDaysRow}>
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🚶</Text>
+                <Text style={styles.stepDayValue}>{data.days_15k || 0}</Text>
+                <Text style={styles.stepDayLabel}>15K+ days</Text>
               </View>
-              <View style={styles.stepsStat}>
-                <Text style={styles.stepsValue}>{data.high_step_days}</Text>
-                <Text style={styles.stepsLabel}>10K+ Days</Text>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🏃</Text>
+                <Text style={styles.stepDayValue}>{data.days_20k || 0}</Text>
+                <Text style={styles.stepDayLabel}>20K+ days</Text>
               </View>
-              <View style={styles.stepsStat}>
-                <Text style={styles.stepsValue}>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🔥</Text>
+                <Text style={styles.stepDayValue}>{data.days_25k || 0}</Text>
+                <Text style={styles.stepDayLabel}>25K+ days</Text>
+              </View>
+            </View>
+            <View style={styles.stepsSummaryRow}>
+              <View style={styles.stepsSummaryStat}>
+                <Text style={styles.stepsSummaryValue}>{data.total_step_days || 0}</Text>
+                <Text style={styles.stepsSummaryLabel}>Days Logged</Text>
+              </View>
+              <View style={styles.stepsSummaryStat}>
+                <Text style={styles.stepsSummaryValue}>
                   {(data.avg_daily_steps || 0) >= 1000 
                     ? `${((data.avg_daily_steps || 0) / 1000).toFixed(1)}k`
                     : data.avg_daily_steps || 0}
                 </Text>
-                <Text style={styles.stepsLabel}>Avg/Day</Text>
+                <Text style={styles.stepsSummaryLabel}>Avg/Day</Text>
+              </View>
+              <View style={styles.stepsSummaryStat}>
+                <Text style={styles.stepsSummaryValue}>
+                  {(data.total_steps || 0) >= 1000000
+                    ? `${((data.total_steps || 0) / 1000000).toFixed(1)}M`
+                    : (data.total_steps || 0) >= 1000
+                    ? `${((data.total_steps || 0) / 1000).toFixed(0)}k`
+                    : data.total_steps || 0}
+                </Text>
+                <Text style={styles.stepsSummaryLabel}>Total Steps</Text>
               </View>
             </View>
-            <Text style={styles.totalSteps}>
-              Total: {(data.total_steps || 0).toLocaleString()} steps
-            </Text>
           </View>
 
           {/* Weight Progress */}
@@ -337,71 +363,127 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.md,
   },
-  breakdownRow: {
+  // Run type grid (like Stats screen)
+  typeGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
   },
-  breakdownItem: {
+  typeCard: {
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    alignItems: 'center',
+    width: '31%',
+    marginBottom: spacing.sm,
+  },
+  typeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  typeIconText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+    color: colors.textOnPrimary,
+  },
+  typeCount: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  typeLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+  },
+  typeKm: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.background,
+  },
+  categoryItem: {
     flex: 1,
     alignItems: 'center',
   },
-  breakdownDivider: {
+  categoryEmoji: {
+    fontSize: 24,
+    marginBottom: spacing.xs,
+  },
+  categoryValue: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  categoryLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+  },
+  categoryDivider: {
     width: 1,
-    height: 30,
+    height: 50,
     backgroundColor: colors.background,
   },
-  breakdownValue: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-  },
-  breakdownLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  typeBreakdown: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: spacing.md,
-  },
-  typeChip: {
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
-    backgroundColor: colors.primaryLight + '30',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.md,
-  },
-  typeText: {
-    fontSize: typography.sizes.xs,
-    color: colors.primary,
-    fontWeight: typography.weights.medium,
-  },
-  stepsGrid: {
+  // High step days (15k+, 20k+, 25k+)
+  stepDaysRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: spacing.sm,
-  },
-  stepsStat: {
     alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  stepsValue: {
+  stepDayItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stepDayEmoji: {
+    fontSize: 24,
+    marginBottom: spacing.xs,
+  },
+  stepDayValue: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  stepsLabel: {
+  stepDayLabel: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,
   },
-  totalSteps: {
-    textAlign: 'center',
-    fontSize: typography.sizes.sm,
+  stepDayDivider: {
+    width: 1,
+    height: 50,
+    backgroundColor: colors.background,
+  },
+  stepsSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.background,
+  },
+  stepsSummaryStat: {
+    alignItems: 'center',
+  },
+  stepsSummaryValue: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
+  stepsSummaryLabel: {
+    fontSize: typography.sizes.xs,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   weightRow: {
     flexDirection: 'row',

@@ -39,8 +39,8 @@ import {
   ProfileModal,
   StepsTracker,
   WeekSummaryCard,
-  MonthInReview,
 } from '../components';
+import { MonthInReview } from '../components/MonthInReview';
 import { 
   runApi, 
   statsApi, 

@@ -658,6 +658,9 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
     total_steps = sum(s.step_count for s in step_entries)
     avg_daily_steps = total_steps // total_step_days if total_step_days > 0 else 0
     high_step_days = len([s for s in step_entries if s.step_count >= 10000])
+    days_15k = len([s for s in step_entries if s.step_count >= 15000])
+    days_20k = len([s for s in step_entries if s.step_count >= 20000])
+    days_25k = len([s for s in step_entries if s.step_count >= 25000])
     
     # Weight progress for the month
     weight_query = db.query(Weight).filter(
@@ -740,6 +743,9 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
         "total_steps": total_steps,
         "avg_daily_steps": avg_daily_steps,
         "high_step_days": high_step_days,
+        "days_15k": days_15k,
+        "days_20k": days_20k,
+        "days_25k": days_25k,
         "start_weight": start_weight,
         "end_weight": end_weight,
         "weight_change": weight_change,
