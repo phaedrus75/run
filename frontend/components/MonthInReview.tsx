@@ -142,9 +142,10 @@ export function MonthInReview({ data, onDismiss }: Props) {
                     <View style={[styles.typeIcon, { backgroundColor: colors.runTypes[type] }]}>
                       <Text style={styles.typeIconText}>{type.toUpperCase()}</Text>
                     </View>
-                    <Text style={styles.typeCount}>{count}</Text>
-                    <Text style={styles.typeLabel}>runs</Text>
-                    <Text style={styles.typeKm}>{totalForType} km</Text>
+                    <View style={styles.typeCountRow}>
+                      <Text style={styles.typeCount}>{count}</Text>
+                      <Text style={styles.typeLabel}> runs</Text>
+                    </View>
                   </View>
                 );
               })}
@@ -367,6 +368,10 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     color: colors.textOnPrimary,
   },
+  typeCountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   typeCount: {
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
@@ -375,11 +380,6 @@ const styles = StyleSheet.create({
   typeLabel: {
     fontSize: 10,
     color: colors.textSecondary,
-  },
-  typeKm: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 1,
   },
   categoryRow: {
     flexDirection: 'row',
