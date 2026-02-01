@@ -29,7 +29,8 @@ const { width } = Dimensions.get('window');
 export function MonthInReview({ data, onDismiss }: Props) {
   const [showModal, setShowModal] = useState(true);
 
-  if (!data.should_show) {
+  // Safety check - ensure data exists and should_show is true
+  if (!data || !data.should_show) {
     return null;
   }
 
@@ -50,8 +51,8 @@ export function MonthInReview({ data, onDismiss }: Props) {
     return { text: '0', color: colors.textSecondary, emoji: '➡️' };
   };
 
-  const kmChange = getChangeIndicator(data.km_vs_last_month);
-  const runsChange = getChangeIndicator(data.runs_vs_last_month);
+  const kmChange = getChangeIndicator(data.km_vs_last_month || 0);
+  const runsChange = getChangeIndicator(data.runs_vs_last_month || 0);
 
   const handleClose = () => {
     setShowModal(false);
@@ -89,7 +90,7 @@ export function MonthInReview({ data, onDismiss }: Props) {
                 {data.goal_met ? 'Goal Achieved!' : 'Keep Pushing!'}
               </Text>
               <Text style={styles.goalText}>
-                {data.monthly_km_achieved} / {data.monthly_km_goal} km ({data.goal_percent.toFixed(0)}%)
+                {data.monthly_km_achieved || 0} / {data.monthly_km_goal || 0} km ({(data.goal_percent || 0).toFixed(0)}%)
               </Text>
             </View>
           </View>
@@ -106,7 +107,7 @@ export function MonthInReview({ data, onDismiss }: Props) {
               </View>
             </View>
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>{data.total_km.toFixed(1)}</Text>
+              <Text style={styles.statValue}>{(data.total_km || 0).toFixed(1)}</Text>
               <Text style={styles.statLabel}>Kilometers</Text>
               <View style={styles.changeIndicator}>
                 <Text style={[styles.changeText, { color: kmChange.color }]}>
@@ -175,15 +176,15 @@ export function MonthInReview({ data, onDismiss }: Props) {
               </View>
               <View style={styles.stepsStat}>
                 <Text style={styles.stepsValue}>
-                  {data.avg_daily_steps >= 1000 
-                    ? `${(data.avg_daily_steps / 1000).toFixed(1)}k`
-                    : data.avg_daily_steps}
+                  {(data.avg_daily_steps || 0) >= 1000 
+                    ? `${((data.avg_daily_steps || 0) / 1000).toFixed(1)}k`
+                    : data.avg_daily_steps || 0}
                 </Text>
                 <Text style={styles.stepsLabel}>Avg/Day</Text>
               </View>
             </View>
             <Text style={styles.totalSteps}>
-              Total: {data.total_steps.toLocaleString()} steps
+              Total: {(data.total_steps || 0).toLocaleString()} steps
             </Text>
           </View>
 
@@ -213,7 +214,7 @@ export function MonthInReview({ data, onDismiss }: Props) {
                     styles.weightChangeText,
                     { color: data.weight_change <= 0 ? colors.success : colors.warning }
                   ]}>
-                    {data.weight_change <= 0 ? '📉' : '📈'} {data.weight_change > 0 ? '+' : ''}{data.weight_change.toFixed(1)} lbs
+                    {(data.weight_change || 0) <= 0 ? '📉' : '📈'} {(data.weight_change || 0) > 0 ? '+' : ''}{(data.weight_change || 0).toFixed(1)} lbs
                   </Text>
                 </View>
               )}
