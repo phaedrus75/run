@@ -188,30 +188,6 @@ export function MonthInReview({ data, onDismiss }: Props) {
                 <Text style={styles.stepDayLabel}>25K+ days</Text>
               </View>
             </View>
-            <View style={styles.stepsSummaryRow}>
-              <View style={styles.stepsSummaryStat}>
-                <Text style={styles.stepsSummaryValue}>{data.total_step_days || 0}</Text>
-                <Text style={styles.stepsSummaryLabel}>Days Logged</Text>
-              </View>
-              <View style={styles.stepsSummaryStat}>
-                <Text style={styles.stepsSummaryValue}>
-                  {(data.avg_daily_steps || 0) >= 1000 
-                    ? `${((data.avg_daily_steps || 0) / 1000).toFixed(1)}k`
-                    : data.avg_daily_steps || 0}
-                </Text>
-                <Text style={styles.stepsSummaryLabel}>Avg/Day</Text>
-              </View>
-              <View style={styles.stepsSummaryStat}>
-                <Text style={styles.stepsSummaryValue}>
-                  {(data.total_steps || 0) >= 1000000
-                    ? `${((data.total_steps || 0) / 1000000).toFixed(1)}M`
-                    : (data.total_steps || 0) >= 1000
-                    ? `${((data.total_steps || 0) / 1000).toFixed(0)}k`
-                    : data.total_steps || 0}
-                </Text>
-                <Text style={styles.stepsSummaryLabel}>Total Steps</Text>
-              </View>
-            </View>
           </View>
 
           {/* Weight Progress */}
@@ -275,8 +251,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
   header: {
     alignItems: 'center',
@@ -284,63 +260,63 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   headerEmoji: {
-    fontSize: 48,
-    marginBottom: spacing.sm,
+    fontSize: 36,
+    marginBottom: spacing.xs,
   },
   headerTitle: {
-    fontSize: typography.sizes.xxl,
+    fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.text,
     marginBottom: spacing.xs,
   },
   headerSubtitle: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     color: colors.textSecondary,
   },
   goalBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
+    padding: spacing.sm,
     borderRadius: radius.lg,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   goalEmoji: {
-    fontSize: 32,
-    marginRight: spacing.md,
+    fontSize: 24,
+    marginRight: spacing.sm,
   },
   goalInfo: {
     flex: 1,
   },
   goalTitle: {
-    fontSize: typography.sizes.lg,
+    fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
     marginBottom: 2,
   },
   goalText: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.textSecondary,
   },
   statsGrid: {
     flexDirection: 'row',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     justifyContent: 'space-between',
   },
   statBox: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
+    borderRadius: radius.md,
+    padding: spacing.sm,
     alignItems: 'center',
     marginHorizontal: spacing.xs,
     ...shadows.small,
   },
   statValue: {
-    fontSize: typography.sizes.xxl,
+    fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.primary,
   },
   statLabel: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,
   },
@@ -352,64 +328,64 @@ const styles = StyleSheet.create({
   },
   section: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginTop: spacing.md,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
     ...shadows.small,
   },
   sectionTitle: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
     color: colors.text,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   // Run type grid (like Stats screen)
   typeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   typeCard: {
     backgroundColor: colors.background,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    borderRadius: radius.sm,
+    padding: spacing.xs,
     alignItems: 'center',
     width: '31%',
-    marginBottom: spacing.sm,
-  },
-  typeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: spacing.xs,
   },
+  typeIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
   typeIconText: {
-    fontSize: typography.sizes.xs,
+    fontSize: 9,
     fontWeight: typography.weights.bold,
     color: colors.textOnPrimary,
   },
   typeCount: {
-    fontSize: typography.sizes.lg,
+    fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
   typeLabel: {
-    fontSize: typography.sizes.xs,
+    fontSize: 10,
     color: colors.textSecondary,
   },
   typeKm: {
-    fontSize: typography.sizes.xs,
+    fontSize: 10,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   categoryRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.background,
   },
@@ -418,21 +394,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryEmoji: {
-    fontSize: 24,
-    marginBottom: spacing.xs,
+    fontSize: 18,
+    marginBottom: 2,
   },
   categoryValue: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
   categoryLabel: {
-    fontSize: typography.sizes.xs,
+    fontSize: 10,
     color: colors.textSecondary,
   },
   categoryDivider: {
     width: 1,
-    height: 50,
+    height: 40,
     backgroundColor: colors.background,
   },
   // High step days (15k+, 20k+, 25k+)
@@ -440,29 +416,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    marginBottom: spacing.md,
   },
   stepDayItem: {
     alignItems: 'center',
     flex: 1,
   },
   stepDayEmoji: {
-    fontSize: 24,
-    marginBottom: spacing.xs,
+    fontSize: 18,
+    marginBottom: 2,
   },
   stepDayValue: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
   stepDayLabel: {
-    fontSize: typography.sizes.xs,
+    fontSize: 10,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   stepDayDivider: {
     width: 1,
-    height: 50,
+    height: 40,
     backgroundColor: colors.background,
   },
   stepsSummaryRow: {
@@ -489,36 +464,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   weightPoint: {
     alignItems: 'center',
   },
   weightLabel: {
-    fontSize: typography.sizes.xs,
+    fontSize: 10,
     color: colors.textSecondary,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   weightValue: {
-    fontSize: typography.sizes.lg,
+    fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
   weightArrow: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   weightArrowText: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes.lg,
     color: colors.textSecondary,
   },
   weightChange: {
     alignSelf: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
   },
   weightChangeText: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     fontWeight: typography.weights.semibold,
   },
   streakRow: {
@@ -527,25 +502,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   streakValue: {
-    fontSize: typography.sizes.xxl,
+    fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.primary,
-    marginRight: spacing.sm,
+    marginRight: spacing.xs,
   },
   streakLabel: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.textSecondary,
   },
   closeButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+    borderRadius: radius.md,
+    padding: spacing.md,
     alignItems: 'center',
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
   },
   closeButtonText: {
     color: colors.textOnPrimary,
-    fontSize: typography.sizes.lg,
+    fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
   },
 });
