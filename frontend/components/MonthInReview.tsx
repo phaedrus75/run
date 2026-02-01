@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     marginBottom: spacing.sm,
-    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
   statBox: {
     flex: 1,
@@ -305,6 +305,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.md,
     alignItems: 'center',
+    marginHorizontal: spacing.xs,
     ...shadows.small,
   },
   statValue: {
@@ -364,9 +365,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: spacing.md,
-    gap: spacing.xs,
   },
   typeChip: {
+    marginRight: spacing.xs,
+    marginBottom: spacing.xs,
     backgroundColor: colors.primaryLight + '30',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
