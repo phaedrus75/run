@@ -2,8 +2,8 @@
  * 🎓 ONBOARDING SCREEN
  * ====================
  * 
- * Beautiful onboarding flow to introduce users to RunZen.
- * Shows after signup, before entering the main app.
+ * Onboarding that reflects RunZen's philosophy:
+ * 3 focused slides about WHY (not how), then goal setup.
  */
 
 import React, { useState, useRef } from 'react';
@@ -25,73 +25,39 @@ import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
 interface OnboardingSlide {
   id: string;
-  emoji: string;
   title: string;
-  description: string;
-  tips?: string[];
+  subtitle: string;
+  body: string;
+  accent: string;
 }
 
 const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
     id: '1',
-    emoji: '🏃',
-    title: 'Welcome to RunZen',
-    description: 'Your personal running companion for tracking runs, setting goals, and crushing your fitness journey.',
-    tips: [
-      'Track every run with precision',
-      'Set and achieve your goals',
-      'Watch your progress grow',
-    ],
+    title: 'Run first.\nTrack second.',
+    subtitle: 'The RunZen philosophy',
+    body: "Most apps want you to carry your phone, watch your pace, and analyze every step. RunZen is different. Run however you want — then log it in 10 seconds when you're done.",
+    accent: colors.primary,
   },
   {
     id: '2',
-    emoji: '📝',
-    title: 'Log Your Runs',
-    description: 'After each run, log your distance and time. Choose from 3K to 21K distances.',
-    tips: [
-      'Tap "Log a Run" on the home screen',
-      'Select your distance (3K, 5K, 10K, etc.)',
-      'Enter your time and save!',
-    ],
+    title: 'Consistency\nover speed.',
+    subtitle: 'What actually matters',
+    body: "We don't care about your splits. We care about your streak. Show up, log the run, build the habit. That's how real progress happens.",
+    accent: colors.secondary,
   },
   {
     id: '3',
-    emoji: '🎯',
-    title: 'Set Your Goals',
-    description: 'Stay motivated with yearly and monthly distance goals. We\'ll track your progress automatically.',
-    tips: [
-      'Default: 1000km/year, 100km/month',
-      'Customize in your profile settings',
-      'Watch your progress bars fill up!',
-    ],
-  },
-  {
-    id: '4',
-    emoji: '🏆',
-    title: 'Earn Achievements',
-    description: 'Unlock badges as you hit milestones. Personal bests trigger confetti celebrations!',
-    tips: [
-      'First run, streak milestones, distance goals',
-      'Beat your best time = 🎊 Confetti!',
-      'Track all achievements in Stats',
-    ],
-  },
-  {
-    id: '5',
-    emoji: '📊',
-    title: 'Track Everything',
-    description: 'Beyond runs, track your weight journey and high step days. See trends over time.',
-    tips: [
-      'Log weight to track fitness progress',
-      'Record 15K+ step days',
-      'View charts and trends in Stats',
-    ],
+    title: 'Just enough\ndata.',
+    subtitle: 'Progress without noise',
+    body: "Distance. Time. Streak. Goals. That's it. No heart rate graphs, no cadence charts, no GPS maps. Just a clean record of your running journey.",
+    accent: colors.primary,
   },
 ];
 
@@ -127,14 +93,13 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   };
 
   const handleComplete = async () => {
-    // Validate handle
     const cleanHandle = handle.trim().toLowerCase();
     if (!cleanHandle || cleanHandle.length < 3) {
       setHandleError('Handle must be at least 3 characters');
       return;
     }
     if (!/^[a-z0-9_]+$/.test(cleanHandle)) {
-      setHandleError('Only letters, numbers, and underscores allowed');
+      setHandleError('Only letters, numbers, and underscores');
       return;
     }
     
@@ -144,7 +109,6 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
     try {
       const token = await getToken();
       
-      // Save handle first
       const handleResponse = await fetch(`${API_BASE_URL}/user/handle`, {
         method: 'POST',
         headers: {
@@ -161,7 +125,6 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
         return;
       }
       
-      // Save goals (including weight goals)
       await fetch(`${API_BASE_URL}/user/goals`, {
         method: 'POST',
         headers: {
@@ -176,7 +139,6 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
         }),
       });
       
-      // Mark onboarding complete
       await fetch(`${API_BASE_URL}/user/complete-onboarding`, {
         method: 'POST',
         headers: {
@@ -184,7 +146,6 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
         },
       });
       
-      // Refresh user data
       await refreshUser();
       
     } catch (error) {
@@ -194,25 +155,14 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
     }
   };
 
-  const renderSlide = ({ item, index }: { item: OnboardingSlide; index: number }) => (
+  const renderSlide = ({ item }: { item: OnboardingSlide }) => (
     <View style={styles.slide}>
-      <View style={styles.emojiContainer}>
-        <Text style={styles.emoji}>{item.emoji}</Text>
+      <View style={styles.slideContent}>
+        <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
+        <Text style={styles.slideTitle}>{item.title}</Text>
+        <View style={[styles.slideDivider, { backgroundColor: item.accent }]} />
+        <Text style={styles.slideBody}>{item.body}</Text>
       </View>
-      
-      <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.description}>{item.description}</Text>
-      
-      {item.tips && (
-        <View style={styles.tipsContainer}>
-          {item.tips.map((tip, i) => (
-            <View key={i} style={styles.tipRow}>
-              <Text style={styles.tipBullet}>•</Text>
-              <Text style={styles.tipText}>{tip}</Text>
-            </View>
-          ))}
-        </View>
-      )}
     </View>
   );
 
@@ -227,13 +177,13 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
         
         const dotWidth = scrollX.interpolate({
           inputRange,
-          outputRange: [8, 24, 8],
+          outputRange: [8, 28, 8],
           extrapolate: 'clamp',
         });
         
         const opacity = scrollX.interpolate({
           inputRange,
-          outputRange: [0.3, 1, 0.3],
+          outputRange: [0.25, 1, 0.25],
           extrapolate: 'clamp',
         });
         
@@ -261,21 +211,17 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
             contentContainerStyle={styles.goalScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.emojiContainer}>
-              <Text style={styles.emoji}>🎯</Text>
-            </View>
-            
-            <Text style={styles.title}>Set Up Your Profile</Text>
-            <Text style={styles.description}>
-              Choose your unique handle and set your goals. You can always change these later.
+            <Text style={styles.setupSubtitle}>Almost there</Text>
+            <Text style={styles.setupTitle}>Set your baseline</Text>
+            <Text style={styles.setupDescription}>
+              These keep you accountable. You can always adjust later.
             </Text>
             
             <View style={styles.goalInputContainer}>
               {/* Handle */}
-              <Text style={styles.sectionLabel}>🏷️ Your Handle</Text>
+              <Text style={styles.sectionLabel}>Your handle</Text>
               
               <View style={styles.goalInputRow}>
-                <Text style={styles.goalLabel}>Choose a unique username</Text>
                 <View style={styles.goalInputWrapper}>
                   <Text style={styles.handlePrefix}>@</Text>
                   <TextInput
@@ -285,7 +231,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
                       setHandle(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
                       setHandleError('');
                     }}
-                    placeholder="runner123"
+                    placeholder="yourname"
                     placeholderTextColor={colors.textLight}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -294,82 +240,86 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
                 </View>
                 {handleError ? (
                   <Text style={styles.handleError}>{handleError}</Text>
-                ) : null}
+                ) : (
+                  <Text style={styles.handleHint}>This can't be changed later</Text>
+                )}
               </View>
               
               {/* Running Goals */}
-              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>🏃 Running Goals</Text>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Running goals</Text>
               
-              <View style={styles.goalInputRow}>
-                <Text style={styles.goalLabel}>Yearly Goal</Text>
-                <View style={styles.goalInputWrapper}>
-                  <TextInput
-                    style={styles.goalInput}
-                    value={yearlyGoal}
-                    onChangeText={setYearlyGoal}
-                    keyboardType="number-pad"
-                    placeholder="1000"
-                    placeholderTextColor={colors.textLight}
-                  />
-                  <Text style={styles.goalUnit}>km</Text>
+              <View style={styles.goalRow}>
+                <View style={[styles.goalCard, shadows.small]}>
+                  <Text style={styles.goalCardLabel}>Yearly</Text>
+                  <View style={styles.goalCardInputRow}>
+                    <TextInput
+                      style={styles.goalCardInput}
+                      value={yearlyGoal}
+                      onChangeText={setYearlyGoal}
+                      keyboardType="number-pad"
+                      placeholder="1000"
+                      placeholderTextColor={colors.textLight}
+                    />
+                    <Text style={styles.goalCardUnit}>km</Text>
+                  </View>
                 </View>
-              </View>
-              
-              <View style={styles.goalInputRow}>
-                <Text style={styles.goalLabel}>Monthly Goal</Text>
-                <View style={styles.goalInputWrapper}>
-                  <TextInput
-                    style={styles.goalInput}
-                    value={monthlyGoal}
-                    onChangeText={setMonthlyGoal}
-                    keyboardType="number-pad"
-                    placeholder="100"
-                    placeholderTextColor={colors.textLight}
-                  />
-                  <Text style={styles.goalUnit}>km</Text>
+                
+                <View style={[styles.goalCard, shadows.small]}>
+                  <Text style={styles.goalCardLabel}>Monthly</Text>
+                  <View style={styles.goalCardInputRow}>
+                    <TextInput
+                      style={styles.goalCardInput}
+                      value={monthlyGoal}
+                      onChangeText={setMonthlyGoal}
+                      keyboardType="number-pad"
+                      placeholder="100"
+                      placeholderTextColor={colors.textLight}
+                    />
+                    <Text style={styles.goalCardUnit}>km</Text>
+                  </View>
                 </View>
               </View>
               
               {/* Weight Goals */}
-              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>⚖️ Weight Tracking (Optional)</Text>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Weight tracking <Text style={styles.optionalTag}>optional</Text></Text>
               
-              <View style={styles.goalInputRow}>
-                <Text style={styles.goalLabel}>Current Weight</Text>
-                <View style={styles.goalInputWrapper}>
-                  <TextInput
-                    style={styles.goalInput}
-                    value={startWeight}
-                    onChangeText={setStartWeight}
-                    keyboardType="decimal-pad"
-                    placeholder="—"
-                    placeholderTextColor={colors.textLight}
-                  />
-                  <Text style={styles.goalUnit}>lbs</Text>
+              <View style={styles.goalRow}>
+                <View style={[styles.goalCard, shadows.small]}>
+                  <Text style={styles.goalCardLabel}>Current</Text>
+                  <View style={styles.goalCardInputRow}>
+                    <TextInput
+                      style={styles.goalCardInput}
+                      value={startWeight}
+                      onChangeText={setStartWeight}
+                      keyboardType="decimal-pad"
+                      placeholder="—"
+                      placeholderTextColor={colors.textLight}
+                    />
+                    <Text style={styles.goalCardUnit}>lbs</Text>
+                  </View>
                 </View>
-              </View>
-              
-              <View style={styles.goalInputRow}>
-                <Text style={styles.goalLabel}>Goal Weight</Text>
-                <View style={styles.goalInputWrapper}>
-                  <TextInput
-                    style={styles.goalInput}
-                    value={goalWeight}
-                    onChangeText={setGoalWeight}
-                    keyboardType="decimal-pad"
-                    placeholder="—"
-                    placeholderTextColor={colors.textLight}
-                  />
-                  <Text style={styles.goalUnit}>lbs</Text>
+                
+                <View style={[styles.goalCard, shadows.small]}>
+                  <Text style={styles.goalCardLabel}>Goal</Text>
+                  <View style={styles.goalCardInputRow}>
+                    <TextInput
+                      style={styles.goalCardInput}
+                      value={goalWeight}
+                      onChangeText={setGoalWeight}
+                      keyboardType="decimal-pad"
+                      placeholder="—"
+                      placeholderTextColor={colors.textLight}
+                    />
+                    <Text style={styles.goalCardUnit}>lbs</Text>
+                  </View>
                 </View>
               </View>
             </View>
             
-            <View style={styles.goalTips}>
-              <Text style={styles.goalTipTitle}>💡 Quick Tips:</Text>
-              <Text style={styles.goalTipText}>
-                • 1000km/year = ~20km/week{'\n'}
-                • Start small and adjust as you go{'\n'}
-                • Consistency beats intensity!
+            <View style={styles.tipBox}>
+              <Text style={styles.tipText}>
+                1000 km/year = about 20 km/week.{'\n'}
+                Start where you are. Adjust as you go.
               </Text>
             </View>
           </ScrollView>
@@ -380,7 +330,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
             disabled={saving}
           >
             <Text style={styles.completeButtonText}>
-              {saving ? 'Setting up...' : "Let's Go! 🚀"}
+              {saving ? 'Setting up...' : "Let's run"}
             </Text>
           </TouchableOpacity>
         </KeyboardAvoidingView>
@@ -391,6 +341,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <Text style={styles.headerBrand}>RunZen</Text>
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
@@ -420,7 +371,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
       <View style={styles.footer}>
         <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
           <Text style={styles.nextButtonText}>
-            {currentIndex === ONBOARDING_SLIDES.length - 1 ? 'Set Goals' : 'Next'}
+            {currentIndex === ONBOARDING_SLIDES.length - 1 ? 'Set up goals' : 'Next'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -435,9 +386,16 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  headerBrand: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    letterSpacing: -0.5,
   },
   skipButton: {
     padding: spacing.sm,
@@ -446,61 +404,45 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.sizes.md,
   },
+
+  // Slides
   slide: {
     width,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
-    alignItems: 'center',
-  },
-  emojiContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primaryLight + '30',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
+    flex: 1,
   },
-  emoji: {
-    fontSize: 56,
+  slideContent: {
+    paddingBottom: 60,
   },
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    textAlign: 'center',
+  slideSubtitle: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
     marginBottom: spacing.md,
   },
-  description: {
+  slideTitle: {
+    fontSize: 36,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    lineHeight: 44,
+    marginBottom: spacing.lg,
+  },
+  slideDivider: {
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    marginBottom: spacing.lg,
+  },
+  slideBody: {
     fontSize: typography.sizes.md,
     color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: spacing.xl,
+    lineHeight: 26,
   },
-  tipsContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    width: '100%',
-    ...shadows.small,
-  },
-  tipRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.sm,
-  },
-  tipBullet: {
-    color: colors.primary,
-    fontSize: typography.sizes.md,
-    marginRight: spacing.sm,
-    fontWeight: typography.weights.bold,
-  },
-  tipText: {
-    color: colors.text,
-    fontSize: typography.sizes.sm,
-    flex: 1,
-    lineHeight: 20,
-  },
+
+  // Dots
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -508,18 +450,20 @@ const styles = StyleSheet.create({
     marginVertical: spacing.lg,
   },
   dot: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-    marginHorizontal: 4,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.text,
+    marginHorizontal: 3,
   },
+
+  // Footer
   footer: {
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
   },
   nextButton: {
     backgroundColor: colors.primary,
-    paddingVertical: spacing.lg,
+    paddingVertical: 18,
     borderRadius: radius.lg,
     alignItems: 'center',
     ...shadows.medium,
@@ -529,17 +473,47 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
   },
-  // Goal Setup Styles
+
+  // Goal Setup
   goalSetupContainer: {
     flex: 1,
   },
   goalScrollContent: {
     padding: spacing.xl,
-    alignItems: 'center',
+  },
+  setupSubtitle: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: spacing.xs,
+  },
+  setupTitle: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  setupDescription: {
+    fontSize: typography.sizes.md,
+    color: colors.textSecondary,
+    lineHeight: 24,
+    marginBottom: spacing.xl,
   },
   goalInputContainer: {
     width: '100%',
-    marginTop: spacing.lg,
+  },
+  sectionLabel: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  optionalTag: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.regular,
+    color: colors.textLight,
   },
   goalInputRow: {
     backgroundColor: colors.surface,
@@ -547,18 +521,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
     ...shadows.small,
-  },
-  goalLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  sectionLabel: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-    color: colors.text,
-    marginBottom: spacing.md,
-    alignSelf: 'flex-start',
   },
   goalInputWrapper: {
     flexDirection: 'row',
@@ -571,11 +533,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: 0,
   },
-  goalUnit: {
-    fontSize: typography.sizes.lg,
-    color: colors.textSecondary,
-    marginLeft: spacing.sm,
-  },
   handlePrefix: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
@@ -587,30 +544,62 @@ const styles = StyleSheet.create({
   },
   handleError: {
     fontSize: typography.sizes.sm,
-    color: colors.error || '#FF6B6B',
+    color: colors.error,
     marginTop: spacing.xs,
   },
-  goalTips: {
-    backgroundColor: colors.primaryLight + '20',
+  handleHint: {
+    fontSize: typography.sizes.xs,
+    color: colors.textLight,
+    marginTop: spacing.xs,
+  },
+  goalRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+  },
+  goalCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,
-    width: '100%',
-    marginTop: spacing.lg,
+    marginRight: spacing.sm,
   },
-  goalTipTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-    color: colors.text,
+  goalCardLabel: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
-  goalTipText: {
+  goalCardInputRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  goalCardInput: {
+    flex: 1,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    padding: 0,
+  },
+  goalCardUnit: {
+    fontSize: typography.sizes.md,
+    color: colors.textSecondary,
+    marginLeft: spacing.xs,
+  },
+  tipBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginTop: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  tipText: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     lineHeight: 22,
   },
   completeButton: {
     backgroundColor: colors.primary,
-    paddingVertical: spacing.lg,
+    paddingVertical: 18,
     borderRadius: radius.lg,
     alignItems: 'center',
     marginHorizontal: spacing.xl,

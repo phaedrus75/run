@@ -2,11 +2,12 @@
  * 🔐 AUTH SCREEN
  * ===============
  * 
- * Login and Signup screen with a clean, modern design.
- * Includes forgot password flow.
+ * Landing page for RunZen.
+ * Communicates the brand: "Less tracking. More running."
+ * Includes login, signup, and forgot password flows.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,17 +19,21 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { forgotPassword, resetPassword } from '../services/auth';
 
-type AuthMode = 'login' | 'signup' | 'forgot' | 'reset';
+const { width } = Dimensions.get('window');
+
+type AuthMode = 'landing' | 'login' | 'signup' | 'forgot' | 'reset';
 
 export default function AuthScreen() {
   const { login, signup } = useAuth();
   
-  const [mode, setMode] = useState<AuthMode>('login');
+  const [mode, setMode] = useState<AuthMode>('landing');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -36,15 +41,28 @@ export default function AuthScreen() {
   const [resetCode, setResetCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const taglineFade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ]),
+      Animated.timing(taglineFade, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
   async function handleSubmit() {
     if (mode === 'login' || mode === 'signup') {
       if (!email || !password) {
-        Alert.alert('Error', 'Please fill in all fields');
+        Alert.alert('Missing Fields', 'Please enter your email and password.');
         return;
       }
-
       if (mode === 'signup' && password.length < 6) {
-        Alert.alert('Error', 'Password must be at least 6 characters');
+        Alert.alert('Password Too Short', 'Use at least 6 characters.');
         return;
       }
 
@@ -65,14 +83,13 @@ export default function AuthScreen() {
         Alert.alert('Error', 'Please enter your email');
         return;
       }
-
       setIsLoading(true);
       try {
         await forgotPassword(email);
         Alert.alert(
-          'Check Your Email',
-          'If an account exists with this email, a reset code has been generated. Check the server logs or your email.',
-          [{ text: 'OK', onPress: () => setMode('reset') }]
+          'Code Sent',
+          'If an account exists with this email, a reset code has been generated.',
+          [{ text: 'Enter Code', onPress: () => setMode('reset') }]
         );
       } catch (error: any) {
         Alert.alert('Error', error.message || 'Something went wrong');
@@ -84,23 +101,20 @@ export default function AuthScreen() {
         Alert.alert('Error', 'Please fill in all fields');
         return;
       }
-
       if (password.length < 6) {
         Alert.alert('Error', 'Password must be at least 6 characters');
         return;
       }
-
       if (password !== confirmPassword) {
         Alert.alert('Error', 'Passwords do not match');
         return;
       }
-
       setIsLoading(true);
       try {
         await resetPassword(email, resetCode, password);
         Alert.alert(
-          'Success',
-          'Your password has been reset. You can now log in.',
+          'Password Reset',
+          'You can now log in with your new password.',
           [{ text: 'OK', onPress: () => { setMode('login'); clearFields(); } }]
         );
       } catch (error: any) {
@@ -118,40 +132,68 @@ export default function AuthScreen() {
     setName('');
   }
 
-  function toggleMode() {
-    if (mode === 'login') {
-      setMode('signup');
-    } else {
-      setMode('login');
-    }
-    clearFields();
-  }
+  // Landing page — first impression
+  if (mode === 'landing') {
+    return (
+      <View style={styles.landingContainer}>
+        <View style={styles.landingContent}>
+          <Animated.View style={[styles.brandBlock, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <Text style={styles.brandName}>RunZen</Text>
+            <View style={styles.brandLine} />
+          </Animated.View>
 
-  function goToForgotPassword() {
-    setMode('forgot');
-    clearFields();
-  }
+          <Animated.View style={{ opacity: taglineFade }}>
+            <Text style={styles.tagline}>Less tracking.{'\n'}More running.</Text>
+            <Text style={styles.philosophy}>
+              No GPS. No heart rate zones.{'\n'}Just log your run and get back to life.
+            </Text>
+          </Animated.View>
+        </View>
 
-  function goBackToLogin() {
-    setMode('login');
-    clearFields();
+        <Animated.View style={[styles.landingActions, { opacity: taglineFade }]}>
+          <TouchableOpacity
+            style={styles.landingPrimaryButton}
+            onPress={() => setMode('signup')}
+          >
+            <Text style={styles.landingPrimaryText}>Get Started</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.landingSecondaryButton}
+            onPress={() => setMode('login')}
+          >
+            <Text style={styles.landingSecondaryText}>I already have an account</Text>
+          </TouchableOpacity>
+
+          <View style={styles.landingPillars}>
+            <Text style={styles.pillarItem}>10-second logging</Text>
+            <Text style={styles.pillarDot}>  ·  </Text>
+            <Text style={styles.pillarItem}>Streaks</Text>
+            <Text style={styles.pillarDot}>  ·  </Text>
+            <Text style={styles.pillarItem}>Progress</Text>
+          </View>
+        </Animated.View>
+      </View>
+    );
   }
 
   const getTitle = () => {
     switch (mode) {
-      case 'login': return 'Welcome back!';
-      case 'signup': return 'Create your account';
-      case 'forgot': return 'Forgot Password';
-      case 'reset': return 'Reset Password';
+      case 'login': return 'Welcome back';
+      case 'signup': return 'Start your journey';
+      case 'forgot': return 'Reset password';
+      case 'reset': return 'Enter reset code';
+      default: return '';
     }
   };
 
   const getButtonText = () => {
     switch (mode) {
       case 'login': return 'Log In';
-      case 'signup': return 'Sign Up';
+      case 'signup': return 'Create Account';
       case 'forgot': return 'Send Reset Code';
       case 'reset': return 'Reset Password';
+      default: return '';
     }
   };
 
@@ -164,21 +206,20 @@ export default function AuthScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Logo/Header */}
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.emoji}>🏃</Text>
-          <Text style={styles.title}>RunTracker</Text>
-          <Text style={styles.subtitle}>{getTitle()}</Text>
+          <Text style={styles.headerBrand}>RunZen</Text>
+          <Text style={styles.headerTitle}>{getTitle()}</Text>
         </View>
 
         {/* Form */}
-        <View style={[styles.form, shadows.medium]}>
+        <View style={[styles.form, shadows.small]}>
           {mode === 'signup' && (
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Name (optional)</Text>
+              <Text style={styles.label}>Name</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Your name"
+                placeholder="Optional"
                 placeholderTextColor={colors.textLight}
                 value={name}
                 onChangeText={setName}
@@ -246,8 +287,8 @@ export default function AuthScreen() {
           )}
 
           {mode === 'login' && (
-            <TouchableOpacity onPress={goToForgotPassword} style={styles.forgotLink}>
-              <Text style={styles.forgotLinkText}>Forgot Password?</Text>
+            <TouchableOpacity onPress={() => setMode('forgot')} style={styles.forgotLink}>
+              <Text style={styles.forgotLinkText}>Forgot password?</Text>
             </TouchableOpacity>
           )}
 
@@ -264,9 +305,12 @@ export default function AuthScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Toggle / Back */}
+        {/* Navigation links */}
         {(mode === 'login' || mode === 'signup') && (
-          <TouchableOpacity style={styles.toggle} onPress={toggleMode}>
+          <TouchableOpacity
+            style={styles.toggle}
+            onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); clearFields(); }}
+          >
             <Text style={styles.toggleText}>
               {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
               <Text style={styles.toggleLink}>
@@ -277,9 +321,9 @@ export default function AuthScreen() {
         )}
 
         {(mode === 'forgot' || mode === 'reset') && (
-          <TouchableOpacity style={styles.toggle} onPress={goBackToLogin}>
+          <TouchableOpacity style={styles.toggle} onPress={() => { setMode('login'); clearFields(); }}>
             <Text style={styles.toggleText}>
-              <Text style={styles.toggleLink}>← Back to Login</Text>
+              <Text style={styles.toggleLink}>Back to login</Text>
             </Text>
           </TouchableOpacity>
         )}
@@ -291,27 +335,94 @@ export default function AuthScreen() {
             </Text>
           </TouchableOpacity>
         )}
-
-        {/* Features - only show on login/signup */}
-        {(mode === 'login' || mode === 'signup') && (
-          <View style={styles.features}>
-            <Text style={styles.featuresTitle}>Track your running journey:</Text>
-            <View style={styles.featureRow}>
-              <Text style={styles.featureItem}>🏃 Log runs</Text>
-              <Text style={styles.featureItem}>📊 View stats</Text>
-            </View>
-            <View style={styles.featureRow}>
-              <Text style={styles.featureItem}>🏆 Achievements</Text>
-              <Text style={styles.featureItem}>⚖️ Weight tracking</Text>
-            </View>
-          </View>
-        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  // ---- Landing Page ----
+  landingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'space-between',
+    paddingTop: 120,
+    paddingBottom: 60,
+    paddingHorizontal: spacing.xl,
+  },
+  landingContent: {
+    alignItems: 'center',
+  },
+  brandBlock: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  brandName: {
+    fontSize: 52,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    letterSpacing: -1,
+  },
+  brandLine: {
+    width: 40,
+    height: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+    marginTop: spacing.md,
+  },
+  tagline: {
+    fontSize: 28,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 36,
+    marginBottom: spacing.lg,
+  },
+  philosophy: {
+    fontSize: typography.sizes.md,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  landingActions: {
+    alignItems: 'center',
+  },
+  landingPrimaryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingVertical: 18,
+    width: '100%',
+    alignItems: 'center',
+    ...shadows.medium,
+  },
+  landingPrimaryText: {
+    color: colors.textOnPrimary,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+  },
+  landingSecondaryButton: {
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+  },
+  landingSecondaryText: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.md,
+  },
+  landingPillars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xl,
+  },
+  pillarItem: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+  },
+  pillarDot: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+  },
+
+  // ---- Auth Form ----
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -325,17 +436,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
-  emoji: {
-    fontSize: 64,
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: typography.sizes.hero,
+  headerBrand: {
+    fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.text,
+    letterSpacing: -0.5,
     marginBottom: spacing.xs,
   },
-  subtitle: {
+  headerTitle: {
     fontSize: typography.sizes.lg,
     color: colors.textSecondary,
   },
@@ -390,7 +498,7 @@ const styles = StyleSheet.create({
   },
   toggle: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   toggleText: {
     fontSize: typography.sizes.md,
@@ -400,23 +508,4 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: typography.weights.semibold,
   },
-  features: {
-    alignItems: 'center',
-  },
-  featuresTitle: {
-    fontSize: typography.sizes.sm,
-    color: colors.textLight,
-    marginBottom: spacing.sm,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.lg,
-    marginBottom: spacing.xs,
-  },
-  featureItem: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-  },
 });
-

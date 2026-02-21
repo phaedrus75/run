@@ -492,23 +492,25 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
 # ==========================================
 
 MOTIVATIONAL_MESSAGES = [
-    {"message": "Every run makes you stronger!", "emoji": "💪"},
-    {"message": "You're building something amazing!", "emoji": "🌟"},
-    {"message": "One step at a time, one run at a time!", "emoji": "👟"},
-    {"message": "Your future self will thank you!", "emoji": "🙏"},
-    {"message": "Progress, not perfection!", "emoji": "📈"},
-    {"message": "You showed up. That's what matters!", "emoji": "🎯"},
-    {"message": "The hardest part is over - you started!", "emoji": "🚀"},
-    {"message": "Running is moving meditation!", "emoji": "🧘"},
+    {"message": "You showed up. That's the whole game.", "emoji": "🏃"},
+    {"message": "Consistency beats intensity. Always.", "emoji": "🔁"},
+    {"message": "Run today. Worry about pace never.", "emoji": "🌿"},
+    {"message": "The best run is the one you actually do.", "emoji": "✓"},
+    {"message": "Progress, not perfection.", "emoji": "📈"},
+    {"message": "Your body was built to move.", "emoji": "🫀"},
+    {"message": "Every logged run is proof you showed up.", "emoji": "📝"},
+    {"message": "Running is moving meditation.", "emoji": "🧘"},
+    {"message": "Small runs add up to big journeys.", "emoji": "🗺️"},
+    {"message": "Less thinking, more running.", "emoji": "💨"},
 ]
 
 MILESTONE_MESSAGES = {
-    1: {"message": "First run complete! The journey begins!", "emoji": "🎉", "achievement": "First Steps"},
-    5: {"message": "5 runs done! You're getting hooked!", "emoji": "🔥", "achievement": "Getting Started"},
-    10: {"message": "Double digits! You're a runner now!", "emoji": "🏆", "achievement": "Double Digits"},
-    25: {"message": "25 runs! Consistency is your superpower!", "emoji": "⭐", "achievement": "Quarter Century"},
-    50: {"message": "50 runs! You're unstoppable!", "emoji": "🚀", "achievement": "Half Century"},
-    100: {"message": "100 RUNS! You're a legend!", "emoji": "👑", "achievement": "Century Club"},
+    1: {"message": "First run logged. The streak starts now.", "emoji": "🎉", "achievement": "First Steps"},
+    5: {"message": "5 runs in. The habit is forming.", "emoji": "🌱", "achievement": "Taking Root"},
+    10: {"message": "10 runs. You're a runner now.", "emoji": "🏃", "achievement": "Double Digits"},
+    25: {"message": "25 runs. Consistency is your superpower.", "emoji": "⭐", "achievement": "Quarter Century"},
+    50: {"message": "50 runs. This is who you are now.", "emoji": "🏔️", "achievement": "Half Century"},
+    100: {"message": "100 runs. Respect the journey.", "emoji": "👑", "achievement": "Century Club"},
 }
 
 def get_motivational_message(db: Session, user_id: Optional[int] = None) -> dict:

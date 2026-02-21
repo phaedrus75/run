@@ -150,7 +150,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         km_this_month: 0,
       });
       setMotivation({
-        message: "Ready to start your running journey?",
+        message: "Every run counts. Log your first one.",
         emoji: "🏃",
       });
     } finally {
@@ -186,19 +186,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     fetchData();
   }, [fetchData]);
   
-  // 🎨 Greeting based on time of day
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning! ☀️';
-    if (hour < 17) return 'Good afternoon! 🌤️';
-    return 'Good evening! 🌙';
+    if (hour < 6) return 'Early riser';
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
   };
   
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>🏃 Loading...</Text>
+          <Text style={styles.loadingText}>RunZen</Text>
         </View>
       </SafeAreaView>
     );
@@ -241,14 +241,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         </View>
         
-        {/* 👋 Greeting */}
+        {/* Greeting */}
         <Text style={styles.greeting}>
-          {getGreeting()} {user?.name || 'Runner'}
+          {getGreeting()}, {user?.name || 'Runner'}
         </Text>
         
-        {/* 📊 Overall Stats */}
+        {/* Overall Stats */}
         <View style={[styles.lifetimeCard, shadows.medium]}>
-          <Text style={styles.lifetimeTitle}>📊 Overall Stats</Text>
+          <Text style={styles.lifetimeTitle}>Your journey</Text>
           <View style={styles.lifetimeRow}>
             <View style={styles.lifetimeStat}>
               <Text style={styles.lifetimeValue}>{stats?.total_runs || 0}</Text>
@@ -281,13 +281,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           kmThisWeek={stats?.km_this_week || 0}
         />
         
-        {/* 🚀 Quick Start Button */}
+        {/* Quick Action */}
         <TouchableOpacity
           style={[styles.startButton, shadows.medium]}
           onPress={() => navigation.navigate('Run')}
           activeOpacity={0.8}
         >
-          <Text style={styles.startButtonText}>📝 Log a Run</Text>
+          <Text style={styles.startButtonText}>Log a run</Text>
         </TouchableOpacity>
         
         {/* 🎯 Goals Progress */}
@@ -336,10 +336,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             ))
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🏃‍♀️</Text>
-              <Text style={styles.emptyText}>No runs yet!</Text>
+              <Text style={styles.emptyEmoji}>🏃</Text>
+              <Text style={styles.emptyText}>Your first run awaits</Text>
               <Text style={styles.emptySubtext}>
-                Tap "Start a Run" to record your first run
+                Go run. Come back. Log it in 10 seconds.
               </Text>
             </View>
           )}
@@ -401,8 +401,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: typography.sizes.lg,
-    color: colors.textSecondary,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    letterSpacing: -0.5,
   },
   header: {
     flexDirection: 'row',
