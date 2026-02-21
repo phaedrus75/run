@@ -286,3 +286,32 @@ class CircleMembership(Base):
         # Composite unique constraint
         {'sqlite_autoincrement': True},
     )
+
+
+class PasswordResetToken(Base):
+    """
+    🔐 Password Reset Token - For forgot password flow
+    
+    Stores temporary reset codes with expiration.
+    """
+    __tablename__ = "password_reset_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    
+    # 👤 User requesting reset
+    user_id = Column(Integer, nullable=False, index=True)
+    
+    # 📧 Email for quick lookup
+    email = Column(String, nullable=False, index=True)
+    
+    # 🔑 6-digit reset code
+    reset_code = Column(String, nullable=False)
+    
+    # ⏰ When this token expires (15 minutes from creation)
+    expires_at = Column(DateTime, nullable=False)
+    
+    # ✅ Has this token been used?
+    used = Column(Boolean, default=False)
+    
+    # 📅 When created
+    created_at = Column(DateTime, server_default=func.now())

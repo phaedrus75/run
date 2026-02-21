@@ -26,7 +26,7 @@ import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry
+from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email,
@@ -267,25 +267,79 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 
-@app.post("/auth/admin-reset-password")
-def admin_reset_password(email: str, new_password: str, secret: str, db: Session = Depends(get_db)):
+@app.post("/auth/forgot-password")
+def forgot_password(email: str, db: Session = Depends(get_db)):
     """
-    🔐 TEMPORARY: Admin password reset endpoint
-    Remove after use!
+    🔐 Request a password reset code
+    
+    Generates a 6-digit code that expires in 15 minutes.
+    Code is logged to server logs (check Railway logs to retrieve).
     """
-    if secret != "runzen-admin-2026":
-        raise HTTPException(status_code=403, detail="Invalid secret")
+    import random
+    from datetime import datetime, timedelta
     
     user = get_user_by_email(db, email)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return {"message": "If an account exists with this email, a reset code has been generated"}
     
-    import bcrypt
-    hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-    user.hashed_password = hashed
+    reset_code = str(random.randint(100000, 999999))
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+    
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.email == email,
+        PasswordResetToken.used == False
+    ).update({"used": True})
+    
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        email=email,
+        reset_code=reset_code,
+        expires_at=expires_at
+    )
+    db.add(reset_token)
     db.commit()
     
-    return {"message": f"Password reset for {email}"}
+    print(f"🔐 PASSWORD RESET CODE for {email}: {reset_code} (expires in 15 min)")
+    
+    return {"message": "If an account exists with this email, a reset code has been generated"}
+
+
+@app.post("/auth/reset-password")
+def reset_password(email: str, code: str, new_password: str, db: Session = Depends(get_db)):
+    """
+    🔐 Reset password using the code from forgot-password
+    
+    Requires the 6-digit code and new password.
+    """
+    import bcrypt
+    from datetime import datetime
+    
+    token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.email == email,
+        PasswordResetToken.reset_code == code,
+        PasswordResetToken.used == False,
+        PasswordResetToken.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset code"
+        )
+    
+    user = db.query(User).filter(User.id == token.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    user.hashed_password = hashed
+    
+    token.used = True
+    db.commit()
+    
+    print(f"✅ Password successfully reset for {email}")
+    
+    return {"message": "Password reset successfully"}
 
 
 @app.get("/auth/me", response_model=UserResponse)
