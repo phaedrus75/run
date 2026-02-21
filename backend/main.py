@@ -267,6 +267,27 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 
+@app.post("/auth/admin-reset-password")
+def admin_reset_password(email: str, new_password: str, secret: str, db: Session = Depends(get_db)):
+    """
+    🔐 TEMPORARY: Admin password reset endpoint
+    Remove after use!
+    """
+    if secret != "runzen-admin-2026":
+        raise HTTPException(status_code=403, detail="Invalid secret")
+    
+    user = get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    import bcrypt
+    hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    user.hashed_password = hashed
+    db.commit()
+    
+    return {"message": f"Password reset for {email}"}
+
+
 @app.get("/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(require_auth)):
     """
