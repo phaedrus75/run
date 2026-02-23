@@ -1,12 +1,5 @@
-/**
- * 🎖️ ACHIEVEMENTS COMPONENT
- * ==========================
- * 
- * Shows unlocked and locked achievements.
- */
-
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import type { AchievementsData, Achievement } from '../services/api';
 
@@ -14,36 +7,73 @@ interface AchievementsProps {
   data: AchievementsData;
 }
 
+const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
+  milestone: { label: 'Run Count', emoji: '🏁' },
+  distance: { label: 'Total Distance', emoji: '📏' },
+  distance_type: { label: 'First Completions', emoji: '🎯' },
+  specialist: { label: 'Specialist', emoji: '🔄' },
+  streak: { label: 'Streaks', emoji: '🔥' },
+  goals: { label: 'Monthly Goals', emoji: '🎯' },
+  category: { label: 'Run Category', emoji: '🗺️' },
+  steps: { label: 'Steps', emoji: '👟' },
+};
+
+const CATEGORY_ORDER = [
+  'milestone', 'distance', 'distance_type', 'specialist',
+  'streak', 'goals', 'category', 'steps',
+];
+
+function groupByCategory(achievements: Achievement[]): Record<string, Achievement[]> {
+  const groups: Record<string, Achievement[]> = {};
+  for (const a of achievements) {
+    if (!groups[a.category]) groups[a.category] = [];
+    groups[a.category].push(a);
+  }
+  return groups;
+}
+
 export function Achievements({ data }: AchievementsProps) {
   const [showLocked, setShowLocked] = useState(false);
   const { unlocked, locked, total, unlocked_count } = data;
 
-  const renderAchievement = (achievement: Achievement, index: number) => (
-    <View 
-      key={achievement.id} 
+  const allAchievements = [...unlocked, ...locked];
+  const grouped = groupByCategory(allAchievements);
+
+  const renderBadge = (achievement: Achievement) => (
+    <View
+      key={achievement.id}
       style={[
-        styles.achievementCard,
-        !achievement.unlocked && styles.lockedCard,
+        styles.badge,
+        !achievement.unlocked && styles.lockedBadge,
       ]}
     >
-      <Text style={styles.emoji}>{achievement.emoji}</Text>
-      <View style={styles.achievementInfo}>
-        <Text style={[styles.name, !achievement.unlocked && styles.lockedText]}>
-          {achievement.name}
-        </Text>
-        <Text style={[styles.description, !achievement.unlocked && styles.lockedText]}>
-          {achievement.description}
-        </Text>
-      </View>
+      <Text style={[styles.badgeEmoji, !achievement.unlocked && styles.lockedEmoji]}>
+        {achievement.emoji}
+      </Text>
+      <Text
+        style={[styles.badgeName, !achievement.unlocked && styles.lockedText]}
+        numberOfLines={1}
+      >
+        {achievement.name}
+      </Text>
+      <Text
+        style={[styles.badgeDesc, !achievement.unlocked && styles.lockedText]}
+        numberOfLines={2}
+      >
+        {achievement.description}
+      </Text>
       {achievement.unlocked && (
-        <Text style={styles.checkmark}>✓</Text>
+        <View style={styles.unlockedDot} />
       )}
     </View>
   );
 
+  const visibleCategories = showLocked
+    ? CATEGORY_ORDER.filter(c => grouped[c]?.length)
+    : CATEGORY_ORDER.filter(c => grouped[c]?.some(a => a.unlocked));
+
   return (
     <View style={[styles.container, shadows.small]}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>🎖️ Achievements</Text>
         <View style={styles.countBadge}>
@@ -51,40 +81,41 @@ export function Achievements({ data }: AchievementsProps) {
         </View>
       </View>
 
-      {/* Progress Bar */}
       <View style={styles.progressBar}>
-        <View 
+        <View
           style={[
             styles.progressFill,
-            { width: `${(unlocked_count / total) * 100}%` }
-          ]} 
+            { width: `${(unlocked_count / total) * 100}%` },
+          ]}
         />
       </View>
 
-      {/* Unlocked Achievements */}
-      {unlocked.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏆 Unlocked</Text>
-          {unlocked.map(renderAchievement)}
-        </View>
-      )}
+      {visibleCategories.map(cat => {
+        const items = grouped[cat] || [];
+        const catInfo = CATEGORY_LABELS[cat] || { label: cat, emoji: '' };
+        const visible = showLocked ? items : items.filter(a => a.unlocked);
+        if (visible.length === 0) return null;
 
-      {/* Toggle Locked */}
-      <TouchableOpacity 
+        return (
+          <View key={cat} style={styles.categorySection}>
+            <Text style={styles.categoryTitle}>
+              {catInfo.emoji} {catInfo.label}
+            </Text>
+            <View style={styles.badgeGrid}>
+              {visible.map(renderBadge)}
+            </View>
+          </View>
+        );
+      })}
+
+      <TouchableOpacity
         style={styles.toggleButton}
         onPress={() => setShowLocked(!showLocked)}
       >
         <Text style={styles.toggleText}>
-          {showLocked ? '▼ Hide Locked' : '▶ Show Locked'} ({locked.length})
+          {showLocked ? '▼ Hide Locked' : '▶ Show All'} ({locked.length} locked)
         </Text>
       </TouchableOpacity>
-
-      {/* Locked Achievements */}
-      {showLocked && locked.length > 0 && (
-        <View style={styles.section}>
-          {locked.map(renderAchievement)}
-        </View>
-      )}
     </View>
   );
 }
@@ -130,53 +161,69 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     borderRadius: 3,
   },
-  section: {
-    marginTop: spacing.sm,
+  categorySection: {
+    marginBottom: spacing.md,
   },
-  sectionTitle: {
+  categoryTitle: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
     color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
-  achievementCard: {
+  badgeGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+  },
+  badge: {
+    width: '30%',
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.xs,
+    padding: spacing.sm,
+    marginHorizontal: '1.5%',
+    marginBottom: spacing.sm,
+    alignItems: 'center',
+    position: 'relative',
   },
-  lockedCard: {
+  lockedBadge: {
     backgroundColor: colors.background,
-    opacity: 0.6,
+    opacity: 0.45,
   },
-  emoji: {
-    fontSize: 28,
-    marginRight: spacing.md,
+  badgeEmoji: {
+    fontSize: 26,
+    marginBottom: 4,
   },
-  achievementInfo: {
-    flex: 1,
+  lockedEmoji: {
+    opacity: 0.5,
   },
-  name: {
-    fontSize: typography.sizes.md,
+  badgeName: {
+    fontSize: 11,
     fontWeight: typography.weights.semibold,
     color: colors.text,
+    textAlign: 'center',
+    marginBottom: 2,
   },
-  description: {
-    fontSize: typography.sizes.sm,
+  badgeDesc: {
+    fontSize: 9,
     color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 12,
   },
   lockedText: {
     color: colors.textLight,
   },
-  checkmark: {
-    fontSize: 20,
-    color: colors.success,
-    fontWeight: typography.weights.bold,
+  unlockedDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.success,
   },
   toggleButton: {
     paddingVertical: spacing.sm,
+    alignItems: 'center',
   },
   toggleText: {
     fontSize: typography.sizes.sm,

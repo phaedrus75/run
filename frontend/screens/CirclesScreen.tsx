@@ -25,6 +25,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { getToken } from '../services/auth';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
@@ -59,6 +60,7 @@ interface CircleDetails {
 }
 
 export function CirclesScreen() {
+  const { logout } = useAuth();
   const [circles, setCircles] = useState<Circle[]>([]);
   const [selectedCircle, setSelectedCircle] = useState<CircleDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,10 @@ export function CirclesScreen() {
       if (response.ok) {
         const data = await response.json();
         setCircles(data);
+      } else if (response.status === 401) {
+        Alert.alert('Session Expired', 'Please log in again.', [
+          { text: 'OK', onPress: () => logout() },
+        ]);
       }
     } catch (error) {
       console.error('Failed to fetch circles:', error);
@@ -90,7 +96,7 @@ export function CirclesScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [logout]);
 
   useFocusEffect(
     useCallback(() => {

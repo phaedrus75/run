@@ -97,6 +97,10 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
           setExistingHandle(null);
           setHandle('');
         }
+      } else if (response.status === 401) {
+        Alert.alert('Session Expired', 'Please log in again.', [
+          { text: 'OK', onPress: () => { logout(); onClose(); } },
+        ]);
       }
     } catch (error) {
       console.log('Failed to fetch handle:', error);

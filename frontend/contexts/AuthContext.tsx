@@ -43,13 +43,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const token = await getToken();
       if (token) {
-        const storedUser = await getStoredUser();
-        if (storedUser) {
-          setUser(storedUser);
+        const response = await fetch('https://run-production-83ca.up.railway.app/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+          setStoredUser(userData);
+        } else {
+          // Token expired or invalid — clear stored auth
+          await apiLogout();
+          setUser(null);
         }
       }
     } catch (error) {
-      console.log('Auth check failed:', error);
+      // Network error — fall back to stored user so app works offline
+      console.log('Auth check network error, using stored user:', error);
+      const storedUser = await getStoredUser();
+      if (storedUser) {
+        setUser(storedUser);
+      }
     } finally {
       setIsLoading(false);
     }
