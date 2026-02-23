@@ -227,7 +227,7 @@ export function CirclesScreen() {
   const shareInviteCode = async (code: string, name: string) => {
     try {
       await Share.share({
-        message: `Join my running circle "${name}" on RunZen!\n\nUse invite code: ${code}`,
+        message: `Join my running circle "${name}" on ZenRun!\n\nUse invite code: ${code}`,
       });
     } catch (error) {
       console.error('Failed to share:', error);

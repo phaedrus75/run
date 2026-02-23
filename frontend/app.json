@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "RunZen",
-    "slug": "runtracker",
+    "name": "ZenRun",
+    "slug": "zenrun",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.phaedrus75.runzen",
+      "bundleIdentifier": "com.phaedrus75.zenrun",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E3A5F"
       },
-      "package": "com.phaedrus75.runzen"
+      "package": "com.phaedrus75.zenrun"
     },
     "web": {
       "favicon": "./assets/favicon.png"

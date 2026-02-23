@@ -2,7 +2,7 @@
  * 🎓 ONBOARDING SCREEN
  * ====================
  * 
- * Onboarding that reflects RunZen's philosophy:
+ * Onboarding that reflects ZenRun's philosophy:
  * 3 focused slides about WHY (not how), then goal setup.
  */
 
@@ -41,8 +41,8 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
     id: '1',
     title: 'Run first.\nTrack second.',
-    subtitle: 'The RunZen philosophy',
-    body: "Most apps want you to carry your phone, watch your pace, and analyze every step. RunZen is different. Run however you want — then log it in 10 seconds when you're done.",
+    subtitle: 'The ZenRun philosophy',
+    body: "Most apps want you to carry your phone, watch your pace, and analyze every step. ZenRun is different. Run however you want — then log it in 10 seconds when you're done.",
     accent: colors.primary,
   },
   {
@@ -341,7 +341,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerBrand}>RunZen</Text>
+        <Text style={styles.headerBrand}>ZenRun</Text>
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>

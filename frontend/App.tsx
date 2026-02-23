@@ -1,5 +1,5 @@
 /**
- * 🏃 RUNTRACKER APP
+ * 🏃 ZENRUN APP
  * ==================
  * 
  * Welcome to the main entry point of our React Native app!

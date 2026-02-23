@@ -1,5 +1,5 @@
 """
-🏃 RUNTRACKER API - Main Entry Point
+🏃 ZENRUN API - Main Entry Point
 =====================================
 
 Welcome! This is where your API starts.
@@ -45,7 +45,7 @@ import crud
 # ==========================================
 
 app = FastAPI(
-    title="🏃 RunZen API",
+    title="🏃 ZenRun API",
     description="Track your runs, crush your goals!",
     version="1.0.0",
 )
@@ -159,7 +159,7 @@ def read_root():
     - Whatever you return gets sent back as JSON automatically!
     """
     return {
-        "message": "🏃 Welcome to RunZen API!",
+        "message": "🏃 Welcome to ZenRun API!",
         "docs": "Visit /docs for interactive documentation",
         "health": "OK"
     }

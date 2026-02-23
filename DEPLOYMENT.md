@@ -1,6 +1,6 @@
 # 🚀 Deployment Guide
 
-This guide will help you deploy your RunTracker app so others can use it!
+This guide will help you deploy your ZenRun app so others can use it!
 
 ---
 
@@ -35,7 +35,7 @@ Update `database.py` to use PostgreSQL in production:
 ```python
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./runtracker.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./zenrun.db")
 
 # Railway uses postgres:// but SQLAlchemy needs postgresql://
 if DATABASE_URL.startswith("postgres://"):

@@ -370,7 +370,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
             </TouchableOpacity>
 
             {/* Version */}
-            <Text style={styles.version}>RunTracker v1.0.0</Text>
+            <Text style={styles.version}>ZenRun v1.0.0</Text>
           </ScrollView>
         )}
       </View>

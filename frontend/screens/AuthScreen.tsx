@@ -2,7 +2,7 @@
  * 🔐 AUTH SCREEN
  * ===============
  * 
- * Landing page for RunZen.
+ * Landing page for ZenRun.
  * Communicates the brand: "Less tracking. More running."
  * Includes login, signup, and forgot password flows.
  */
@@ -138,7 +138,7 @@ export default function AuthScreen() {
       <View style={styles.landingContainer}>
         <View style={styles.landingContent}>
           <Animated.View style={[styles.brandBlock, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            <Text style={styles.brandName}>RunZen</Text>
+            <Text style={styles.brandName}>ZenRun</Text>
             <View style={styles.brandLine} />
           </Animated.View>
 
@@ -208,7 +208,7 @@ export default function AuthScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerBrand}>RunZen</Text>
+          <Text style={styles.headerBrand}>ZenRun</Text>
           <Text style={styles.headerTitle}>{getTitle()}</Text>
         </View>
 

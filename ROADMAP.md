@@ -1,8 +1,8 @@
-# 🏃 RunTracker Product Roadmap
+# 🏃 ZenRun Product Roadmap
 
 ## 📋 Overview
 
-This document tracks the product roadmap for RunTracker - a mobile app for tracking runs, achieving goals, and staying motivated.
+This document tracks the product roadmap for ZenRun - a mobile app for tracking runs, achieving goals, and staying motivated.
 
 ---
 

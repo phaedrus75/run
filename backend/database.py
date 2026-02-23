@@ -16,7 +16,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # 📁 Database URL from environment, or use local SQLite
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./runtracker.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./zenrun.db")
 
 # 🔧 Railway uses postgres:// but SQLAlchemy needs postgresql://
 if DATABASE_URL.startswith("postgres://"):

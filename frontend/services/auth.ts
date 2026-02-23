@@ -11,8 +11,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
 // Storage keys
-const TOKEN_KEY = '@runtracker_token';
-const USER_KEY = '@runtracker_user';
+const TOKEN_KEY = '@zenrun_token';
+const USER_KEY = '@zenrun_user';
 
 // Types
 export interface User {

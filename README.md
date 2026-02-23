@@ -1,4 +1,4 @@
-# 🏃 RunZen - Your Personal Running Companion
+# 🏃 ZenRun - Your Personal Running Companion
 
 A mobile app to plan, track, and celebrate your runs!
 

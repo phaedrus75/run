@@ -198,7 +198,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>RunZen</Text>
+          <Text style={styles.loadingText}>ZenRun</Text>
         </View>
       </SafeAreaView>
     );
@@ -216,7 +216,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       >
         {/* 👋 Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>RunZen</Text>
+          <Text style={styles.title}>ZenRun</Text>
           <View style={styles.headerRight}>
             {/* 🔥 Streak Badge */}
             {streakProgress && (
