@@ -19,6 +19,9 @@
       "bundleIdentifier": "com.phaedrus75.zenrun",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": []
       }
     },
     "android": {
