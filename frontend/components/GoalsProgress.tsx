@@ -62,7 +62,7 @@ export function GoalsProgress({ goals }: GoalsProgressProps) {
               {Math.round(yearlyExpected)}%
             </Text>
           </View>
-          <Text style={styles.progressPercent}>{yearly.percent}%</Text>
+          <Text style={styles.progressPercent}>{Math.round(yearly.percent)}%</Text>
         </View>
 
         <View style={styles.statsRow}>
@@ -114,7 +114,7 @@ export function GoalsProgress({ goals }: GoalsProgressProps) {
               </>
             )}
           </View>
-          <Text style={styles.progressPercent}>{monthly.percent}%</Text>
+          <Text style={styles.progressPercent}>{Math.round(monthly.percent)}%</Text>
         </View>
 
         <View style={styles.statsRow}>
