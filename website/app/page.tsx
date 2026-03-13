@@ -5,41 +5,106 @@ export default function Home() {
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-warm-bg via-white to-warm-surface" />
         <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-16 md:pt-36 md:pb-24">
-          <div className="max-w-2xl">
-            <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
-              Less tracking.<br />
-              <span className="text-coral">More running.</span>
-            </h1>
-            <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
-              Running apps turned running into a spreadsheet. ZenRun is the
-              opposite — log your run in 2 seconds, keep your streak alive, and
-              get back to your life.
-            </p>
-            <div id="download" className="flex flex-wrap gap-4">
-              <a
-                href="#"
-                className="inline-flex items-center gap-3 bg-gray-900 text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors"
-              >
-                <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
-                </svg>
-                <div className="text-left">
-                  <div className="text-[10px] uppercase tracking-wide opacity-80">Download on the</div>
-                  <div className="text-base font-semibold -mt-0.5">App Store</div>
+          <div className="flex flex-col md:flex-row items-center gap-12 md:gap-16">
+            <div className="flex-1 max-w-xl">
+              <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
+                Less tracking.<br />
+                <span className="text-coral">More running.</span>
+              </h1>
+              <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
+                Running apps turned running into a spreadsheet. ZenRun is the
+                opposite — log your run in 2 seconds, keep your streak alive, and
+                get back to your life.
+              </p>
+              <div id="download" className="flex flex-wrap gap-4">
+                <a
+                  href="#"
+                  className="inline-flex items-center gap-3 bg-gray-900 text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors"
+                >
+                  <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+                  </svg>
+                  <div className="text-left">
+                    <div className="text-[10px] uppercase tracking-wide opacity-80">Download on the</div>
+                    <div className="text-base font-semibold -mt-0.5">App Store</div>
+                  </div>
+                </a>
+                <a
+                  href="#"
+                  className="inline-flex items-center gap-3 bg-gray-900 text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors"
+                >
+                  <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.443 1.413a1 1 0 010 1.74l-2.443 1.414L15.18 12l2.518-2.693zM5.864 2.658L16.8 8.99l-2.302 2.302L5.864 2.658z" />
+                  </svg>
+                  <div className="text-left">
+                    <div className="text-[10px] uppercase tracking-wide opacity-80">Get it on</div>
+                    <div className="text-base font-semibold -mt-0.5">Google Play</div>
+                  </div>
+                </a>
+              </div>
+            </div>
+
+            {/* Phone mockup */}
+            <div className="hidden md:flex flex-1 justify-center">
+              <div className="relative w-[280px] h-[580px] bg-gray-900 rounded-[3rem] p-3 shadow-2xl">
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 w-28 h-6 bg-gray-900 rounded-b-2xl z-10" />
+                <div className="w-full h-full bg-[#FFF9F5] rounded-[2.3rem] overflow-hidden px-5 pt-14 pb-6">
+                  {/* Status bar */}
+                  <div className="flex justify-between items-center mb-6">
+                    <span className="text-[15px] font-bold text-gray-900">ZenRun</span>
+                    <div className="w-8 h-8 bg-gray-200 rounded-full" />
+                  </div>
+
+                  {/* Streak card */}
+                  <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-400">Weekly Streak</span>
+                      <span className="text-xs font-semibold text-[#4ECDC4]">Best: 8</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mb-2">
+                      <span className="text-3xl font-extrabold text-gray-900">5</span>
+                      <span className="text-sm text-gray-400">weeks</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <div className="h-1.5 flex-1 bg-[#FF6B6B] rounded-full" />
+                      <div className="h-1.5 flex-1 bg-[#FF6B6B] rounded-full" />
+                      <div className="h-1.5 flex-1 bg-gray-200 rounded-full" />
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-2">1 more run this week</p>
+                  </div>
+
+                  {/* Goal card */}
+                  <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-900">2026 Goal</span>
+                      <span className="text-[10px] font-semibold text-[#4ECDC4] bg-[#4ECDC4]/10 px-2 py-0.5 rounded-full">On Track</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2.5 mb-1.5">
+                      <div className="bg-[#FF6B6B] h-2.5 rounded-full" style={{width: '38%'}} />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>380 km done</span>
+                      <span>38%</span>
+                    </div>
+                  </div>
+
+                  {/* Recent run */}
+                  <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-bold text-gray-900">5K</span>
+                        <span className="text-[11px] text-gray-400 ml-2">28:42</span>
+                      </div>
+                      <span className="text-[11px] text-gray-400">Today</span>
+                    </div>
+                  </div>
+
+                  {/* CTA button */}
+                  <div className="bg-[#FF6B6B] rounded-xl py-3 text-center mt-1">
+                    <span className="text-white text-sm font-semibold">Log a run</span>
+                  </div>
                 </div>
-              </a>
-              <a
-                href="#"
-                className="inline-flex items-center gap-3 bg-gray-900 text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors"
-              >
-                <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.443 1.413a1 1 0 010 1.74l-2.443 1.414L15.18 12l2.518-2.693zM5.864 2.658L16.8 8.99l-2.302 2.302L5.864 2.658z" />
-                </svg>
-                <div className="text-left">
-                  <div className="text-[10px] uppercase tracking-wide opacity-80">Get it on</div>
-                  <div className="text-base font-semibold -mt-0.5">Google Play</div>
-                </div>
-              </a>
+              </div>
             </div>
           </div>
         </div>

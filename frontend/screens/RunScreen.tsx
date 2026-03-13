@@ -1,33 +1,32 @@
 /**
- * 📝 LOG RUN SCREEN
- * ==================
- * 
- * Log a run with distance, category (outdoor/treadmill), duration.
- * Timer is optional - most users track time elsewhere.
- * 
- * 🎓 LEARNING NOTES:
- * - This screen focuses on logging completed runs
- * - Timer is available but optional
- * - Category helps distinguish outdoor vs treadmill runs
+ * LOG RUN SCREEN
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ConfettiCannon from 'react-native-confetti-cannon';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunTypeButton } from '../components/RunTypeButton';
 import { Timer } from '../components/Timer';
 import { runApi, getDistance } from '../services/api';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const RUN_TYPES = ['3k', '5k', '10k', '15k', '18k', '21k'];
 const CATEGORIES = [
@@ -35,12 +34,40 @@ const CATEGORIES = [
   { id: 'treadmill', label: '🏃 Treadmill', emoji: '🏃' },
 ];
 
+const QUOTES = [
+  { text: "The only opponent you have to beat is yourself, the way you used to be.", author: "Haruki Murakami" },
+  { text: "It is only necessary that he runs and runs. Then one day he will see order and law and love.", author: "George Sheehan" },
+  { text: "Trust your body and keep things simple.", author: "Christopher McDougall" },
+  { text: "All I do is keep on running in my own cozy, homemade void. And this is a pretty wonderful thing.", author: "Haruki Murakami" },
+  { text: "The real purpose of running isn't to win a race. It's to test the limits of the human heart.", author: "Bill Bowerman" },
+  { text: "Every morning in Africa, a gazelle wakes up. It knows it must outrun the fastest lion or it will be killed. It doesn't matter whether you are the lion or a gazelle — when the sun comes up, you'd better be running.", author: "Born to Run" },
+  { text: "Running is the greatest metaphor for life, because you get out of it what you put into it.", author: "Oprah Winfrey" },
+  { text: "Exerting yourself to the fullest within your individual limits: that's the essence of running.", author: "Haruki Murakami" },
+  { text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Aristotle" },
+  { text: "The miracle isn't that I finished. The miracle is that I had the courage to start.", author: "John Bingham" },
+  { text: "You showed up. That's what matters.", author: "ZenRun" },
+  { text: "Another run in the books. The streak continues.", author: "ZenRun" },
+  { text: "You didn't run to be fast. You ran to feel alive.", author: "ZenRun" },
+  { text: "Consistency is the only metric that matters. You're building it.", author: "ZenRun" },
+];
+
+function getRandomQuote() {
+  return QUOTES[Math.floor(Math.random() * QUOTES.length)];
+}
+
 interface RunScreenProps {
   navigation: any;
 }
 
+interface RunResult {
+  distance: string;
+  category: string;
+  formattedDuration: string;
+  pace: string;
+  celebrations: any[];
+}
+
 export function RunScreen({ navigation }: RunScreenProps) {
-  // 📊 State
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [category, setCategory] = useState<string>('outdoor');
   const [useTimer, setUseTimer] = useState(false);
@@ -48,25 +75,79 @@ export function RunScreen({ navigation }: RunScreenProps) {
   const [seconds, setSeconds] = useState('');
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  
-  // 🎯 Handle manual run save
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [quote, setQuote] = useState(getRandomQuote());
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const confettiRef = useRef<any>(null);
+
+  const openCelebration = (result: RunResult) => {
+    setRunResult(result);
+    setQuote(getRandomQuote());
+    setShowCelebration(true);
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11,
+    }).start(() => {
+      confettiRef.current?.start();
+    });
+  };
+
+  const closeCelebration = (action: 'done' | 'another') => {
+    Animated.timing(slideAnim, {
+      toValue: SCREEN_HEIGHT,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowCelebration(false);
+      if (action === 'done') {
+        navigation.navigate('Home', {
+          celebrations: runResult?.celebrations || [],
+        });
+      } else {
+        setSelectedType(null);
+        setMinutes('');
+        setSeconds('');
+        setNotes('');
+      }
+    });
+  };
+
+  const processRunResult = (run: any, totalSeconds: number, runType: string) => {
+    const distance = getDistance(runType);
+    const paceSeconds = totalSeconds / distance;
+    const paceMins = Math.floor(paceSeconds / 60);
+    const paceSecs = Math.floor(paceSeconds % 60);
+    const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
+
+    openCelebration({
+      distance: runType.toUpperCase(),
+      category: category === 'treadmill' ? 'Treadmill' : 'Outdoor',
+      formattedDuration: run.formatted_duration,
+      pace: paceStr,
+      celebrations: run.celebrations || [],
+    });
+  };
+
   const handleSaveRun = async () => {
     if (!selectedType) {
       Alert.alert('Select Distance', 'Please select a run distance');
       return;
     }
-    
+
     const mins = parseInt(minutes) || 0;
     const secs = parseInt(seconds) || 0;
     const totalSeconds = mins * 60 + secs;
-    
+
     if (totalSeconds <= 0) {
       Alert.alert('Enter Duration', 'Please enter how long your run took');
       return;
     }
-    
+
     setIsSaving(true);
-    
+
     try {
       const run = await runApi.create({
         run_type: selectedType,
@@ -74,51 +155,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
         notes: notes || undefined,
         category: category,
       });
-      
-      // Calculate pace for the message
-      const distance = getDistance(selectedType);
-      const paceSeconds = totalSeconds / distance;
-      const paceMins = Math.floor(paceSeconds / 60);
-      const paceSecs = Math.floor(paceSeconds % 60);
-      const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
-      
-      // Check for celebrations
-      const celebrations = run.celebrations || [];
-      const hasCelebration = celebrations.length > 0;
-      
-      // Build celebration message
-      let celebrationText = '';
-      if (hasCelebration) {
-        celebrationText = '\n\n' + celebrations.map(c => `${c.title}`).join('\n');
-      }
-      
-      // Determine alert title
-      let alertTitle = 'Run logged';
-      if (celebrations.length > 0) {
-        alertTitle = celebrations[0].title;
-      }
-      
-      Alert.alert(
-        alertTitle,
-        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${celebrationText}`,
-        [
-          {
-            text: 'Done',
-            onPress: () => navigation.navigate('Home', { 
-              celebrations: celebrations,
-            }),
-          },
-          {
-            text: 'Log Another',
-            onPress: () => {
-              setSelectedType(null);
-              setMinutes('');
-              setSeconds('');
-              setNotes('');
-            },
-          },
-        ]
-      );
+      processRunResult(run, totalSeconds, selectedType);
     } catch (error) {
       console.error('Failed to save run:', error);
       Alert.alert('Error', 'Failed to save run. Please try again.');
@@ -126,13 +163,12 @@ export function RunScreen({ navigation }: RunScreenProps) {
       setIsSaving(false);
     }
   };
-  
-  // 🎯 Handle timer completion
+
   const handleTimerComplete = async (totalSeconds: number) => {
     if (!selectedType) return;
-    
+
     setIsSaving(true);
-    
+
     try {
       const run = await runApi.create({
         run_type: selectedType,
@@ -140,48 +176,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
         notes: notes || undefined,
         category: category,
       });
-      
-      const distance = getDistance(selectedType);
-      const paceSeconds = totalSeconds / distance;
-      const paceMins = Math.floor(paceSeconds / 60);
-      const paceSecs = Math.floor(paceSeconds % 60);
-      const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
-      
-      // Check for celebrations
-      const celebrations = run.celebrations || [];
-      const hasCelebration = celebrations.length > 0;
-      
-      // Build celebration message
-      let celebrationText = '';
-      if (hasCelebration) {
-        celebrationText = '\n\n' + celebrations.map(c => `${c.title}`).join('\n');
-      }
-      
-      // Determine alert title
-      let alertTitle = 'Run logged';
-      if (celebrations.length > 0) {
-        alertTitle = celebrations[0].title;
-      }
-      
-      Alert.alert(
-        alertTitle,
-        `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${celebrationText}`,
-        [
-          {
-            text: 'Done',
-            onPress: () => navigation.navigate('Home', { 
-              celebrations: celebrations,
-            }),
-          },
-          {
-            text: 'Log Another',
-            onPress: () => {
-              setSelectedType(null);
-              setUseTimer(false);
-            },
-          },
-        ]
-      );
+      processRunResult(run, totalSeconds, selectedType);
     } catch (error) {
       console.error('Failed to save run:', error);
       Alert.alert('Error', 'Failed to save run. Please try again.');
@@ -189,17 +184,13 @@ export function RunScreen({ navigation }: RunScreenProps) {
       setIsSaving(false);
     }
   };
-  
-  // Show timer view
+
   if (useTimer && selectedType) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.timerContainer}>
-          <Timer
-            runType={selectedType}
-            onComplete={handleTimerComplete}
-          />
-          <TouchableOpacity 
+          <Timer runType={selectedType} onComplete={handleTimerComplete} />
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => setUseTimer(false)}
           >
@@ -209,139 +200,238 @@ export function RunScreen({ navigation }: RunScreenProps) {
       </SafeAreaView>
     );
   }
-  
+
+  const haptic = (style: Haptics.ImpactFeedbackStyle) => {
+    try { Haptics.impactAsync(style); } catch {}
+  };
+
+  const handleDistancePress = (type: string) => {
+    haptic(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedType(type);
+  };
+
+  const handleCategoryPress = (id: string) => {
+    haptic(Haptics.ImpactFeedbackStyle.Light);
+    setCategory(id);
+  };
+
+  const handleSavePress = () => {
+    haptic(Haptics.ImpactFeedbackStyle.Heavy);
+    handleSaveRun();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* 🏃 Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>📝 Log a Run</Text>
-            <Text style={styles.subtitle}>
-              How did it go?
-            </Text>
-          </View>
-          
-          {/* 📏 Distance Selection */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Distance</Text>
-            <View style={styles.typeGrid}>
-              {RUN_TYPES.map(type => (
-                <RunTypeButton
+        <View style={styles.body}>
+          {/* Header */}
+          <Text style={styles.title}>Log a Run</Text>
+
+          {/* Distance */}
+          <Text style={styles.sectionTitle}>Distance</Text>
+          <View style={styles.typeGrid}>
+            {RUN_TYPES.map(type => {
+              const typeColor = colors.runTypes[type] || colors.primary;
+              const isSelected = selectedType === type;
+              return (
+                <Pressable
                   key={type}
-                  type={type}
-                  size="small"
-                  selected={selectedType === type}
-                  onPress={() => setSelectedType(type)}
-                />
-              ))}
-            </View>
-          </View>
-          
-          {/* 🏃 Category Selection */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Category</Text>
-            <View style={styles.categoryRow}>
-              {CATEGORIES.map(cat => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.categoryButton,
-                    category === cat.id && styles.categoryButtonActive,
+                  onPress={() => handleDistancePress(type)}
+                  style={({ pressed }) => [
+                    styles.distanceChip,
+                    {
+                      backgroundColor: isSelected ? typeColor : colors.surface,
+                      borderColor: typeColor,
+                      transform: [{ scale: pressed ? 0.92 : 1 }],
+                    },
+                    isSelected && shadows.small,
                   ]}
-                  onPress={() => setCategory(cat.id)}
                 >
-                  <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
                   <Text style={[
-                    styles.categoryText,
-                    category === cat.id && styles.categoryTextActive,
+                    styles.distanceChipText,
+                    { color: isSelected ? '#fff' : typeColor },
                   ]}>
-                    {cat.id === 'outdoor' ? 'Outdoor' : 'Treadmill'}
+                    {type.toUpperCase()}
                   </Text>
-                </TouchableOpacity>
-              ))}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Category */}
+          <View style={styles.categoryRow}>
+            {CATEGORIES.map(cat => (
+              <Pressable
+                key={cat.id}
+                onPress={() => handleCategoryPress(cat.id)}
+                style={({ pressed }) => [
+                  styles.categoryButton,
+                  category === cat.id && styles.categoryButtonActive,
+                  { transform: [{ scale: pressed ? 0.95 : 1 }] },
+                ]}
+              >
+                <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
+                <Text style={[
+                  styles.categoryText,
+                  category === cat.id && styles.categoryTextActive,
+                ]}>
+                  {cat.id === 'outdoor' ? 'Outdoor' : 'Treadmill'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Duration */}
+          <Text style={styles.sectionTitle}>Duration</Text>
+          <View style={styles.durationRow}>
+            <View style={styles.durationInput}>
+              <TextInput
+                style={styles.durationField}
+                placeholder="00"
+                placeholderTextColor={colors.textLight}
+                keyboardType="number-pad"
+                maxLength={3}
+                value={minutes}
+                onChangeText={setMinutes}
+              />
+              <Text style={styles.durationLabel}>min</Text>
+            </View>
+            <Text style={styles.durationSeparator}>:</Text>
+            <View style={styles.durationInput}>
+              <TextInput
+                style={styles.durationField}
+                placeholder="00"
+                placeholderTextColor={colors.textLight}
+                keyboardType="number-pad"
+                maxLength={2}
+                value={seconds}
+                onChangeText={setSeconds}
+              />
+              <Text style={styles.durationLabel}>sec</Text>
             </View>
           </View>
-          
-          {/* ⏱️ Duration Input */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Duration</Text>
-            <View style={styles.durationRow}>
-              <View style={styles.durationInput}>
-                <TextInput
-                  style={styles.durationField}
-                  placeholder="00"
-                  placeholderTextColor={colors.textLight}
-                  keyboardType="number-pad"
-                  maxLength={3}
-                  value={minutes}
-                  onChangeText={setMinutes}
-                />
-                <Text style={styles.durationLabel}>min</Text>
-              </View>
-              <Text style={styles.durationSeparator}>:</Text>
-              <View style={styles.durationInput}>
-                <TextInput
-                  style={styles.durationField}
-                  placeholder="00"
-                  placeholderTextColor={colors.textLight}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  value={seconds}
-                  onChangeText={setSeconds}
-                />
-                <Text style={styles.durationLabel}>sec</Text>
-              </View>
-            </View>
-            
-            {/* Timer Option */}
-            <TouchableOpacity
-              style={styles.timerOption}
-              onPress={() => {
-                if (!selectedType) {
-                  Alert.alert('Select Distance', 'Please select a distance first');
-                  return;
-                }
-                setUseTimer(true);
-              }}
-            >
-              <Text style={styles.timerOptionText}>⏱️ Use Timer Instead</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* 📝 Notes */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Notes (optional)</Text>
-            <TextInput
-              style={styles.notesInput}
-              placeholder="How did your run feel?"
-              placeholderTextColor={colors.textLight}
-              multiline
-              numberOfLines={2}
-              value={notes}
-              onChangeText={setNotes}
-            />
-          </View>
-          
-          {/* 💾 Save Button */}
-          <TouchableOpacity
-            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-            onPress={handleSaveRun}
+
+          {/* Notes - compact inline */}
+          <TextInput
+            style={styles.notesInput}
+            placeholder="Notes (optional)"
+            placeholderTextColor={colors.textLight}
+            value={notes}
+            onChangeText={setNotes}
+          />
+        </View>
+
+        {/* Pinned bottom button */}
+        <View style={styles.bottomBar}>
+          <Pressable
+            onPress={handleSavePress}
             disabled={isSaving}
+            style={({ pressed }) => [
+              styles.saveButton,
+              isSaving && styles.saveButtonDisabled,
+              { transform: [{ scale: pressed ? 0.97 : 1 }] },
+            ]}
           >
             <Text style={styles.saveButtonText}>
               {isSaving ? 'Saving...' : '✓ Log Run'}
             </Text>
-          </TouchableOpacity>
-        </ScrollView>
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
+
+      {/* Celebration Modal */}
+      <Modal
+        visible={showCelebration}
+        transparent
+        animationType="none"
+        onRequestClose={() => closeCelebration('done')}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => closeCelebration('done')}
+          />
+          <Animated.View
+            style={[
+              styles.celebrationSheet,
+              { transform: [{ translateY: slideAnim }] },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+
+            {runResult && (
+              <View style={styles.celebrationContent}>
+                <Text style={styles.celebrationEmoji}>🏃</Text>
+                <Text style={styles.celebrationTitle}>Run logged.</Text>
+
+                <View style={styles.runSummary}>
+                  <View style={styles.summaryRow}>
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryValue}>{runResult.distance}</Text>
+                      <Text style={styles.summaryLabel}>{runResult.category}</Text>
+                    </View>
+                    <View style={styles.summaryDivider} />
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryValue}>{runResult.formattedDuration}</Text>
+                      <Text style={styles.summaryLabel}>Time</Text>
+                    </View>
+                    <View style={styles.summaryDivider} />
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryValue}>{runResult.pace}</Text>
+                      <Text style={styles.summaryLabel}>per km</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {runResult.celebrations.length > 0 && (
+                  <View style={styles.achievementBanner}>
+                    {runResult.celebrations.map((c, i) => (
+                      <Text key={i} style={styles.achievementText}>{c.title}</Text>
+                    ))}
+                  </View>
+                )}
+
+                <View style={styles.quoteContainer}>
+                  <Text style={styles.quoteText}>"{quote.text}"</Text>
+                  <Text style={styles.quoteAuthor}>— {quote.author}</Text>
+                </View>
+
+                <View style={styles.celebrationButtons}>
+                  <TouchableOpacity
+                    style={styles.doneButton}
+                    onPress={() => closeCelebration('done')}
+                  >
+                    <Text style={styles.doneButtonText}>Done</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.anotherButton}
+                    onPress={() => closeCelebration('another')}
+                  >
+                    <Text style={styles.anotherButtonText}>Log Another</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </Animated.View>
+
+          {showCelebration && (
+            <ConfettiCannon
+              ref={confettiRef}
+              count={80}
+              origin={{ x: Dimensions.get('window').width / 2, y: -20 }}
+              fadeOut
+              autoStart={false}
+              fallSpeed={2500}
+              explosionSpeed={300}
+              colors={[colors.primary, colors.secondary, colors.accent, '#FF8E8E', '#7EDDD6']}
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -351,46 +441,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  scrollView: {
+  body: {
     flex: 1,
-  },
-  scrollContent: {
-    padding: spacing.lg,
-  },
-  header: {
-    marginBottom: spacing.lg,
-    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   title: {
-    fontSize: typography.sizes.xxl,
+    fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.text,
     textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    textAlign: 'center',
-  },
-  section: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   sectionTitle: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
-    color: colors.text,
+    color: colors.textSecondary,
     marginBottom: spacing.sm,
+    marginTop: spacing.md,
   },
   typeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    gap: spacing.sm,
+    gap: 8,
+  },
+  distanceChip: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  distanceChipText: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
   },
   categoryRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   categoryButton: {
     flex: 1,
@@ -399,21 +489,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    padding: spacing.md,
+    paddingVertical: 10,
     borderWidth: 2,
     borderColor: 'transparent',
-    ...shadows.small,
   },
   categoryButtonActive: {
     borderColor: colors.primary,
     backgroundColor: colors.primary + '10',
   },
   categoryEmoji: {
-    fontSize: 24,
-    marginRight: spacing.sm,
+    fontSize: 18,
+    marginRight: 6,
   },
   categoryText: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     fontWeight: typography.weights.medium,
   },
@@ -432,8 +521,8 @@ const styles = StyleSheet.create({
   durationField: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    width: 80,
-    height: 60,
+    width: 76,
+    height: 56,
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
     color: colors.text,
@@ -441,9 +530,9 @@ const styles = StyleSheet.create({
     ...shadows.small,
   },
   durationLabel: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: 4,
   },
   durationSeparator: {
     fontSize: typography.sizes.xxl,
@@ -451,31 +540,25 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginHorizontal: spacing.md,
   },
-  timerOption: {
-    marginTop: spacing.md,
-    alignItems: 'center',
-  },
-  timerOptionText: {
-    fontSize: typography.sizes.sm,
-    color: colors.primary,
-    fontWeight: typography.weights.medium,
-  },
   notesInput: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: typography.sizes.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    fontSize: typography.sizes.sm,
     color: colors.text,
-    minHeight: 60,
-    textAlignVertical: 'top',
-    ...shadows.small,
+    marginTop: spacing.md,
+  },
+  bottomBar: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    paddingTop: spacing.sm,
   },
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.lg,
-    padding: spacing.lg,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: spacing.md,
     ...shadows.medium,
   },
   saveButtonDisabled: {
@@ -500,5 +583,138 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.medium,
+  },
+
+  // Celebration modal
+  modalOverlay: {
+    flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  celebrationSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    minHeight: SCREEN_HEIGHT * 0.55,
+    paddingBottom: 40,
+    ...shadows.large,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 5,
+    backgroundColor: colors.textLight,
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  celebrationContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    alignItems: 'center',
+  },
+  celebrationEmoji: {
+    fontSize: 48,
+    marginBottom: spacing.sm,
+  },
+  celebrationTitle: {
+    fontSize: 28,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    marginBottom: spacing.lg,
+  },
+  runSummary: {
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryValue: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  summaryLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.textLight + '40',
+  },
+  achievementBanner: {
+    width: '100%',
+    backgroundColor: colors.accent + '30',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    alignItems: 'center',
+  },
+  achievementText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  quoteContainer: {
+    width: '100%',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  quoteText: {
+    fontSize: typography.sizes.md,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 24,
+    textAlign: 'center',
+  },
+  quoteAuthor: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  celebrationButtons: {
+    width: '100%',
+    gap: spacing.sm,
+  },
+  doneButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingVertical: 16,
+    alignItems: 'center',
+    ...shadows.small,
+  },
+  doneButtonText: {
+    color: colors.textOnPrimary,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+  },
+  anotherButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  anotherButtonText: {
+    color: colors.primary,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
   },
 });
