@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native';
+import Svg, { Polyline, Circle } from 'react-native-svg';
 import { colors, spacing, typography, radius } from '../theme/colors';
 
 interface ChartDataPoint {
@@ -17,6 +18,7 @@ interface StatsChartProps {
 }
 
 export function StatsChart({ data, title }: StatsChartProps) {
+  const [chartWidth, setChartWidth] = React.useState(0);
   const maxKm = Math.max(...data.map(d => d.totalKm), 1);
   const maxPaceSeconds = Math.max(...data.map(d => d.avgPaceSeconds), 1);
   const minPaceSeconds = Math.min(
@@ -25,6 +27,7 @@ export function StatsChart({ data, title }: StatsChartProps) {
   );
 
   const chartHeight = 180;
+  const barAreaHeight = chartHeight - 20;
   const barMaxHeight = chartHeight - 40;
 
   const totalKm = data.reduce((sum, d) => sum + d.totalKm, 0);
@@ -42,23 +45,35 @@ export function StatsChart({ data, title }: StatsChartProps) {
     return (km / maxKm) * barMaxHeight;
   };
 
-  const getLineY = (paceSeconds: number) => {
-    if (paceSeconds === 0) return chartHeight;
+  const getPaceY = (paceSeconds: number): number => {
+    if (paceSeconds === 0) return barAreaHeight;
     const range = maxPaceSeconds - minPaceSeconds;
-    if (range === 0) return chartHeight / 2;
+    if (range === 0) return barAreaHeight / 2;
     const normalized = (paceSeconds - minPaceSeconds) / range;
-    return chartHeight - 20 - ((1 - normalized) * (barMaxHeight - 20));
+    return 10 + normalized * (barMaxHeight - 20);
   };
 
-  const getLineBottom = (paceSeconds: number) => {
-    return chartHeight - getLineY(paceSeconds) - 4;
+  const onChartLayout = (e: LayoutChangeEvent) => {
+    setChartWidth(e.nativeEvent.layout.width);
   };
+
+  const paceLinePoints = React.useMemo(() => {
+    if (chartWidth === 0 || data.length === 0) return [];
+    const colWidth = chartWidth / data.length;
+    return data
+      .map((point, i) => {
+        if (point.avgPaceSeconds <= 0) return null;
+        const x = colWidth * i + colWidth / 2;
+        const y = getPaceY(point.avgPaceSeconds);
+        return { x, y };
+      })
+      .filter(Boolean) as { x: number; y: number }[];
+  }, [chartWidth, data, minPaceSeconds, maxPaceSeconds]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
 
-      {/* Summary header */}
       <View style={styles.summaryHeader}>
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>
@@ -74,7 +89,6 @@ export function StatsChart({ data, title }: StatsChartProps) {
         </View>
       </View>
 
-      {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendBox, { backgroundColor: colors.primary }]} />
@@ -86,7 +100,6 @@ export function StatsChart({ data, title }: StatsChartProps) {
         </View>
       </View>
 
-      {/* Chart */}
       <View style={styles.chartContainer}>
         <View style={styles.yAxisLeft}>
           <Text style={styles.axisLabel}>{maxKm.toFixed(0)}</Text>
@@ -94,24 +107,19 @@ export function StatsChart({ data, title }: StatsChartProps) {
           <Text style={styles.axisLabel}>0</Text>
         </View>
 
-        <View style={[styles.chart, { height: chartHeight }]}>
+        <View style={[styles.chart, { height: chartHeight }]} onLayout={onChartLayout}>
           <View style={styles.barsContainer}>
             {data.map((point, index) => {
               const barHeight = getBarHeight(point.totalKm);
-              const prevPoint = index > 0 ? data[index - 1] : null;
-              const hasPace = point.avgPaceSeconds > 0;
-              const prevHasPace = prevPoint && prevPoint.avgPaceSeconds > 0;
-
+              const isWeekly = title.toLowerCase().includes('week');
+              const runLabel = isWeekly ? `${point.numRuns}` : `${point.numRuns} runs`;
               return (
                 <View key={index} style={styles.barColumn}>
-                  {/* Run count on bar */}
-                  <View style={[styles.runCountBadge, { bottom: barHeight + 5 }]}>
-                    <Text style={styles.runCountText}>
-                      {point.numRuns > 0 ? point.numRuns : ''}
+                  <View style={[styles.kmBadge, { bottom: barHeight + 24 }]}>
+                    <Text style={styles.kmBadgeText}>
+                      {point.totalKm > 0 ? point.totalKm.toFixed(0) : ''}
                     </Text>
                   </View>
-
-                  {/* Bar */}
                   <View
                     style={[
                       styles.bar,
@@ -121,39 +129,47 @@ export function StatsChart({ data, title }: StatsChartProps) {
                         opacity: point.totalKm > 0 ? 1 : 0.3,
                       },
                     ]}
-                  />
-
-                  {/* Pace line dot + connecting line */}
-                  {hasPace && (
-                    <View
-                      style={[
-                        styles.linePoint,
-                        { bottom: getLineBottom(point.avgPaceSeconds) },
-                      ]}
-                    >
-                      <View style={styles.lineDot} />
-                    </View>
-                  )}
-
-                  {/* Line segment connecting to previous point */}
-                  {hasPace && prevHasPace && (
-                    <View
-                      style={[
-                        styles.lineSegment,
-                        getLineSegmentStyle(
-                          getLineBottom(prevPoint!.avgPaceSeconds),
-                          getLineBottom(point.avgPaceSeconds),
-                          chartHeight
-                        ),
-                      ]}
-                    />
-                  )}
-
+                  >
+                    {point.numRuns > 0 && barHeight > 18 && (
+                      <Text style={styles.barInsideText}>{runLabel}</Text>
+                    )}
+                  </View>
                   <Text style={styles.xLabel}>{point.shortLabel}</Text>
                 </View>
               );
             })}
           </View>
+
+          {chartWidth > 0 && paceLinePoints.length > 0 && (
+            <Svg
+              style={StyleSheet.absoluteFill}
+              width={chartWidth}
+              height={chartHeight}
+              pointerEvents="none"
+            >
+              {paceLinePoints.length > 1 && (
+                <Polyline
+                  points={paceLinePoints.map(p => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke={colors.secondary}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              {paceLinePoints.map((p, i) => (
+                <Circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r={4}
+                  fill={colors.secondary}
+                  stroke={colors.surface}
+                  strokeWidth={2}
+                />
+              ))}
+            </Svg>
+          )}
         </View>
 
         <View style={styles.yAxisRight}>
@@ -164,22 +180,6 @@ export function StatsChart({ data, title }: StatsChartProps) {
       </View>
     </View>
   );
-}
-
-function getLineSegmentStyle(prevBottom: number, currBottom: number, chartHeight: number) {
-  const midBottom = (prevBottom + currBottom) / 2;
-  const height = Math.abs(prevBottom - currBottom) || 2;
-  return {
-    position: 'absolute' as const,
-    left: '-50%',
-    width: '100%',
-    bottom: midBottom + 4 - height / 2,
-    height: Math.max(height, 2),
-    backgroundColor: colors.secondary,
-    opacity: 0.6,
-    borderRadius: 1,
-    transform: [{ rotate: prevBottom > currBottom ? `${Math.atan2(prevBottom - currBottom, 40) * (180 / Math.PI)}deg` : `${-Math.atan2(currBottom - prevBottom, 40) * (180 / Math.PI)}deg` }],
-  };
 }
 
 const styles = StyleSheet.create({
@@ -247,13 +247,11 @@ const styles = StyleSheet.create({
   yAxisLeft: {
     width: 30,
     justifyContent: 'space-between',
-    paddingBottom: 20,
   },
   yAxisRight: {
     width: 30,
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingBottom: 20,
   },
   axisLabel: {
     fontSize: 10,
@@ -268,7 +266,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    paddingBottom: 20,
   },
   barColumn: {
     flex: 1,
@@ -279,35 +276,26 @@ const styles = StyleSheet.create({
     width: '60%',
     borderRadius: radius.sm,
     minHeight: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  runCountBadge: {
+  barInsideText: {
+    fontSize: 9,
+    fontWeight: typography.weights.semibold,
+    color: '#fff',
+  },
+  kmBadge: {
     position: 'absolute',
     zIndex: 10,
   },
-  runCountText: {
+  kmBadgeText: {
     fontSize: 11,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  linePoint: {
-    position: 'absolute',
-    alignItems: 'center',
-    zIndex: 5,
-  },
-  lineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.secondary,
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
-  lineSegment: {},
   xLabel: {
     fontSize: 10,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
-    position: 'absolute',
-    bottom: 0,
+    marginTop: 4,
   },
 });

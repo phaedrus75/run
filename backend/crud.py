@@ -448,10 +448,10 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
     current_streak, longest_streak = calculate_streaks(db, user_id=user_id)
     
     if is_complete:
-        message = "🎉 Week complete! Streak secured!"
+        message = "You showed up this week."
     else:
         remaining = runs_needed - runs_completed
-        message = f"Need: {remaining} more run{'s' if remaining > 1 else ''}"
+        message = f"{remaining} more run{'s' if remaining > 1 else ''} this week"
     
     return {
         "runs_completed": runs_completed,

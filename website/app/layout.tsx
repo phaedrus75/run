@@ -3,12 +3,12 @@ import './globals.css';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'ZenRun — Log runs. Build streaks. Stay consistent.',
+  title: 'ZenRun — Less tracking. More running.',
   description:
-    'A simple running app focused on consistency over performance. Log your run in 10 seconds, track streaks, earn achievements, and compete with friends.',
+    'A running app built for consistency, not competition. Log your run in 2 seconds, keep your streak alive, and get back to your life.',
   openGraph: {
-    title: 'ZenRun — Log runs. Build streaks. Stay consistent.',
-    description: 'A simple running app focused on consistency over performance.',
+    title: 'ZenRun — Less tracking. More running.',
+    description: 'A running app built for consistency, not competition.',
     url: 'https://zenrun.co',
     siteName: 'ZenRun',
     type: 'website',
@@ -61,8 +61,8 @@ function Footer() {
               <span className="text-xl font-bold text-white">ZenRun</span>
             </div>
             <p className="text-sm leading-relaxed max-w-md">
-              A simple running app focused on consistency over performance.
-              Log your run in 10 seconds, build streaks, and stay motivated.
+              Less tracking. More running. A running app built for consistency,
+              not competition.
             </p>
           </div>
           <div>

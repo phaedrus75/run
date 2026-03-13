@@ -262,7 +262,7 @@ export function StatsScreen() {
             avgPaceSeconds: d.avgPaceSeconds,
             numRuns: d.numRuns,
           }))}
-          title="📈 Pace Trend"
+          title="Pace Over Time"
         />
         
         {/* Streak Progress */}
@@ -412,7 +412,7 @@ export function StatsScreen() {
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{allStats.totalKm.toFixed(1)}</Text>
+            <Text style={styles.summaryValue}>{Math.round(allStats.totalKm)}</Text>
             <Text style={styles.summaryLabel}>Total KM</Text>
           </View>
           <View style={styles.summaryDivider} />
@@ -496,7 +496,7 @@ export function StatsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>📊 Loading stats...</Text>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -514,8 +514,8 @@ export function StatsScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Statistics</Text>
-          <Text style={styles.subtitle}>Data from 2026 onwards</Text>
+          <Text style={styles.title}>Your Journey</Text>
+          <Text style={styles.subtitle}>Since 2026</Text>
         </View>
 
         {/* Tabs */}

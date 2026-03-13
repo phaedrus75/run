@@ -36,6 +36,9 @@ export const colors = {
   textLight: '#B2BEC3',
   textOnPrimary: '#FFFFFF',
   
+  // 🔲 Border
+  border: '#E8E8E8',
+  
   // 🎨 Status colors
   success: '#00B894',
   warning: '#FDCB6E',

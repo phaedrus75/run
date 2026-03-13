@@ -4,20 +4,16 @@ export default function Home() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-warm-bg via-white to-warm-surface" />
-        <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-20 md:pt-36 md:pb-32">
+        <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-16 md:pt-36 md:pb-24">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 bg-coral/10 text-coral text-sm font-semibold px-4 py-1.5 rounded-full mb-6">
-              <span>🏃</span> Now on iOS
-            </div>
             <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
-              Log runs.<br />
-              Build streaks.<br />
-              <span className="text-coral">Stay consistent.</span>
+              Less tracking.<br />
+              <span className="text-coral">More running.</span>
             </h1>
             <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
-              ZenRun is a simple running app that helps you build a lasting
-              running habit. No GPS tracking, no overload — just log your run
-              in 10 seconds and get back to your day.
+              Running apps turned running into a spreadsheet. ZenRun is the
+              opposite — log your run in 2 seconds, keep your streak alive, and
+              get back to your life.
             </p>
             <div id="download" className="flex flex-wrap gap-4">
               <a
@@ -49,16 +45,138 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How It Works */}
+      {/* The Problem */}
+      <section className="bg-white py-20 md:py-28">
+        <div className="max-w-3xl mx-auto px-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
+            Running has been hijacked by metrics.
+          </h2>
+          <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
+            <p>
+              Open any popular running app and you&apos;re hit with pace splits, cadence,
+              heart rate zones, VO2 max estimates, power output, vertical oscillation.
+              Then comes the social layer — leaderboards, segment records, and the
+              unspoken pressure to perform for an audience.
+            </p>
+            <p>
+              Runners admit to sprinting the last metres of a run just to improve their
+              Strava average. Others add miles in the rain so their upload reads
+              &ldquo;20 miles&rdquo; for public validation. Easy runs — the foundation
+              of aerobic fitness — are routinely run too fast because posting a slow
+              pace feels embarrassing.
+            </p>
+            <p className="text-gray-900 font-semibold">
+              What started as tools to help runners have become tools that own them.
+              The joy has been optimised out.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Philosophy */}
+      <section className="py-20 md:py-28">
+        <div className="max-w-3xl mx-auto px-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+            A different philosophy
+          </h2>
+          <p className="text-lg text-gray-500 mb-14">
+            ZenRun is built on ideas from runners and thinkers who understood
+            something the fitness industry forgot.
+          </p>
+
+          <div className="space-y-12">
+            <div className="border-l-2 border-coral pl-6">
+              <blockquote className="text-lg text-gray-700 italic leading-relaxed mb-3">
+                &ldquo;Sometimes, we complicate things with gadgets and gear, when
+                what we really need is to trust our bodies and keep things simple.&rdquo;
+              </blockquote>
+              <p className="text-sm text-gray-500 font-medium">
+                Christopher McDougall, <em>Born to Run</em>
+              </p>
+              <p className="text-sm text-gray-400 mt-2">
+                The Tarahumara run hundreds of miles in thin sandals, smiling.
+                No GPS. No heart rate monitors. They run because running is
+                woven into their culture — a form of community and celebration.
+              </p>
+            </div>
+
+            <div className="border-l-2 border-teal pl-6">
+              <blockquote className="text-lg text-gray-700 italic leading-relaxed mb-3">
+                &ldquo;The only opponent you have to beat is yourself, the way
+                you used to be.&rdquo;
+              </blockquote>
+              <p className="text-sm text-gray-500 font-medium">
+                Haruki Murakami, <em>What I Talk About When I Talk About Running</em>
+              </p>
+              <p className="text-sm text-gray-400 mt-2">
+                Murakami has run marathons for four decades. He doesn&apos;t run
+                to live longer. He runs to live fully. What matters is whether
+                you improved over yesterday — not where you rank on a leaderboard.
+              </p>
+            </div>
+
+            <div className="border-l-2 border-gray-300 pl-6">
+              <blockquote className="text-lg text-gray-700 italic leading-relaxed mb-3">
+                &ldquo;It is only necessary that he runs and runs and sometimes
+                suffers. Then one day he will wake up and discover that somewhere
+                along the way he has begun to see order and law and love and Truth.&rdquo;
+              </blockquote>
+              <p className="text-sm text-gray-500 font-medium">
+                George Sheehan, <em>Running &amp; Being</em>
+              </p>
+              <p className="text-sm text-gray-400 mt-2">
+                Running transforms the runner. Not through data, but through
+                the accumulated experience of showing up, day after day.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* What the science says */}
+      <section className="bg-warm-surface py-20 md:py-28">
+        <div className="max-w-3xl mx-auto px-6 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
+            Consistency is the only metric that matters.
+          </h2>
+          <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto mb-12">
+            The single most important factor in running progress is not pace,
+            cadence, or VO2 max. Research shows that runners who show up regularly —
+            even with imperfect sessions — build lasting fitness. Perfectionism,
+            the mindset that data-heavy apps reinforce, actually hinders progress.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+            <div className="bg-white rounded-2xl p-6">
+              <div className="text-3xl font-extrabold text-coral mb-2">7 days</div>
+              <p className="text-sm text-gray-500">
+                How fast aerobic fitness starts declining without regular runs
+              </p>
+            </div>
+            <div className="bg-white rounded-2xl p-6">
+              <div className="text-3xl font-extrabold text-coral mb-2">66 days</div>
+              <p className="text-sm text-gray-500">
+                Average time for consistent training to become an automatic habit
+              </p>
+            </div>
+            <div className="bg-white rounded-2xl p-6">
+              <div className="text-3xl font-extrabold text-coral mb-2">2x/week</div>
+              <p className="text-sm text-gray-500">
+                The minimum frequency that maintains your aerobic base and streak
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How ZenRun works */}
       <section className="bg-white py-20 md:py-28">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Running should be simple
+              How ZenRun works
             </h2>
             <p className="text-lg text-gray-500 max-w-xl mx-auto">
-              No GPS. No heart rate. No data overload. Just you, your run, and a
-              10-second log when you&apos;re done.
+              Everything you need, nothing you don&apos;t.
             </p>
           </div>
 
@@ -66,18 +184,47 @@ export default function Home() {
             {[
               {
                 icon: '⏱️',
-                title: '10-Second Logging',
-                desc: 'Pick your distance, enter your time, done. The fastest run logger you\'ll ever use.',
+                title: 'Log in 2 seconds',
+                desc: 'Pick your distance, enter your time, done. No GPS needed. Run however you want, log it when you\'re back.',
               },
               {
                 icon: '🔥',
-                title: 'Weekly Streaks',
-                desc: 'Run at least twice a week to keep your streak alive. Simple rules, powerful motivation.',
+                title: 'Streaks reward showing up',
+                desc: 'Run at least twice a week to keep your streak alive. Not pace. Not distance. Just presence.',
               },
               {
                 icon: '🏆',
-                title: '50 Achievements',
-                desc: 'Earn badges for milestones, distances, consistency, and more. Always something to chase.',
+                title: '50 badges for your journey',
+                desc: 'Earn achievements for milestones in your running life — first 5K, 100th run, a year of consistency. Your journey, celebrated.',
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="bg-warm-bg rounded-2xl p-8 text-center hover:shadow-lg transition-shadow"
+              >
+                <div className="text-5xl mb-5">{item.icon}</div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+            {[
+              {
+                icon: '👥',
+                title: 'Circles, not leaderboards',
+                desc: 'Share your running journey with up to 10 close friends. Accountability without the pressure of public competition.',
+              },
+              {
+                icon: '🎯',
+                title: 'Goals that keep you honest',
+                desc: 'Set yearly and monthly km targets. A simple progress bar shows where you are and where you should be.',
+              },
+              {
+                icon: '📊',
+                title: 'Just enough data',
+                desc: 'Distance. Time. Streak. Goals. Personal records. That\'s the full list. No cadence, no heart rate zones, no VO2 max.',
               },
             ].map((item) => (
               <div
@@ -93,66 +240,32 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Grid */}
+      {/* ZenRunner */}
       <section className="py-20 md:py-28">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Everything you need, nothing you don&apos;t
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="max-w-3xl mx-auto px-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-10">
+            You are a ZenRunner if you...
+          </h2>
+          <ul className="space-y-5">
             {[
-              {
-                icon: '📊',
-                title: 'Personal Records',
-                desc: 'Track your best times across 3K, 5K, 10K, 15K, 18K, and 21K distances.',
-                color: 'bg-purple-50 text-purple-600',
-              },
-              {
-                icon: '👥',
-                title: 'Circles',
-                desc: 'Create groups with friends. Share invite codes and compete on monthly leaderboards.',
-                color: 'bg-teal-50 text-teal-600',
-              },
-              {
-                icon: '📅',
-                title: 'Month in Review',
-                desc: 'Get a comprehensive summary of your running month with breakdowns by distance.',
-                color: 'bg-amber-50 text-amber-600',
-              },
-              {
-                icon: '🎯',
-                title: 'Goals & Progress',
-                desc: 'Set yearly and monthly km goals. Track your progress with clear visual indicators.',
-                color: 'bg-coral/10 text-coral',
-              },
-              {
-                icon: '👟',
-                title: 'Step Tracking',
-                desc: 'Log high step days and track 15K+, 20K+, and 25K+ milestones.',
-                color: 'bg-green-50 text-green-600',
-              },
-              {
-                icon: '⚖️',
-                title: 'Weight Tracking',
-                desc: 'Optional weight logging with progress charts toward your goal.',
-                color: 'bg-blue-50 text-blue-600',
-              },
+              'Run 2–5 times a week and want to keep doing that for years',
+              'Value the mental clarity of running as much as the physical fitness',
+              'Have felt the anxiety of tracking apps and want something calmer',
+              'Care about building a sustainable habit, not chasing a PR every week',
+              'Want to share your journey with close friends, not perform for followers',
+              'Believe that the best run is the one you actually did',
             ].map((item) => (
-              <div
-                key={item.title}
-                className="bg-white rounded-2xl p-8 border border-gray-100 hover:border-gray-200 hover:shadow-md transition-all"
-              >
-                <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl ${item.color} text-2xl mb-4`}>
-                  {item.icon}
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
-              </div>
+              <li key={item} className="flex items-start gap-4">
+                <span className="mt-1.5 w-2 h-2 rounded-full bg-coral shrink-0" />
+                <span className="text-lg text-gray-700">{item}</span>
+              </li>
             ))}
-          </div>
+          </ul>
+          <p className="mt-10 text-gray-500 leading-relaxed">
+            We&apos;re not for the runner optimising their 5K time by 3 seconds.
+            Those runners are well-served by existing apps.
+            We&apos;re for the runner who just wants to run.
+          </p>
         </div>
       </section>
 
@@ -160,11 +273,10 @@ export default function Home() {
       <section className="bg-gray-900 py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Start your running streak today
+            Start running. Stop tracking.
           </h2>
           <p className="text-lg text-gray-400 mb-10 max-w-lg mx-auto">
             Join runners who focus on showing up, not showing off.
-            Download ZenRun and log your first run in under a minute.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a

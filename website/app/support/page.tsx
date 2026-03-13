@@ -38,11 +38,11 @@ export default function SupportPage() {
             {[
               {
                 q: 'How do I log a run?',
-                a: 'Go to the Run tab, select your distance, choose outdoor or treadmill, enter your time in minutes and seconds, and tap Save.',
+                a: 'Go to the Run tab, pick your distance, enter your time, tap Save. Takes about 2 seconds.',
               },
               {
                 q: 'How do streaks work?',
-                a: 'Your streak counts consecutive weeks where you logged at least two runs. Miss a week and it resets. Your longest streak is always saved.',
+                a: 'Run at least twice in a week and your streak continues. Miss a week and it resets. Your longest streak is always saved.',
               },
               {
                 q: 'Can I change my handle?',
@@ -58,11 +58,11 @@ export default function SupportPage() {
               },
               {
                 q: 'Does ZenRun use GPS?',
-                a: 'No. ZenRun does not track your location. You manually log your distance and time after your run.',
+                a: 'No. ZenRun deliberately does not track your location. Run without your phone. Log it when you\'re back.',
               },
               {
                 q: 'Is ZenRun free?',
-                a: 'Yes. ZenRun is free to download and use.',
+                a: 'Yes. ZenRun is completely free.',
               },
             ].map((faq) => (
               <div key={faq.q}>

@@ -45,7 +45,7 @@ export function StreakProgress({ progress }: StreakProgressProps) {
           <Text style={styles.requirementCount}>{runs_completed}/{runs_needed}</Text>
         </View>
         {runs_completed === 1 && !is_complete && (
-          <Text style={styles.nudge}>1 more to keep the streak!</Text>
+          <Text style={styles.nudge}>One more and you've shown up this week</Text>
         )}
       </View>
 

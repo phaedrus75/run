@@ -93,7 +93,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
       }
       
       // Determine alert title
-      let alertTitle = '🎉 Run Logged!';
+      let alertTitle = 'Run logged';
       if (celebrations.length > 0) {
         alertTitle = celebrations[0].title;
       }
@@ -103,7 +103,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
         `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${celebrationText}`,
         [
           {
-            text: hasCelebration ? 'Celebrate! 🎉' : 'Done',
+            text: 'Done',
             onPress: () => navigation.navigate('Home', { 
               celebrations: celebrations,
             }),
@@ -158,7 +158,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
       }
       
       // Determine alert title
-      let alertTitle = '🎉 Run Logged!';
+      let alertTitle = 'Run logged';
       if (celebrations.length > 0) {
         alertTitle = celebrations[0].title;
       }
@@ -168,7 +168,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
         `${selectedType.toUpperCase()} ${category === 'treadmill' ? '(Treadmill)' : '(Outdoor)'}\n\nTime: ${run.formatted_duration}\nPace: ${paceStr} per km${celebrationText}`,
         [
           {
-            text: hasCelebration ? 'Celebrate! 🎉' : 'Done',
+            text: 'Done',
             onPress: () => navigation.navigate('Home', { 
               celebrations: celebrations,
             }),
@@ -225,7 +225,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
           <View style={styles.header}>
             <Text style={styles.title}>📝 Log a Run</Text>
             <Text style={styles.subtitle}>
-              Record your completed run
+              How did it go?
             </Text>
           </View>
           

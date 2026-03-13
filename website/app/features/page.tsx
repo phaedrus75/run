@@ -2,107 +2,112 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Features — ZenRun',
-  description: 'Everything ZenRun offers: fast run logging, streaks, achievements, circles, personal records, and more.',
+  description: 'Everything ZenRun offers — and everything it deliberately leaves out.',
 };
 
 const FEATURES = [
   {
     category: 'Run Logging',
+    philosophy: 'Run first. Log later. Get on with your day.',
     items: [
       {
         icon: '⏱️',
-        title: '10-Second Logging',
-        desc: 'Select your distance (3K to 21K), enter your time, and save. The entire process takes seconds, not minutes.',
+        title: '2-Second Logging',
+        desc: 'Pick your distance, enter your time, done. No GPS needed. No phone on your run. Log it when you\'re back.',
       },
       {
         icon: '🏃',
         title: '6 Distances',
-        desc: 'Track runs across 3K, 5K, 10K, 15K, 18K, and 21K (half marathon). Outdoor and treadmill categories.',
+        desc: '3K, 5K, 10K, 15K, 18K, and 21K. Outdoor or treadmill. That\'s the full list — because that\'s all you need.',
       },
       {
         icon: '📝',
-        title: 'Add Past Runs',
-        desc: 'Forgot to log? Add runs from previous days with the backdate feature.',
+        title: 'Backdate Runs',
+        desc: 'Forgot to log? Add runs from previous days. Because the run matters, not when you recorded it.',
       },
     ],
   },
   {
-    category: 'Motivation & Streaks',
+    category: 'Consistency & Streaks',
+    philosophy: 'We reward showing up, not showing off.',
     items: [
       {
         icon: '🔥',
         title: 'Weekly Streaks',
-        desc: 'Keep your streak alive by running at least once per week. See your current and longest streak at a glance.',
+        desc: 'Run at least twice a week to keep your streak alive. Not pace. Not distance. Just presence. That\'s it.',
       },
       {
         icon: '🎯',
         title: 'Monthly & Yearly Goals',
-        desc: 'Set your own km targets per month and per year. Watch your progress bars fill up throughout the season.',
+        desc: 'Set your own km targets. A simple progress bar shows where you are and where you should be. No judgement.',
       },
       {
         icon: '🎉',
-        title: 'Celebrations',
-        desc: 'Confetti and special messages when you maintain streaks, hit monthly goals, or log high step days.',
+        title: 'Quiet Celebrations',
+        desc: 'A small moment of confetti when you maintain a streak or hit a goal. No push notifications. No pressure.',
       },
     ],
   },
   {
-    category: 'Achievements & Records',
+    category: 'Achievements',
+    philosophy: 'Your milestones. Not compared to anyone else\'s.',
     items: [
       {
         icon: '🏆',
-        title: '50 Achievements',
-        desc: '8 categories of badges: milestones, total distance, first completions, specialist, streaks, goals, run categories, and steps.',
+        title: '50 Badges',
+        desc: 'Across 8 categories: milestones, distance, first completions, streaks, goals, and more. Every badge celebrates your journey.',
       },
       {
         icon: '⚡',
         title: 'Personal Records',
-        desc: 'Automatic PR tracking for every distance. See your fastest time, pace, and when you set it.',
+        desc: 'Your fastest time at each distance, tracked automatically. Compete with yourself — the way you used to be.',
       },
       {
         icon: '📅',
         title: 'Month in Review',
-        desc: 'Detailed monthly summaries with run breakdowns by distance and high step day analysis.',
+        desc: 'A calm summary of your month. Run breakdown by distance, step highlights, and a moment to reflect.',
       },
     ],
   },
   {
-    category: 'Social',
+    category: 'Community',
+    philosophy: 'Accountability, not a leaderboard.',
     items: [
       {
         icon: '👥',
         title: 'Circles',
-        desc: 'Create private groups of up to 10 runners. Share an invite code and compete on monthly leaderboards.',
+        desc: 'Private groups of up to 10 close friends. See who\'s been running. No strangers. No followers. No public profiles.',
       },
       {
         icon: '🏷️',
-        title: 'Unique Handles',
-        desc: 'Claim your @handle and represent yourself in circle leaderboards.',
+        title: 'Your Handle',
+        desc: 'Claim a unique handle. It shows up in your circles. That\'s the extent of your public identity.',
       },
       {
-        icon: '🥇',
-        title: 'Leaderboards',
-        desc: 'See who ran the most km this month in your circle. Rankings update in real-time.',
+        icon: '💬',
+        title: 'Shared Motivation',
+        desc: 'Knowing your friends are running too is the best motivation. No likes, no comments — just quiet mutual accountability.',
       },
     ],
   },
   {
-    category: 'Health & Data',
+    category: 'Just Enough Data',
+    philosophy: 'Distance. Time. Streak. Goals. That\'s the full list.',
     items: [
       {
         icon: '👟',
         title: 'Step Tracking',
-        desc: 'Log high step days and track 15K+, 20K+, and 25K+ milestones over time.',
+        desc: 'Log high step days. See your 15K+, 20K+, and 25K+ milestones. Simple and optional.',
       },
       {
         icon: '⚖️',
         title: 'Weight Tracking',
-        desc: 'Optional weight logging with visual progress charts toward your goal weight.',
+        desc: 'Optional weight logging with a progress chart. There when you want it, invisible when you don\'t.',
       },
       {
         icon: '📊',
-        title: 'Stats Dashboard',
-        desc: 'All-time, monthly, and weekly stats. Distance breakdowns, pace trends, and run history.',
+        title: 'Stats That Matter',
+        desc: 'Weekly, monthly, and all-time views. Distance, runs, pace trend. No cadence, no heart rate zones, no VO2 max.',
       },
     ],
   },
@@ -112,18 +117,25 @@ export default function FeaturesPage() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
       <div className="text-center mb-16">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">Features</h1>
+        <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
+          Everything you need.
+          <br />
+          <span className="text-coral">Nothing you don&apos;t.</span>
+        </h1>
         <p className="text-lg text-gray-500 max-w-xl mx-auto">
-          Everything you need to build a consistent running habit.
-          Nothing you don&apos;t.
+          We spent as much time deciding what to leave out as what to put in.
+          Here&apos;s what made the cut.
         </p>
       </div>
 
       {FEATURES.map((section) => (
         <div key={section.category} className="mb-16 last:mb-0">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8 pb-3 border-b border-gray-200">
-            {section.category}
-          </h2>
+          <div className="mb-8 pb-3 border-b border-gray-200">
+            <h2 className="text-2xl font-bold text-gray-900">
+              {section.category}
+            </h2>
+            <p className="text-sm text-gray-400 mt-1">{section.philosophy}</p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {section.items.map((item) => (
               <div
@@ -140,8 +152,12 @@ export default function FeaturesPage() {
       ))}
 
       <div className="text-center mt-20 bg-coral/5 rounded-3xl p-12">
-        <h2 className="text-2xl font-bold text-gray-900 mb-3">Ready to start running?</h2>
-        <p className="text-gray-500 mb-8">Download ZenRun and log your first run today.</p>
+        <h2 className="text-2xl font-bold text-gray-900 mb-3">
+          Ready to just run?
+        </h2>
+        <p className="text-gray-500 mb-8">
+          No credit card. No setup. Download and log your first run in under a minute.
+        </p>
         <a
           href="/#download"
           className="inline-block bg-coral hover:bg-coral-dark text-white font-semibold px-8 py-3.5 rounded-full transition-colors"

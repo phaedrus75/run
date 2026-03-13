@@ -42,14 +42,14 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
     id: '1',
     title: 'Run first.\nTrack second.',
     subtitle: 'The ZenRun philosophy',
-    body: "Most apps want you to carry your phone, watch your pace, and analyze every step. ZenRun is different. Run however you want — then log it in 10 seconds when you're done.",
+    body: "Most apps want you to carry your phone, watch your pace, and analyze every step. ZenRun is different. Run however you want — then log it in 2 seconds when you're back.",
     accent: colors.primary,
   },
   {
     id: '2',
     title: 'Consistency\nover speed.',
     subtitle: 'What actually matters',
-    body: "We don't care about your splits. We care about your streak. Show up, log the run, build the habit. That's how real progress happens.",
+    body: "We don't care about your splits. We care that you showed up. Run twice a week, keep your streak alive, build the habit. That's how real progress happens.",
     accent: colors.secondary,
   },
   {

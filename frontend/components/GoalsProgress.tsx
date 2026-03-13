@@ -37,7 +37,7 @@ export function GoalsProgress({ goals }: GoalsProgressProps) {
         <View style={styles.goalHeader}>
           <Text style={styles.goalTitle}>🎯 2026 Goal</Text>
           <Text style={[styles.statusBadge, yearly.on_track ? styles.onTrack : styles.behindTrack]}>
-            {yearly.on_track ? '✓ On Track' : 'Push harder!'}
+            {yearly.on_track ? '✓ On Track' : 'Keep showing up'}
           </Text>
         </View>
 

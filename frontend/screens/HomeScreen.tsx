@@ -150,7 +150,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         km_this_month: 0,
       });
       setMotivation({
-        message: "Every run counts. Log your first one.",
+        message: "Your running journey starts here.",
         emoji: "🏃",
       });
     } finally {
@@ -339,7 +339,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.emptyEmoji}>🏃</Text>
               <Text style={styles.emptyText}>Your first run awaits</Text>
               <Text style={styles.emptySubtext}>
-                Go run. Come back. Log it in 10 seconds.
+                Go run. Come back. Log it when you're ready.
               </Text>
             </View>
           )}

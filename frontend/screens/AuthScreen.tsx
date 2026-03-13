@@ -145,7 +145,7 @@ export default function AuthScreen() {
           <Animated.View style={{ opacity: taglineFade }}>
             <Text style={styles.tagline}>Less tracking.{'\n'}More running.</Text>
             <Text style={styles.philosophy}>
-              No GPS. No heart rate zones.{'\n'}Just log your run and get back to life.
+              No GPS. No heart rate zones.{'\n'}Just run. Log it. Move on.
             </Text>
           </Animated.View>
         </View>
@@ -166,7 +166,7 @@ export default function AuthScreen() {
           </TouchableOpacity>
 
           <View style={styles.landingPillars}>
-            <Text style={styles.pillarItem}>10-second logging</Text>
+            <Text style={styles.pillarItem}>2-second logging</Text>
             <Text style={styles.pillarDot}>  ·  </Text>
             <Text style={styles.pillarItem}>Streaks</Text>
             <Text style={styles.pillarDot}>  ·  </Text>

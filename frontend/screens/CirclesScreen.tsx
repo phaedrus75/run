@@ -282,7 +282,7 @@ export function CirclesScreen() {
             <Text style={styles.emptyEmoji}>👥</Text>
             <Text style={styles.emptyTitle}>No Circles Yet</Text>
             <Text style={styles.emptyText}>
-              Create a circle to compete with friends, or join one with an invite code.
+              Run with friends. Create a circle or join one with an invite code.
             </Text>
             <View style={styles.emptyButtons}>
               <TouchableOpacity
@@ -340,7 +340,7 @@ export function CirclesScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalEmoji}>👥</Text>
             <Text style={styles.modalSubtitle}>
-              Create a circle to compete with friends. Share the invite code to let them join.
+              Create a circle and share the invite code with friends to run together.
             </Text>
 
             <TextInput
@@ -446,7 +446,7 @@ export function CirclesScreen() {
               </View>
 
               {/* Leaderboard */}
-              <Text style={styles.leaderboardTitle}>🏆 This Month's Leaderboard</Text>
+              <Text style={styles.leaderboardTitle}>This Month</Text>
               
               {selectedCircle.members.map((member) => (
                 <View
