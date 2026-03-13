@@ -1,13 +1,3 @@
-/**
- * 📊 STATS CHART COMPONENT
- * =========================
- * 
- * A custom chart showing:
- * - Total KM as bars (left axis)
- * - Average pace as a line (right axis)
- * - Number of runs as labels
- */
-
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing, typography, radius } from '../theme/colors';
@@ -16,8 +6,8 @@ interface ChartDataPoint {
   label: string;
   shortLabel: string;
   totalKm: number;
-  avgPace: string;  // "5:30" format
-  avgPaceSeconds: number;  // For scaling
+  avgPace: string;
+  avgPaceSeconds: number;
   numRuns: number;
 }
 
@@ -27,35 +17,63 @@ interface StatsChartProps {
 }
 
 export function StatsChart({ data, title }: StatsChartProps) {
-  // Find max values for scaling
   const maxKm = Math.max(...data.map(d => d.totalKm), 1);
   const maxPaceSeconds = Math.max(...data.map(d => d.avgPaceSeconds), 1);
-  const minPaceSeconds = Math.min(...data.filter(d => d.avgPaceSeconds > 0).map(d => d.avgPaceSeconds), maxPaceSeconds);
-  
+  const minPaceSeconds = Math.min(
+    ...data.filter(d => d.avgPaceSeconds > 0).map(d => d.avgPaceSeconds),
+    maxPaceSeconds
+  );
+
   const chartHeight = 180;
-  const barMaxHeight = chartHeight - 40; // Leave room for labels
-  
-  // Calculate bar height based on km
+  const barMaxHeight = chartHeight - 40;
+
+  const totalKm = data.reduce((sum, d) => sum + d.totalKm, 0);
+  const totalRuns = data.reduce((sum, d) => sum + d.numRuns, 0);
+  const pacePoints = data.filter(d => d.avgPaceSeconds > 0);
+  const avgPaceSeconds = pacePoints.length > 0
+    ? pacePoints.reduce((sum, d) => sum + d.avgPaceSeconds, 0) / pacePoints.length
+    : 0;
+  const avgPaceMins = Math.floor(avgPaceSeconds / 60);
+  const avgPaceSecs = Math.round(avgPaceSeconds % 60);
+  const avgPaceStr = avgPaceSeconds > 0 ? `${avgPaceMins}:${avgPaceSecs.toString().padStart(2, '0')}` : '--';
+
   const getBarHeight = (km: number) => {
     if (maxKm === 0) return 0;
     return (km / maxKm) * barMaxHeight;
   };
-  
-  // Calculate line Y position based on pace (inverted - faster pace = higher)
+
   const getLineY = (paceSeconds: number) => {
     if (paceSeconds === 0) return chartHeight;
-    // Normalize between min and max pace
     const range = maxPaceSeconds - minPaceSeconds;
     if (range === 0) return chartHeight / 2;
     const normalized = (paceSeconds - minPaceSeconds) / range;
-    // Invert so faster (lower seconds) is higher on chart
     return chartHeight - 20 - ((1 - normalized) * (barMaxHeight - 20));
+  };
+
+  const getLineBottom = (paceSeconds: number) => {
+    return chartHeight - getLineY(paceSeconds) - 4;
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
-      
+
+      {/* Summary header */}
+      <View style={styles.summaryHeader}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryValue}>
+            {totalKm.toFixed(1)} km{' '}
+            <Text style={styles.summarySecondary}>({totalRuns} runs)</Text>
+          </Text>
+        </View>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryValue}>
+            {avgPaceStr}{' '}
+            <Text style={styles.summarySecondary}>avg pace</Text>
+          </Text>
+        </View>
+      </View>
+
       {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
@@ -64,72 +82,80 @@ export function StatsChart({ data, title }: StatsChartProps) {
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendLine, { backgroundColor: colors.secondary }]} />
-          <Text style={styles.legendText}>Avg Pace (min/km)</Text>
+          <Text style={styles.legendText}>Avg Pace</Text>
         </View>
       </View>
-      
+
       {/* Chart */}
       <View style={styles.chartContainer}>
-        {/* Y-Axis Labels - KM */}
         <View style={styles.yAxisLeft}>
           <Text style={styles.axisLabel}>{maxKm.toFixed(0)}</Text>
           <Text style={styles.axisLabel}>{(maxKm / 2).toFixed(0)}</Text>
           <Text style={styles.axisLabel}>0</Text>
         </View>
-        
-        {/* Chart Area */}
+
         <View style={[styles.chart, { height: chartHeight }]}>
-          {/* Bars and Line Points */}
           <View style={styles.barsContainer}>
             {data.map((point, index) => {
               const barHeight = getBarHeight(point.totalKm);
-              const lineY = getLineY(point.avgPaceSeconds);
-              
+              const prevPoint = index > 0 ? data[index - 1] : null;
+              const hasPace = point.avgPaceSeconds > 0;
+              const prevHasPace = prevPoint && prevPoint.avgPaceSeconds > 0;
+
               return (
                 <View key={index} style={styles.barColumn}>
-                  {/* Number of runs label */}
+                  {/* Run count on bar */}
                   <View style={[styles.runCountBadge, { bottom: barHeight + 5 }]}>
                     <Text style={styles.runCountText}>
                       {point.numRuns > 0 ? point.numRuns : ''}
                     </Text>
                   </View>
-                  
+
                   {/* Bar */}
-                  <View 
+                  <View
                     style={[
-                      styles.bar, 
-                      { 
+                      styles.bar,
+                      {
                         height: barHeight,
                         backgroundColor: point.totalKm > 0 ? colors.primary : colors.textLight,
                         opacity: point.totalKm > 0 ? 1 : 0.3,
-                      }
-                    ]} 
+                      },
+                    ]}
                   />
-                  
-                  {/* Line point */}
-                  {point.avgPaceSeconds > 0 && (
-                    <View 
+
+                  {/* Pace line dot + connecting line */}
+                  {hasPace && (
+                    <View
                       style={[
                         styles.linePoint,
-                        { bottom: chartHeight - lineY - 6 }
+                        { bottom: getLineBottom(point.avgPaceSeconds) },
                       ]}
                     >
                       <View style={styles.lineDot} />
-                      <Text style={styles.paceLabel}>{point.avgPace}</Text>
                     </View>
                   )}
-                  
-                  {/* X-Axis Label */}
+
+                  {/* Line segment connecting to previous point */}
+                  {hasPace && prevHasPace && (
+                    <View
+                      style={[
+                        styles.lineSegment,
+                        getLineSegmentStyle(
+                          getLineBottom(prevPoint!.avgPaceSeconds),
+                          getLineBottom(point.avgPaceSeconds),
+                          chartHeight
+                        ),
+                      ]}
+                    />
+                  )}
+
                   <Text style={styles.xLabel}>{point.shortLabel}</Text>
                 </View>
               );
             })}
           </View>
-          
-          {/* Line points are shown above, no line segments needed */}
         </View>
-        
-        {/* Y-Axis Labels - Pace */}
+
         <View style={styles.yAxisRight}>
           <Text style={styles.axisLabel}>Fast</Text>
           <Text style={styles.axisLabel}></Text>
@@ -138,6 +164,22 @@ export function StatsChart({ data, title }: StatsChartProps) {
       </View>
     </View>
   );
+}
+
+function getLineSegmentStyle(prevBottom: number, currBottom: number, chartHeight: number) {
+  const midBottom = (prevBottom + currBottom) / 2;
+  const height = Math.abs(prevBottom - currBottom) || 2;
+  return {
+    position: 'absolute' as const,
+    left: '-50%',
+    width: '100%',
+    bottom: midBottom + 4 - height / 2,
+    height: Math.max(height, 2),
+    backgroundColor: colors.secondary,
+    opacity: 0.6,
+    borderRadius: 1,
+    transform: [{ rotate: prevBottom > currBottom ? `${Math.atan2(prevBottom - currBottom, 40) * (180 / Math.PI)}deg` : `${-Math.atan2(currBottom - prevBottom, 40) * (180 / Math.PI)}deg` }],
+  };
 }
 
 const styles = StyleSheet.create({
@@ -151,28 +193,48 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.background,
+  },
+  summaryItem: {},
+  summaryValue: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  summarySecondary: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.regular,
+    color: colors.textSecondary,
   },
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginBottom: spacing.md,
-    gap: spacing.lg,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    marginHorizontal: spacing.sm,
   },
   legendBox: {
     width: 12,
     height: 12,
     borderRadius: 2,
+    marginRight: spacing.xs,
   },
   legendLine: {
     width: 16,
     height: 3,
     borderRadius: 2,
+    marginRight: spacing.xs,
   },
   legendText: {
     fontSize: typography.sizes.xs,
@@ -240,23 +302,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.surface,
   },
-  paceLabel: {
-    fontSize: 8,
-    color: colors.secondary,
-    marginTop: 2,
-  },
-  lineContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 20,
-  },
-  lineSegment: {
-    position: 'absolute',
-    backgroundColor: colors.secondary,
-    opacity: 0.5,
-  },
+  lineSegment: {},
   xLabel: {
     fontSize: 10,
     color: colors.textSecondary,

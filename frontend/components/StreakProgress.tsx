@@ -1,38 +1,29 @@
-/**
- * 🔥 STREAK PROGRESS COMPONENT (COMPACT)
- * =======================================
- * 
- * Shows weekly progress toward maintaining the streak.
- * Goal: 1 long run (10k+) + 2 short runs
- * Compact design with checkmarks instead of progress bars.
- */
-
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
-import type { WeeklyStreakProgress } from '../services/api';
 
 interface StreakProgressProps {
-  progress: WeeklyStreakProgress;
+  progress: {
+    runs_completed: number;
+    runs_needed: number;
+    is_complete: boolean;
+    current_streak: number;
+    longest_streak: number;
+    message: string;
+  };
 }
 
 export function StreakProgress({ progress }: StreakProgressProps) {
   const {
-    long_runs_completed,
-    long_runs_needed,
-    short_runs_completed,
-    short_runs_needed,
+    runs_completed,
+    runs_needed,
     is_complete,
     current_streak,
     longest_streak,
   } = progress;
 
-  const longComplete = long_runs_completed >= long_runs_needed;
-  const shortComplete = short_runs_completed >= short_runs_needed;
-
   return (
     <View style={[styles.container, shadows.small, is_complete && styles.containerComplete]}>
-      {/* Left: Streak Count */}
       <View style={styles.streakSection}>
         <Text style={styles.fireEmoji}>🔥</Text>
         <View style={styles.streakInfo}>
@@ -41,32 +32,23 @@ export function StreakProgress({ progress }: StreakProgressProps) {
         </View>
       </View>
 
-      {/* Divider */}
       <View style={styles.divider} />
 
-      {/* Right: Requirements */}
       <View style={styles.requirementsSection}>
         <View style={styles.requirementRow}>
-          <Text style={[styles.checkIcon, longComplete && styles.checkComplete]}>
-            {longComplete ? '✓' : '○'}
+          <Text style={[styles.checkIcon, is_complete && styles.checkComplete]}>
+            {is_complete ? '✓' : '○'}
           </Text>
-          <Text style={[styles.requirementText, longComplete && styles.requirementComplete]}>
-            Long run (10k+)
+          <Text style={[styles.requirementText, is_complete && styles.requirementComplete]}>
+            2 runs this week
           </Text>
-          <Text style={styles.requirementCount}>{long_runs_completed}/{long_runs_needed}</Text>
+          <Text style={styles.requirementCount}>{runs_completed}/{runs_needed}</Text>
         </View>
-        <View style={styles.requirementRow}>
-          <Text style={[styles.checkIcon, shortComplete && styles.checkComplete]}>
-            {shortComplete ? '✓' : '○'}
-          </Text>
-          <Text style={[styles.requirementText, shortComplete && styles.requirementComplete]}>
-            Short runs
-          </Text>
-          <Text style={styles.requirementCount}>{short_runs_completed}/{short_runs_needed}</Text>
-        </View>
+        {runs_completed === 1 && !is_complete && (
+          <Text style={styles.nudge}>1 more to keep the streak!</Text>
+        )}
       </View>
 
-      {/* Best Streak Badge */}
       {longest_streak > current_streak && (
         <View style={styles.bestBadge}>
           <Text style={styles.bestText}>Best: {longest_streak}</Text>
@@ -116,12 +98,11 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 36,
-    backgroundColor: colors.border,
+    backgroundColor: colors.textLight + '40',
     marginHorizontal: spacing.md,
   },
   requirementsSection: {
     flex: 1,
-    gap: 2,
   },
   requirementRow: {
     flexDirection: 'row',
@@ -150,6 +131,13 @@ const styles = StyleSheet.create({
   requirementCount: {
     fontSize: typography.sizes.xs,
     color: colors.textLight,
+    fontWeight: typography.weights.medium,
+  },
+  nudge: {
+    fontSize: 10,
+    color: colors.primary,
+    marginTop: 2,
+    marginLeft: 20,
     fontWeight: typography.weights.medium,
   },
   bestBadge: {

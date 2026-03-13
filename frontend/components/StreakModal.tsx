@@ -1,11 +1,3 @@
-/**
- * 🔥 STREAK MODAL
- * ================
- * 
- * Shows detailed streak information when clicking on the streak badge.
- * Displays current week progress and streak history.
- */
-
 import React from 'react';
 import {
   View,
@@ -28,22 +20,15 @@ export function StreakModal({ visible, onClose, progress }: StreakModalProps) {
   if (!progress) return null;
 
   const {
-    long_runs_completed,
-    long_runs_needed,
-    short_runs_completed,
-    short_runs_needed,
+    runs_completed,
+    runs_needed,
     is_complete,
     current_streak,
     longest_streak,
     message,
   } = progress;
 
-  const longComplete = long_runs_completed >= long_runs_needed;
-  const shortComplete = short_runs_completed >= short_runs_needed;
-
-  // Calculate progress percentages
-  const longProgress = Math.min(100, (long_runs_completed / long_runs_needed) * 100);
-  const shortProgress = Math.min(100, (short_runs_completed / short_runs_needed) * 100);
+  const runProgress = Math.min(100, (runs_completed / runs_needed) * 100);
 
   return (
     <Modal
@@ -54,7 +39,6 @@ export function StreakModal({ visible, onClose, progress }: StreakModalProps) {
     >
       <View style={styles.overlay}>
         <View style={[styles.modal, shadows.large]}>
-          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>🔥 Weekly Streak</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -63,7 +47,6 @@ export function StreakModal({ visible, onClose, progress }: StreakModalProps) {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Current Streak */}
             <View style={[styles.streakCard, is_complete && styles.streakCardComplete]}>
               <Text style={styles.streakEmoji}>🔥</Text>
               <Text style={styles.streakNumber}>{current_streak}</Text>
@@ -78,68 +61,39 @@ export function StreakModal({ visible, onClose, progress }: StreakModalProps) {
               )}
             </View>
 
-            {/* This Week Progress */}
             <Text style={styles.sectionTitle}>This Week's Progress</Text>
-            
-            <View style={styles.progressCard}>
-              {/* Long Run Progress */}
-              <View style={styles.progressItem}>
-                <View style={styles.progressHeader}>
-                  <Text style={[styles.checkIcon, longComplete && styles.checkComplete]}>
-                    {longComplete ? '✓' : '○'}
-                  </Text>
-                  <Text style={styles.progressLabel}>Long Run (10k+)</Text>
-                  <Text style={styles.progressCount}>
-                    {long_runs_completed}/{long_runs_needed}
-                  </Text>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View 
-                    style={[
-                      styles.progressBarFill, 
-                      { width: `${longProgress}%` },
-                      longComplete && styles.progressBarComplete
-                    ]} 
-                  />
-                </View>
-              </View>
 
-              {/* Short Runs Progress */}
+            <View style={styles.progressCard}>
               <View style={styles.progressItem}>
                 <View style={styles.progressHeader}>
-                  <Text style={[styles.checkIcon, shortComplete && styles.checkComplete]}>
-                    {shortComplete ? '✓' : '○'}
+                  <Text style={[styles.checkIcon, is_complete && styles.checkComplete]}>
+                    {is_complete ? '✓' : '○'}
                   </Text>
-                  <Text style={styles.progressLabel}>Short Runs</Text>
+                  <Text style={styles.progressLabel}>Runs</Text>
                   <Text style={styles.progressCount}>
-                    {short_runs_completed}/{short_runs_needed}
+                    {runs_completed}/{runs_needed}
                   </Text>
                 </View>
                 <View style={styles.progressBarBg}>
-                  <View 
+                  <View
                     style={[
-                      styles.progressBarFill, 
-                      { width: `${shortProgress}%` },
-                      shortComplete && styles.progressBarComplete
-                    ]} 
+                      styles.progressBarFill,
+                      { width: `${runProgress}%` },
+                      is_complete && styles.progressBarComplete,
+                    ]}
                   />
                 </View>
               </View>
             </View>
 
-            {/* Status Message */}
             <View style={[styles.messageCard, is_complete && styles.messageCardComplete]}>
               <Text style={styles.messageText}>{message}</Text>
             </View>
 
-            {/* Streak Rules */}
             <Text style={styles.sectionTitle}>How Streaks Work</Text>
             <View style={styles.rulesCard}>
               <Text style={styles.ruleText}>
-                ✅ Complete <Text style={styles.ruleBold}>1 long run (10k+)</Text>
-              </Text>
-              <Text style={styles.ruleText}>
-                ✅ Complete <Text style={styles.ruleBold}>2 short runs (any distance)</Text>
+                ✅ Complete <Text style={styles.ruleBold}>2 runs of any distance</Text> each week
               </Text>
               <Text style={styles.ruleHint}>
                 Week resets every Sunday at midnight
@@ -159,17 +113,17 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    maxHeight: '80%',
+    maxHeight: '75%',
     padding: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   title: {
     fontSize: typography.sizes.xl,
@@ -177,61 +131,65 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   closeButton: {
-    padding: spacing.xs,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   closeText: {
-    fontSize: typography.sizes.xl,
+    fontSize: 16,
     color: colors.textSecondary,
   },
   streakCard: {
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
   },
   streakCardComplete: {
     borderWidth: 2,
     borderColor: colors.success,
-    backgroundColor: colors.success + '10',
+    backgroundColor: colors.success + '08',
   },
   streakEmoji: {
-    fontSize: 32,
-    marginRight: spacing.sm,
+    fontSize: 48,
+    marginBottom: spacing.sm,
   },
   streakNumber: {
-    fontSize: 40,
+    fontSize: 56,
     fontWeight: typography.weights.bold,
     color: colors.primary,
-    lineHeight: 44,
+    lineHeight: 60,
   },
   streakLabel: {
     fontSize: typography.sizes.md,
     color: colors.textSecondary,
-    marginLeft: spacing.xs,
+    marginTop: spacing.xs,
   },
   bestStreak: {
-    fontSize: typography.sizes.xs,
+    fontSize: typography.sizes.sm,
     color: colors.textLight,
-    marginLeft: 'auto',
+    marginTop: spacing.sm,
   },
   bestStreakCurrent: {
-    fontSize: typography.sizes.xs,
-    color: colors.success,
-    fontWeight: typography.weights.semibold,
-    marginLeft: 'auto',
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: colors.accent,
+    marginTop: spacing.sm,
   },
   sectionTitle: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
     color: colors.text,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   progressCard: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.sm,
+    padding: spacing.lg,
     marginBottom: spacing.md,
   },
   progressItem: {
@@ -243,10 +201,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   checkIcon: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.textLight,
-    width: 24,
-    textAlign: 'center',
+    width: 20,
   },
   checkComplete: {
     color: colors.success,
@@ -254,21 +211,21 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     flex: 1,
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     color: colors.text,
-    marginLeft: spacing.xs,
+    fontWeight: typography.weights.medium,
   },
   progressCount: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     color: colors.textSecondary,
-    fontWeight: typography.weights.medium,
+    fontWeight: typography.weights.semibold,
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: colors.border,
+    backgroundColor: colors.background,
     borderRadius: 4,
-    marginLeft: 28,
     overflow: 'hidden',
+    marginLeft: 20,
   },
   progressBarFill: {
     height: '100%',
@@ -279,40 +236,41 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   messageCard: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,
-    padding: spacing.sm,
-    marginBottom: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
     alignItems: 'center',
   },
   messageCardComplete: {
-    backgroundColor: colors.success + '20',
+    backgroundColor: colors.success + '15',
   },
   messageText: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     color: colors.text,
+    fontWeight: typography.weights.medium,
     textAlign: 'center',
   },
   rulesCard: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.sm,
-    marginBottom: spacing.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
   ruleText: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
+    lineHeight: 20,
   },
   ruleBold: {
-    fontWeight: typography.weights.semibold,
+    fontWeight: typography.weights.bold,
     color: colors.text,
   },
   ruleHint: {
     fontSize: typography.sizes.xs,
     color: colors.textLight,
-    marginTop: spacing.sm,
     fontStyle: 'italic',
+    marginTop: spacing.xs,
   },
 });
-

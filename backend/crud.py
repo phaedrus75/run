@@ -227,18 +227,9 @@ def is_valid_streak_week(runs: List[Run]) -> bool:
     """
     🔥 Check if a week qualifies for the streak
     
-    A valid streak week requires:
-    - At least 1 long run (10k or above)
-    - At least 2 more short runs (any distance)
-    - Total: 3+ runs with at least one being 10k+
+    A valid streak week requires at least 2 runs of any distance.
     """
-    if len(runs) < 3:
-        return False
-    
-    long_runs = [r for r in runs if r.distance_km >= 10]
-    short_runs = [r for r in runs if r.distance_km < 10]
-    
-    return len(long_runs) >= 1 and len(short_runs) >= 2
+    return len(runs) >= 2
 
 
 def get_week_boundaries_for_date(date: datetime) -> tuple:
@@ -434,15 +425,13 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
     """
     🔥 Get progress toward this week's streak goal for a specific user
     
-    Goal: 1 long run (10k+) + 2 short runs (any)
+    Goal: 2 runs of any distance
     """
     now = datetime.now()
     min_date = datetime(2026, 1, 1)
     
-    # Get this week's boundaries
     week_start, week_end = get_week_boundaries_for_date(now)
     
-    # Get this week's runs for this user
     query = db.query(Run).filter(
         Run.completed_at >= week_start,
         Run.completed_at <= week_end,
@@ -452,34 +441,21 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
         query = query.filter(Run.user_id == user_id)
     week_runs = query.all()
     
-    long_runs = [r for r in week_runs if r.distance_km >= 10]
-    short_runs = [r for r in week_runs if r.distance_km < 10]
+    runs_completed = len(week_runs)
+    runs_needed = 2
+    is_complete = runs_completed >= runs_needed
     
-    long_runs_completed = len(long_runs)
-    short_runs_completed = len(short_runs)
-    
-    is_complete = long_runs_completed >= 1 and short_runs_completed >= 2
-    
-    # Get current and longest streak
     current_streak, longest_streak = calculate_streaks(db, user_id=user_id)
     
-    # Generate message
     if is_complete:
         message = "🎉 Week complete! Streak secured!"
     else:
-        needs = []
-        if long_runs_completed < 1:
-            needs.append("1 long run (10k+)")
-        if short_runs_completed < 2:
-            remaining = 2 - short_runs_completed
-            needs.append(f"{remaining} short run{'s' if remaining > 1 else ''}")
-        message = f"Need: {' and '.join(needs)}"
+        remaining = runs_needed - runs_completed
+        message = f"Need: {remaining} more run{'s' if remaining > 1 else ''}"
     
     return {
-        "long_runs_completed": long_runs_completed,
-        "long_runs_needed": 1,
-        "short_runs_completed": short_runs_completed,
-        "short_runs_needed": 2,
+        "runs_completed": runs_completed,
+        "runs_needed": runs_needed,
         "is_complete": is_complete,
         "current_streak": current_streak,
         "longest_streak": longest_streak,

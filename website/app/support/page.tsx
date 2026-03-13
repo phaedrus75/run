@@ -42,7 +42,7 @@ export default function SupportPage() {
               },
               {
                 q: 'How do streaks work?',
-                a: 'Your streak counts consecutive weeks where you logged at least one run. Miss a week and it resets. Your longest streak is always saved.',
+                a: 'Your streak counts consecutive weeks where you logged at least two runs. Miss a week and it resets. Your longest streak is always saved.',
               },
               {
                 q: 'Can I change my handle?',

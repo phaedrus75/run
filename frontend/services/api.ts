@@ -115,10 +115,8 @@ export interface MotivationalMessage {
 }
 
 export interface WeeklyStreakProgress {
-  long_runs_completed: number;
-  long_runs_needed: number;
-  short_runs_completed: number;
-  short_runs_needed: number;
+  runs_completed: number;
+  runs_needed: number;
   is_complete: boolean;
   current_streak: number;
   longest_streak: number;

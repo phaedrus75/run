@@ -72,7 +72,7 @@ export default function Home() {
               {
                 icon: '🔥',
                 title: 'Weekly Streaks',
-                desc: 'Run at least once a week to keep your streak alive. Simple rules, powerful motivation.',
+                desc: 'Run at least twice a week to keep your streak alive. Simple rules, powerful motivation.',
               },
               {
                 icon: '🏆',
