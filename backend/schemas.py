@@ -196,13 +196,10 @@ class WeeklyStreakProgress(BaseModel):
     🔥 Weekly Streak Progress
     
     Shows progress toward this week's streak goal:
-    - Need 1 long run (10k+)
-    - Need 2+ short runs (any)
+    - Need 2 runs of any distance
     """
-    long_runs_completed: int
-    long_runs_needed: int
-    short_runs_completed: int
-    short_runs_needed: int
+    runs_completed: int
+    runs_needed: int
     is_complete: bool
     current_streak: int
     longest_streak: int
