@@ -450,7 +450,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     }
 
 
-def get_achievements(db: Session, stats: dict, user_id: int = None) -> dict:
+def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal: float = None, monthly_goal: float = None) -> dict:
     """Get all achievements and their unlock status."""
     from models import StepEntry
     
@@ -481,7 +481,7 @@ def get_achievements(db: Session, stats: dict, user_id: int = None) -> dict:
     days_20k_steps = sum(1 for s in step_entries if s.step_count >= 20000)
     days_25k_steps = sum(1 for s in step_entries if s.step_count >= 25000)
     
-    goals = get_goals_progress(db, user_id=user_id)
+    goals = get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id)
     
     extended_stats = {
         **stats,

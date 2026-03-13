@@ -697,7 +697,16 @@ def get_achievements(
     from achievements import get_achievements
     user_id = current_user.id if current_user else None
     stats = crud.get_stats_summary(db, user_id=user_id)
-    return get_achievements(db, stats, user_id=user_id)
+
+    yearly_goal = 1000.0
+    monthly_goal = 100.0
+    if current_user:
+        user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+        if user_goals:
+            yearly_goal = user_goals.yearly_km_goal or 1000.0
+            monthly_goal = user_goals.monthly_km_goal or 100.0
+
+    return get_achievements(db, stats, user_id=user_id, yearly_goal=yearly_goal, monthly_goal=monthly_goal)
 
 
 @app.get("/month-review")
