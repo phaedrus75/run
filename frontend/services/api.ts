@@ -81,6 +81,7 @@ export interface Run {
   distance_km: number;
   completed_at: string;
   notes: string | null;
+  mood: string | null;
   category: string | null;
   pace_per_km: string;
   formatted_duration: string;
@@ -121,6 +122,28 @@ export interface WeeklyStreakProgress {
   current_streak: number;
   longest_streak: number;
   message: string;
+  is_comeback: boolean;
+  weeks_away: number;
+  missed_last_week: boolean;
+}
+
+export interface DailyWisdom {
+  text: string;
+  author: string;
+}
+
+export interface StreakPeriod {
+  start_week: string;
+  end_week: string;
+  length: number;
+  is_current: boolean;
+}
+
+export interface SeasonalMarker {
+  type: string;
+  message: string;
+  season: string;
+  emoji: string;
 }
 
 export interface PersonalRecord {
@@ -209,7 +232,8 @@ export const runApi = {
     run_type: string;
     duration_seconds: number;
     notes?: string;
-    completed_at?: string;  // ISO date string for backdating
+    completed_at?: string;
+    mood?: string;
   }): Promise<Run> => {
     return apiFetch('/runs', {
       method: 'POST',
@@ -243,6 +267,7 @@ export const runApi = {
     run_type?: string;
     duration_seconds?: number;
     notes?: string;
+    mood?: string;
   }): Promise<Run> => {
     return apiFetch(`/runs/${id}`, {
       method: 'PUT',
@@ -355,6 +380,18 @@ export const statsApi = {
   /**
    * 📅 Get month in review data
    */
+  getDailyWisdom: (): Promise<DailyWisdom> => {
+    return apiFetch('/daily-wisdom');
+  },
+
+  getStreakHistory: (): Promise<StreakPeriod[]> => {
+    return apiFetch('/streak-history');
+  },
+
+  getSeasonalMarkers: (): Promise<{ markers: SeasonalMarker[] }> => {
+    return apiFetch('/seasonal-markers');
+  },
+
   getMonthReview: (month?: number, year?: number): Promise<MonthInReview> => {
     const params = new URLSearchParams();
     if (month !== undefined) params.append('month', month.toString());

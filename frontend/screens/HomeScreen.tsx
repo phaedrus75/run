@@ -57,6 +57,9 @@ import {
   type WeightChartData,
   type StepsSummary,
   type MonthInReview as MonthInReviewType,
+  type DailyWisdom,
+  type SeasonalMarker,
+  type StreakPeriod,
 } from '../services/api';
 
 interface HomeScreenProps {
@@ -94,6 +97,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
   const [monthReview, setMonthReview] = useState<MonthInReviewType | null>(null);
   const [showMonthReview, setShowMonthReview] = useState(false);
+  const [dailyWisdom, setDailyWisdom] = useState<DailyWisdom | null>(null);
+  const [seasonalMarkers, setSeasonalMarkers] = useState<SeasonalMarker[]>([]);
+  const [streakHistory, setStreakHistory] = useState<StreakPeriod[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -124,16 +130,23 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       setWeightChart(weightChartData);
       setStepsSummary(stepsData);
       
-      // Fetch month review separately (graceful failure if not deployed)
+      // Fetch secondary data (graceful failure)
       try {
-        const monthReviewData = await statsApi.getMonthReview();
+        const [monthReviewData, wisdomData, markersData, historyData] = await Promise.all([
+          statsApi.getMonthReview().catch(() => null),
+          statsApi.getDailyWisdom().catch(() => null),
+          statsApi.getSeasonalMarkers().catch(() => ({ markers: [] })),
+          statsApi.getStreakHistory().catch(() => []),
+        ]);
         if (monthReviewData && monthReviewData.should_show) {
           setMonthReview(monthReviewData);
           setShowMonthReview(true);
         }
+        if (wisdomData) setDailyWisdom(wisdomData);
+        setSeasonalMarkers(markersData?.markers || []);
+        setStreakHistory(historyData || []);
       } catch (e) {
-        // Month review endpoint not available yet - that's ok
-        console.log('Month review not available');
+        console.log('Secondary data fetch partial failure');
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -246,6 +259,45 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           {getGreeting()}, {user?.name || 'Runner'}
         </Text>
         
+        {/* Daily Wisdom */}
+        {dailyWisdom && (
+          <View style={styles.wisdomCard}>
+            <Text style={styles.wisdomText}>"{dailyWisdom.text}"</Text>
+            <Text style={styles.wisdomAuthor}>— {dailyWisdom.author}</Text>
+          </View>
+        )}
+
+        {/* Comeback / Rest Banner */}
+        {streakProgress?.is_comeback && (
+          <View style={[styles.comebackBanner, shadows.small]}>
+            <Text style={styles.comebackEmoji}>👋</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.comebackTitle}>Welcome back.</Text>
+              <Text style={styles.comebackText}>The streak starts fresh. Good to see you.</Text>
+            </View>
+          </View>
+        )}
+        {streakProgress?.missed_last_week && !streakProgress?.is_comeback && streakProgress?.current_streak === 0 && (
+          <View style={[styles.restBanner, shadows.small]}>
+            <Text style={styles.comebackEmoji}>🌿</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.restText}>You took a breather last week. Your body rebuilds during rest.</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Seasonal Markers */}
+        {seasonalMarkers.length > 0 && (
+          <View style={styles.seasonalCard}>
+            {seasonalMarkers.map((marker, i) => (
+              <View key={i} style={styles.seasonalRow}>
+                <Text style={styles.seasonalEmoji}>{marker.emoji}</Text>
+                <Text style={styles.seasonalText}>{marker.message}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        
         {/* Overall Stats */}
         <View style={[styles.lifetimeCard, shadows.medium]}>
           <Text style={styles.lifetimeTitle}>Your journey</Text>
@@ -357,6 +409,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         visible={showStreak}
         onClose={() => setShowStreak(false)}
         progress={streakProgress}
+        streakHistory={streakHistory}
       />
       
       {/* 📅 Month in Review Modal */}
@@ -578,5 +631,80 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     textAlign: 'center',
+  },
+  wisdomCard: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  wisdomText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 22,
+  },
+  wisdomAuthor: {
+    fontSize: typography.sizes.xs,
+    color: colors.textLight,
+    marginTop: spacing.xs,
+  },
+  comebackBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '12',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  comebackEmoji: {
+    fontSize: 28,
+    marginRight: spacing.sm,
+  },
+  comebackTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  comebackText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  restBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.secondary,
+  },
+  restText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  seasonalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  seasonalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  seasonalEmoji: {
+    fontSize: 20,
+    marginRight: spacing.sm,
+  },
+  seasonalText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    fontWeight: typography.weights.medium,
   },
 });

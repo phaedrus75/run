@@ -8,15 +8,21 @@ import {
   ScrollView,
 } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
-import type { WeeklyStreakProgress } from '../services/api';
+import type { WeeklyStreakProgress, StreakPeriod } from '../services/api';
 
 interface StreakModalProps {
   visible: boolean;
   onClose: () => void;
   progress: WeeklyStreakProgress | null;
+  streakHistory?: StreakPeriod[];
 }
 
-export function StreakModal({ visible, onClose, progress }: StreakModalProps) {
+function formatWeekDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export function StreakModal({ visible, onClose, progress, streakHistory = [] }: StreakModalProps) {
   if (!progress) return null;
 
   const {
@@ -89,6 +95,45 @@ export function StreakModal({ visible, onClose, progress }: StreakModalProps) {
             <View style={[styles.messageCard, is_complete && styles.messageCardComplete]}>
               <Text style={styles.messageText}>{message}</Text>
             </View>
+
+            {streakHistory.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Streak History</Text>
+                <View style={styles.timelineCard}>
+                  {streakHistory.slice().reverse().map((streak, i) => {
+                    const maxLen = Math.max(...streakHistory.map(s => s.length), 1);
+                    const barWidth = Math.max(20, (streak.length / maxLen) * 100);
+                    return (
+                      <View key={i} style={styles.timelineRow}>
+                        <View style={styles.timelineDates}>
+                          <Text style={styles.timelineDateText}>
+                            {formatWeekDate(streak.start_week)}
+                          </Text>
+                        </View>
+                        <View style={styles.timelineBarContainer}>
+                          <View
+                            style={[
+                              styles.timelineBar,
+                              {
+                                width: `${barWidth}%`,
+                                backgroundColor: streak.is_current ? colors.primary : colors.primaryLight,
+                              },
+                            ]}
+                          >
+                            <Text style={styles.timelineBarText}>
+                              {streak.length}w
+                            </Text>
+                          </View>
+                        </View>
+                        {streak.is_current && (
+                          <Text style={styles.timelineCurrentBadge}>now</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
+            )}
 
             <Text style={styles.sectionTitle}>How Streaks Work</Text>
             <View style={styles.rulesCard}>
@@ -272,5 +317,46 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     fontStyle: 'italic',
     marginTop: spacing.xs,
+  },
+  timelineCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  timelineDates: {
+    width: 60,
+  },
+  timelineDateText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+  },
+  timelineBarContainer: {
+    flex: 1,
+    marginHorizontal: spacing.sm,
+  },
+  timelineBar: {
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    minWidth: 36,
+  },
+  timelineBarText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    color: '#fff',
+  },
+  timelineCurrentBadge: {
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+    width: 24,
   },
 });

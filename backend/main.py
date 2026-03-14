@@ -26,7 +26,7 @@ import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken
+from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email,
@@ -85,6 +85,10 @@ def run_migrations():
                 # Add category column to runs table
                 conn.execute(text("""
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS category VARCHAR DEFAULT 'outdoor'
+                """))
+                # Add mood column to runs table
+                conn.execute(text("""
+                    ALTER TABLE runs ADD COLUMN IF NOT EXISTS mood VARCHAR
                 """))
                 # Add user_id column to runs table
                 conn.execute(text("""
@@ -535,7 +539,8 @@ def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)
         run_type=run_update.run_type,
         duration_seconds=run_update.duration_seconds,
         notes=run_update.notes,
-        category=run_update.category
+        category=run_update.category,
+        mood=run_update.mood
     )
     
     if not updated_run:
@@ -1050,6 +1055,7 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
         "distance_km": run.distance_km,
         "completed_at": run.completed_at,
         "notes": run.notes,
+        "mood": getattr(run, 'mood', None),
         "category": getattr(run, 'category', None) or "outdoor",
         "pace_per_km": pace,
         "formatted_duration": formatted,
@@ -1408,12 +1414,67 @@ def get_circle_details(
     for i, member in enumerate(members):
         member["rank"] = i + 1
     
+    # Circle milestones
+    milestones = []
+    total_circle_km = sum(m["monthly_km"] for m in members)
+    milestones.append({
+        "type": "combined_km",
+        "message": f"Your circle ran {round(total_circle_km)} km together this month",
+    })
+    
+    active_members = sum(1 for m in members if m["monthly_runs"] > 0)
+    if active_members == len(members) and len(members) > 1:
+        milestones.append({
+            "type": "all_active",
+            "message": "Everyone showed up this month",
+        })
+    
+    all_streaking = True
+    for m in memberships:
+        _, streak_longest = crud.calculate_streaks(db, user_id=m.user_id)
+        current, _ = crud.calculate_streaks(db, user_id=m.user_id)
+        if current < 1:
+            all_streaking = False
+            break
+    
+    if all_streaking and len(members) > 1:
+        milestones.append({
+            "type": "all_streaking",
+            "message": "Everyone's streak is alive this week",
+        })
+    
+    # This week's check-ins
+    week_start, _ = crud.get_week_boundaries_for_date(now)
+    checkins_raw = db.query(CircleCheckin).filter(
+        CircleCheckin.circle_id == circle_id,
+        CircleCheckin.week_start == week_start
+    ).all()
+    
+    checkins = []
+    my_checkin = None
+    for c in checkins_raw:
+        user = db.query(User).filter(User.id == c.user_id).first()
+        entry = {
+            "user_id": c.user_id,
+            "name": user.name if user else "Runner",
+            "handle": user.handle if user else None,
+            "emoji": c.emoji,
+            "message": c.message,
+            "is_you": c.user_id == current_user.id,
+        }
+        checkins.append(entry)
+        if c.user_id == current_user.id:
+            my_checkin = entry
+    
     return {
         "id": circle.id,
         "name": circle.name,
         "invite_code": circle.invite_code,
         "member_count": len(members),
         "members": members,
+        "milestones": milestones,
+        "checkins": checkins,
+        "my_checkin": my_checkin,
         "created_by": circle.created_by,
     }
 
@@ -1479,8 +1540,294 @@ def check_handle_available(
 
 
 # ==========================================
-# 🎓 WHAT'S NEXT?
+# 🌿 DAILY WISDOM
 # ==========================================
+
+DAILY_QUOTES = [
+    {"text": "Sometimes we complicate things with gadgets and gear, when what we really need is to trust our bodies and keep things simple.", "author": "Christopher McDougall"},
+    {"text": "All I do is keep on running in my own cozy, homemade void, my own nostalgic silence. And this is a pretty wonderful thing.", "author": "Haruki Murakami"},
+    {"text": "The only opponent you have to beat is yourself, the way you used to be.", "author": "Haruki Murakami"},
+    {"text": "The runner need not break four minutes in the mile or four hours in the marathon. It is only necessary that he runs.", "author": "George Sheehan"},
+    {"text": "If you run, you are a runner. It doesn't matter how fast or how far.", "author": "John Bingham"},
+    {"text": "Running is nothing more than a series of arguments between the part of your brain that wants to stop and the part that wants to keep going.", "author": "Unknown"},
+    {"text": "The real purpose of running isn't to win a race. It's to test the limits of the human heart.", "author": "Bill Bowerman"},
+    {"text": "I run because long after my footprints fade far away, my running will leave imprints in my mind forever.", "author": "Budd Coates"},
+    {"text": "There is magic in misery. Just ask any runner.", "author": "Dean Karnazes"},
+    {"text": "We run, not because we think it is doing us good, but because we enjoy it and cannot help ourselves.", "author": "Roger Bannister"},
+    {"text": "Believe that you can run farther or faster. Believe that you are young enough, old enough, strong enough.", "author": "Percy Cerutty"},
+    {"text": "The obsession with running is really an obsession with the potential for more and more life.", "author": "George Sheehan"},
+    {"text": "Out on the roads there is fitness and self-discovery and the persons we were destined to be.", "author": "George Sheehan"},
+    {"text": "Running allows me to set my mind free. Nothing seems impossible.", "author": "Kara Goucher"},
+    {"text": "Pain is inevitable. Suffering is optional.", "author": "Haruki Murakami"},
+    {"text": "Every morning in Africa, a gazelle wakes up knowing it must outrun the fastest lion or it will be killed. Every morning a lion wakes up knowing it must run faster than the slowest gazelle or it will starve. It doesn't matter whether you're a lion or a gazelle — when the sun comes up, you'd better be running.", "author": "Christopher McDougall"},
+    {"text": "The body does not want you to do this. As you run, it tells you to stop but the mind casts it aside and says keep going.", "author": "Jacki Hanson"},
+    {"text": "Ask nothing from your running, and you'll get more than you ever imagined.", "author": "Christopher McDougall"},
+    {"text": "I always loved running — it was something you could do by yourself and under your own power.", "author": "Jesse Owens"},
+    {"text": "Go fast enough to get there, but slow enough to see.", "author": "Jimmy Buffett"},
+    {"text": "Run often. Run long. But never outrun your joy of running.", "author": "Julie Isphording"},
+    {"text": "I don't run to add days to my life, I run to add life to my days.", "author": "Ronald Rook"},
+    {"text": "The miracle isn't that I finished. The miracle is that I had the courage to start.", "author": "John Bingham"},
+    {"text": "Your body will argue that there is no justifiable reason to continue. Your only recourse is to call on your spirit, which fortunately functions independently of logic.", "author": "Tim Noakes"},
+    {"text": "Consistency is the true foundation of trust. Either keep your promises or do not make them.", "author": "Roy T. Bennett"},
+    {"text": "It does not matter how slowly you go as long as you do not stop.", "author": "Confucius"},
+    {"text": "Success isn't always about greatness. It's about consistency. Consistent hard work leads to success.", "author": "Dwayne Johnson"},
+    {"text": "Life is a marathon, not a sprint. Pace yourself accordingly.", "author": "Amby Burfoot"},
+    {"text": "Running is the greatest metaphor for life, because you get out of it what you put into it.", "author": "Oprah Winfrey"},
+    {"text": "There are clubs you can't belong to, neighborhoods you can't live in, schools you can't get into, but the roads are always open.", "author": "Nike"},
+]
+
+@app.get("/daily-wisdom")
+def get_daily_wisdom():
+    """Return a deterministic daily quote based on day of year."""
+    from datetime import datetime
+    day_of_year = datetime.now().timetuple().tm_yday
+    quote = DAILY_QUOTES[day_of_year % len(DAILY_QUOTES)]
+    return {"text": quote["text"], "author": quote["author"]}
+
+
+# ==========================================
+# 🎭 MOOD INSIGHTS
+# ==========================================
+
+@app.get("/mood-insights")
+def get_mood_insights(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    """Mood distribution and day-of-week patterns."""
+    from datetime import datetime
+    from collections import Counter
+    
+    min_date = datetime(2026, 1, 1)
+    query = db.query(Run).filter(Run.completed_at >= min_date)
+    if current_user:
+        query = query.filter(Run.user_id == current_user.id)
+    runs = query.all()
+    
+    mood_runs = [r for r in runs if getattr(r, 'mood', None)]
+    total_with_mood = len(mood_runs)
+    
+    distribution = Counter(r.mood for r in mood_runs)
+    
+    day_moods = {}
+    for r in mood_runs:
+        day_name = r.completed_at.strftime("%A")
+        if day_name not in day_moods:
+            day_moods[day_name] = []
+        day_moods[day_name].append(r.mood)
+    
+    best_day = None
+    if day_moods:
+        day_scores = {}
+        mood_values = {"great": 4, "good": 3, "easy": 2, "tough": 1}
+        for day, moods in day_moods.items():
+            day_scores[day] = sum(mood_values.get(m, 0) for m in moods) / len(moods)
+        best_day = max(day_scores, key=day_scores.get)
+    
+    return {
+        "total_with_mood": total_with_mood,
+        "distribution": dict(distribution),
+        "best_day": best_day,
+    }
+
+
+# ==========================================
+# 📜 STREAK HISTORY
+# ==========================================
+
+@app.get("/streak-history")
+def get_streak_history(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    """Return list of all streak periods."""
+    user_id = current_user.id if current_user else None
+    return crud.get_streak_history(db, user_id=user_id)
+
+
+# ==========================================
+# 🌸 SEASONAL MARKERS
+# ==========================================
+
+def get_season(month: int) -> str:
+    if month in (3, 4, 5):
+        return "spring"
+    elif month in (6, 7, 8):
+        return "summer"
+    elif month in (9, 10, 11):
+        return "fall"
+    else:
+        return "winter"
+
+SEASON_EMOJI = {"spring": "🌸", "summer": "☀️", "fall": "🍂", "winter": "❄️"}
+SEASON_MONTHS = {
+    "spring": [3, 4, 5],
+    "summer": [6, 7, 8],
+    "fall": [9, 10, 11],
+    "winter": [12, 1, 2],
+}
+
+@app.get("/seasonal-markers")
+def get_seasonal_markers(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    """Detect seasonal running milestones."""
+    from datetime import datetime
+    
+    if not current_user:
+        return {"markers": []}
+    
+    min_date = datetime(2026, 1, 1)
+    runs = db.query(Run).filter(
+        Run.user_id == current_user.id,
+        Run.completed_at >= min_date
+    ).order_by(Run.completed_at).all()
+    
+    if not runs:
+        return {"markers": []}
+    
+    markers = []
+    now = datetime.now()
+    current_season = get_season(now.month)
+    
+    seasons_with_runs = {}
+    for run in runs:
+        s = get_season(run.completed_at.month)
+        if s not in seasons_with_runs:
+            seasons_with_runs[s] = {"first_run": run.completed_at, "count": 0, "months": set()}
+        seasons_with_runs[s]["count"] += 1
+        seasons_with_runs[s]["months"].add(run.completed_at.month)
+    
+    if current_season in seasons_with_runs:
+        data = seasons_with_runs[current_season]
+        if data["count"] == 1 or (data["count"] > 0 and data["first_run"].date() == now.date()):
+            markers.append({
+                "type": "first_in_season",
+                "message": f"Your first {current_season} run",
+                "season": current_season,
+                "emoji": SEASON_EMOJI[current_season],
+            })
+        
+        season_months = SEASON_MONTHS[current_season]
+        if len(data["months"]) == len(season_months):
+            markers.append({
+                "type": "survived_season",
+                "message": f"You ran through all of {current_season}",
+                "season": current_season,
+                "emoji": SEASON_EMOJI[current_season],
+            })
+        
+        if data["count"] >= 50:
+            markers.append({
+                "type": "milestone",
+                "message": f"{data['count']} runs this {current_season}",
+                "season": current_season,
+                "emoji": SEASON_EMOJI[current_season],
+            })
+        elif data["count"] >= 25:
+            markers.append({
+                "type": "milestone",
+                "message": f"{data['count']} runs this {current_season}",
+                "season": current_season,
+                "emoji": SEASON_EMOJI[current_season],
+            })
+    
+    return {"markers": markers}
+
+
+# ==========================================
+# 👥 CIRCLE CHECK-INS
+# ==========================================
+
+@app.post("/circles/{circle_id}/checkin")
+def create_circle_checkin(
+    circle_id: int,
+    checkin_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Submit a weekly check-in for a circle."""
+    membership = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id,
+        CircleMembership.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this circle")
+    
+    from datetime import datetime
+    now = datetime.now()
+    week_start, _ = crud.get_week_boundaries_for_date(now)
+    
+    existing = db.query(CircleCheckin).filter(
+        CircleCheckin.circle_id == circle_id,
+        CircleCheckin.user_id == current_user.id,
+        CircleCheckin.week_start == week_start
+    ).first()
+    
+    emoji = checkin_data.get("emoji", "👋")
+    message = checkin_data.get("message", "")
+    if len(message) > 100:
+        message = message[:100]
+    
+    if existing:
+        existing.emoji = emoji
+        existing.message = message
+        db.commit()
+        db.refresh(existing)
+        return {"id": existing.id, "emoji": existing.emoji, "message": existing.message, "updated": True}
+    
+    checkin = CircleCheckin(
+        circle_id=circle_id,
+        user_id=current_user.id,
+        emoji=emoji,
+        message=message,
+        week_start=week_start
+    )
+    db.add(checkin)
+    db.commit()
+    db.refresh(checkin)
+    
+    return {"id": checkin.id, "emoji": checkin.emoji, "message": checkin.message, "updated": False}
+
+
+@app.get("/circles/{circle_id}/checkins")
+def get_circle_checkins(
+    circle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Get this week's check-ins for a circle."""
+    membership = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id,
+        CircleMembership.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this circle")
+    
+    from datetime import datetime
+    now = datetime.now()
+    week_start, _ = crud.get_week_boundaries_for_date(now)
+    
+    checkins = db.query(CircleCheckin).filter(
+        CircleCheckin.circle_id == circle_id,
+        CircleCheckin.week_start == week_start
+    ).all()
+    
+    result = []
+    for c in checkins:
+        user = db.query(User).filter(User.id == c.user_id).first()
+        result.append({
+            "user_id": c.user_id,
+            "name": user.name if user else "Runner",
+            "handle": user.handle if user else None,
+            "emoji": c.emoji,
+            "message": c.message,
+            "is_you": c.user_id == current_user.id,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+    
+    return result
 """
 Congratulations! You've read through the main API file.
 

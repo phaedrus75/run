@@ -50,12 +50,29 @@ interface CircleMember {
   is_you: boolean;
 }
 
+interface CircleCheckin {
+  user_id: number;
+  name: string;
+  handle: string | null;
+  emoji: string;
+  message: string;
+  is_you: boolean;
+}
+
+interface CircleMilestone {
+  type: string;
+  message: string;
+}
+
 interface CircleDetails {
   id: number;
   name: string;
   invite_code: string;
   member_count: number;
   members: CircleMember[];
+  milestones: CircleMilestone[];
+  checkins: CircleCheckin[];
+  my_checkin: CircleCheckin | null;
   created_by: number;
 }
 
@@ -75,6 +92,10 @@ export function CirclesScreen() {
   const [newCircleName, setNewCircleName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Check-in state
+  const [checkinEmoji, setCheckinEmoji] = useState('👋');
+  const [checkinMessage, setCheckinMessage] = useState('');
 
   const fetchCircles = useCallback(async () => {
     try {
@@ -233,6 +254,26 @@ export function CirclesScreen() {
       console.error('Failed to share:', error);
     }
   };
+
+  const handleCheckin = async (circleId: number) => {
+    try {
+      const token = await getToken();
+      await fetch(`${API_BASE_URL}/circles/${circleId}/checkin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ emoji: checkinEmoji, message: checkinMessage }),
+      });
+      setCheckinMessage('');
+      fetchCircleDetails(circleId);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to check in');
+    }
+  };
+
+  const CHECKIN_EMOJIS = ['👋', '🏃', '💪', '😊', '🔥', '✌️', '🌿', '⚡'];
 
   const getRankEmoji = (rank: number) => {
     switch (rank) {
@@ -445,8 +486,81 @@ export function CirclesScreen() {
                 <Text style={styles.inviteCodeValue}>{selectedCircle.invite_code}</Text>
               </View>
 
+              {/* Milestones */}
+              {selectedCircle.milestones && selectedCircle.milestones.length > 0 && (
+                <View style={styles.milestonesSection}>
+                  {selectedCircle.milestones.map((m, i) => (
+                    <View key={i} style={styles.milestoneCard}>
+                      <Text style={styles.milestoneIcon}>
+                        {m.type === 'combined_km' ? '🏃' : m.type === 'all_active' ? '🤝' : '🔥'}
+                      </Text>
+                      <Text style={styles.milestoneText}>{m.message}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Check-ins */}
+              <Text style={styles.leaderboardTitle}>This Week's Pulse</Text>
+              
+              {selectedCircle.checkins && selectedCircle.checkins.length > 0 ? (
+                <View style={styles.checkinsContainer}>
+                  {selectedCircle.checkins.map((c, i) => (
+                    <View key={i} style={[styles.checkinRow, c.is_you && styles.checkinRowYou]}>
+                      <Text style={styles.checkinEmoji}>{c.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.checkinName}>
+                          {c.name}{c.is_you ? ' (You)' : ''}
+                        </Text>
+                        {c.message ? (
+                          <Text style={styles.checkinMsg}>{c.message}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.noCheckinsText}>No check-ins yet this week</Text>
+              )}
+
+              {/* Check-in form */}
+              {!selectedCircle.my_checkin && (
+                <View style={styles.checkinForm}>
+                  <View style={styles.emojiPicker}>
+                    {CHECKIN_EMOJIS.map(e => (
+                      <TouchableOpacity
+                        key={e}
+                        onPress={() => setCheckinEmoji(e)}
+                        style={[
+                          styles.emojiOption,
+                          checkinEmoji === e && styles.emojiOptionActive,
+                        ]}
+                      >
+                        <Text style={styles.emojiOptionText}>{e}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.checkinInputRow}>
+                    <TextInput
+                      style={styles.checkinInput}
+                      placeholder="How's the running going?"
+                      placeholderTextColor={colors.textLight}
+                      value={checkinMessage}
+                      onChangeText={setCheckinMessage}
+                      maxLength={100}
+                    />
+                    <TouchableOpacity
+                      style={styles.checkinSend}
+                      onPress={() => handleCheckin(selectedCircle.id)}
+                    >
+                      <Ionicons name="send" size={20} color={colors.surface} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               {/* Leaderboard */}
-              <Text style={styles.leaderboardTitle}>This Month</Text>
+              <Text style={[styles.leaderboardTitle, { marginTop: spacing.lg }]}>This Month</Text>
               
               {selectedCircle.members.map((member) => (
                 <View
@@ -727,5 +841,112 @@ const styles = StyleSheet.create({
   leaveButtonText: {
     fontSize: typography.sizes.md,
     color: colors.error || '#FF6B6B',
+  },
+  milestonesSection: {
+    marginBottom: spacing.lg,
+  },
+  milestoneCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '10',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  milestoneIcon: {
+    fontSize: 20,
+    marginRight: spacing.sm,
+  },
+  milestoneText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    fontWeight: typography.weights.medium,
+  },
+  checkinsContainer: {
+    marginBottom: spacing.md,
+  },
+  checkinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  checkinRowYou: {
+    borderWidth: 1,
+    borderColor: colors.primary + '40',
+  },
+  checkinEmoji: {
+    fontSize: 24,
+    marginRight: spacing.sm,
+  },
+  checkinName: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  checkinMsg: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  noCheckinsText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+  },
+  checkinForm: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  emojiPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.sm,
+  },
+  emojiOption: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  emojiOptionActive: {
+    backgroundColor: colors.primary + '20',
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  emojiOptionText: {
+    fontSize: 18,
+  },
+  checkinInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  checkinInput: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+  },
+  checkinSend: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

@@ -60,6 +60,7 @@ interface RunScreenProps {
 }
 
 interface RunResult {
+  runId: number;
   distance: string;
   category: string;
   formattedDuration: string;
@@ -73,11 +74,12 @@ export function RunScreen({ navigation }: RunScreenProps) {
   const [useTimer, setUseTimer] = useState(false);
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
-  const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [quote, setQuote] = useState(getRandomQuote());
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [reflection, setReflection] = useState('');
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const confettiRef = useRef<any>(null);
 
@@ -95,13 +97,24 @@ export function RunScreen({ navigation }: RunScreenProps) {
     });
   };
 
-  const closeCelebration = (action: 'done' | 'another') => {
+  const closeCelebration = async (action: 'done' | 'another') => {
+    if (runResult?.runId && (selectedMood || reflection.trim())) {
+      try {
+        const updateData: any = {};
+        if (selectedMood) updateData.mood = selectedMood;
+        if (reflection.trim()) updateData.notes = reflection.trim();
+        await runApi.update(runResult.runId, updateData);
+      } catch {}
+    }
+
     Animated.timing(slideAnim, {
       toValue: SCREEN_HEIGHT,
       duration: 250,
       useNativeDriver: true,
     }).start(() => {
       setShowCelebration(false);
+      setSelectedMood(null);
+      setReflection('');
       if (action === 'done') {
         navigation.navigate('Home', {
           celebrations: runResult?.celebrations || [],
@@ -110,7 +123,6 @@ export function RunScreen({ navigation }: RunScreenProps) {
         setSelectedType(null);
         setMinutes('');
         setSeconds('');
-        setNotes('');
       }
     });
   };
@@ -123,6 +135,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
     const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
 
     openCelebration({
+      runId: run.id,
       distance: runType.toUpperCase(),
       category: category === 'treadmill' ? 'Treadmill' : 'Outdoor',
       formattedDuration: run.formatted_duration,
@@ -152,7 +165,6 @@ export function RunScreen({ navigation }: RunScreenProps) {
       const run = await runApi.create({
         run_type: selectedType,
         duration_seconds: totalSeconds,
-        notes: notes || undefined,
         category: category,
       });
       processRunResult(run, totalSeconds, selectedType);
@@ -173,7 +185,6 @@ export function RunScreen({ navigation }: RunScreenProps) {
       const run = await runApi.create({
         run_type: selectedType,
         duration_seconds: totalSeconds,
-        notes: notes || undefined,
         category: category,
       });
       processRunResult(run, totalSeconds, selectedType);
@@ -314,14 +325,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
             </View>
           </View>
 
-          {/* Notes - compact inline */}
-          <TextInput
-            style={styles.notesInput}
-            placeholder="Notes (optional)"
-            placeholderTextColor={colors.textLight}
-            value={notes}
-            onChangeText={setNotes}
-          />
+          
         </View>
 
         {/* Pinned bottom button */}
@@ -394,6 +398,49 @@ export function RunScreen({ navigation }: RunScreenProps) {
                     ))}
                   </View>
                 )}
+
+                {/* Mood picker */}
+                <View style={styles.moodSection}>
+                  <Text style={styles.moodLabel}>How did it feel?</Text>
+                  <View style={styles.moodRow}>
+                    {[
+                      { id: 'easy', emoji: '😌', label: 'Easy' },
+                      { id: 'good', emoji: '😊', label: 'Good' },
+                      { id: 'tough', emoji: '😤', label: 'Tough' },
+                      { id: 'great', emoji: '🤩', label: 'Great' },
+                    ].map(m => (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => {
+                          haptic(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedMood(selectedMood === m.id ? null : m.id);
+                        }}
+                        style={({ pressed }) => [
+                          styles.moodChip,
+                          selectedMood === m.id && styles.moodChipActive,
+                          { transform: [{ scale: pressed ? 0.92 : 1 }] },
+                        ]}
+                      >
+                        <Text style={styles.moodEmoji}>{m.emoji}</Text>
+                        <Text style={[
+                          styles.moodText,
+                          selectedMood === m.id && styles.moodTextActive,
+                        ]}>{m.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* One-line reflection */}
+                <TextInput
+                  style={styles.reflectionInput}
+                  placeholder="Any thoughts on the run?"
+                  placeholderTextColor={colors.textLight}
+                  value={reflection}
+                  onChangeText={setReflection}
+                  maxLength={100}
+                  returnKeyType="done"
+                />
 
                 <View style={styles.quoteContainer}>
                   <Text style={styles.quoteText}>"{quote.text}"</Text>
@@ -540,15 +587,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginHorizontal: spacing.md,
   },
-  notesInput: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    fontSize: typography.sizes.sm,
-    color: colors.text,
-    marginTop: spacing.md,
-  },
   bottomBar: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
@@ -672,6 +710,58 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.bold,
     color: colors.text,
+  },
+  moodSection: {
+    width: '100%',
+    marginBottom: spacing.sm,
+  },
+  moodLabel: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  moodRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  moodChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  moodChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '15',
+  },
+  moodEmoji: {
+    fontSize: 22,
+    marginBottom: 2,
+  },
+  moodText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+  },
+  moodTextActive: {
+    color: colors.primary,
+    fontWeight: typography.weights.bold,
+  },
+  reflectionInput: {
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   quoteContainer: {
     width: '100%',

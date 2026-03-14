@@ -73,6 +73,9 @@ class Run(Base):
     
     # 🏃 Run category (outdoor or treadmill)
     category = Column(String, nullable=True, default="outdoor")
+    
+    # 🎭 How the run felt (easy, good, tough, great)
+    mood = Column(String, nullable=True)
 
 
 class WeeklyPlan(Base):
@@ -286,6 +289,23 @@ class CircleMembership(Base):
         # Composite unique constraint
         {'sqlite_autoincrement': True},
     )
+
+
+class CircleCheckin(Base):
+    """
+    Circle Check-in - Weekly pulse from circle members
+    
+    One check-in per member per week (Sunday-Saturday).
+    """
+    __tablename__ = "circle_checkins"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    circle_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    emoji = Column(String, nullable=True)
+    message = Column(String, nullable=True)
+    week_start = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class PasswordResetToken(Base):

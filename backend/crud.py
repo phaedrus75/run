@@ -50,13 +50,13 @@ def create_run(db: Session, run: RunCreate, user_id: int = None) -> Run:
     # Get distance from run type
     distance = RUN_DISTANCES.get(run.run_type, 0.0)
     
-    # Create the database object
     db_run = Run(
         run_type=run.run_type,
         duration_seconds=run.duration_seconds,
         distance_km=distance,
         notes=run.notes,
         category=run.category or "outdoor",
+        mood=run.mood,
         user_id=user_id
     )
     
@@ -132,12 +132,9 @@ def delete_run(db: Session, run_id: int) -> bool:
     return False
 
 
-def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds: int = None, notes: str = None, category: str = None) -> Optional[Run]:
+def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds: int = None, notes: str = None, category: str = None, mood: str = None) -> Optional[Run]:
     """
-    ✏️ Update an existing run
-    
-    Only updates fields that are provided (not None).
-    Returns the updated run, or None if not found.
+    Update an existing run. Only updates fields that are provided (not None).
     """
     run = get_run(db, run_id)
     if not run:
@@ -155,6 +152,9 @@ def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds:
     
     if category is not None:
         run.category = category
+    
+    if mood is not None:
+        run.mood = mood
     
     db.commit()
     db.refresh(run)
@@ -330,6 +330,78 @@ def calculate_streaks(db: Session, user_id: Optional[int] = None) -> tuple:
     return (current_streak, longest_streak)
 
 
+def get_streak_history(db: Session, user_id: Optional[int] = None) -> list:
+    """
+    Returns a list of all streaks: [{start_week, end_week, length, is_current}]
+    """
+    min_date = datetime(2026, 1, 1)
+    query = db.query(Run).filter(Run.completed_at >= min_date)
+    if user_id is not None:
+        query = query.filter(Run.user_id == user_id)
+    all_runs = query.order_by(Run.completed_at).all()
+    
+    if not all_runs:
+        return []
+    
+    weeks_data = {}
+    for run in all_runs:
+        sunday, saturday = get_week_boundaries_for_date(run.completed_at)
+        week_key = sunday.strftime("%Y-%m-%d")
+        if week_key not in weeks_data:
+            weeks_data[week_key] = {"start": sunday, "runs": []}
+        weeks_data[week_key]["runs"].append(run)
+    
+    sorted_weeks = sorted(weeks_data.items(), key=lambda x: x[1]["start"])
+    
+    streaks = []
+    current_streak_start = None
+    current_streak_length = 0
+    prev_week_start = None
+    
+    for week_key, week_data in sorted_weeks:
+        week_start = week_data["start"]
+        valid = is_valid_streak_week(week_data["runs"])
+        
+        if valid:
+            if prev_week_start is None or (week_start - prev_week_start).days != 7:
+                if current_streak_length > 0:
+                    streaks.append({
+                        "start_week": current_streak_start.strftime("%Y-%m-%d"),
+                        "end_week": prev_week_start.strftime("%Y-%m-%d"),
+                        "length": current_streak_length,
+                        "is_current": False,
+                    })
+                current_streak_start = week_start
+                current_streak_length = 1
+            else:
+                current_streak_length += 1
+            prev_week_start = week_start
+        else:
+            if current_streak_length > 0:
+                streaks.append({
+                    "start_week": current_streak_start.strftime("%Y-%m-%d"),
+                    "end_week": prev_week_start.strftime("%Y-%m-%d"),
+                    "length": current_streak_length,
+                    "is_current": False,
+                })
+                current_streak_length = 0
+                current_streak_start = None
+                prev_week_start = None
+    
+    if current_streak_length > 0:
+        now = datetime.now()
+        current_week_start, _ = get_week_boundaries_for_date(now)
+        is_current = prev_week_start == current_week_start or (current_week_start - prev_week_start).days == 7
+        streaks.append({
+            "start_week": current_streak_start.strftime("%Y-%m-%d"),
+            "end_week": prev_week_start.strftime("%Y-%m-%d"),
+            "length": current_streak_length,
+            "is_current": is_current,
+        })
+    
+    return streaks
+
+
 def update_stats_after_run(db: Session, distance_km: float) -> UserStats:
     """
     📊 Update stats after completing a run
@@ -447,6 +519,49 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
     
     current_streak, longest_streak = calculate_streaks(db, user_id=user_id)
     
+    # Comeback and rest week detection
+    is_comeback = False
+    weeks_away = 0
+    missed_last_week = False
+    
+    prev_week_start = week_start - timedelta(days=7)
+    prev_week_end = week_start - timedelta(seconds=1)
+    
+    prev_query = db.query(Run).filter(
+        Run.completed_at >= prev_week_start,
+        Run.completed_at <= prev_week_end,
+        Run.completed_at >= min_date
+    )
+    if user_id is not None:
+        prev_query = prev_query.filter(Run.user_id == user_id)
+    prev_week_runs = prev_query.count()
+    
+    if prev_week_runs < 2:
+        missed_last_week = True
+    
+    if runs_completed > 0 and current_streak <= 1:
+        # Check how many consecutive weeks were missed before this one
+        check_start = prev_week_start
+        consecutive_missed = 0
+        for _ in range(52):
+            check_end = check_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+            q = db.query(Run).filter(
+                Run.completed_at >= check_start,
+                Run.completed_at <= check_end,
+                Run.completed_at >= min_date
+            )
+            if user_id is not None:
+                q = q.filter(Run.user_id == user_id)
+            if q.count() < 2:
+                consecutive_missed += 1
+                check_start -= timedelta(days=7)
+            else:
+                break
+        
+        if consecutive_missed >= 2:
+            is_comeback = True
+            weeks_away = consecutive_missed
+    
     if is_complete:
         message = "You showed up this week."
     else:
@@ -460,6 +575,9 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
         "current_streak": current_streak,
         "longest_streak": longest_streak,
         "message": message,
+        "is_comeback": is_comeback,
+        "weeks_away": weeks_away,
+        "missed_last_week": missed_last_week,
     }
 
 

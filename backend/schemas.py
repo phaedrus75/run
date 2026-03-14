@@ -56,18 +56,7 @@ class RunCreate(BaseModel):
     notes: Optional[str] = Field(None, description="Optional notes about your run")
     completed_at: Optional[datetime] = Field(None, description="When the run was completed (for backdating)")
     category: Optional[str] = Field("outdoor", description="Category: outdoor or treadmill")
-    
-    class Config:
-        # 📖 Example for the auto-generated docs
-        json_schema_extra = {
-            "example": {
-                "run_type": "5k",
-                "duration_seconds": 1800,
-                "notes": "Felt great today! 🎉",
-                "completed_at": "2024-01-15T09:30:00",
-                "category": "outdoor"
-            }
-        }
+    mood: Optional[str] = Field(None, description="How the run felt: easy, good, tough, great")
 
 
 class RunUpdate(BaseModel):
@@ -80,15 +69,7 @@ class RunUpdate(BaseModel):
     duration_seconds: Optional[int] = Field(None, ge=0, description="How long the run took in seconds")
     notes: Optional[str] = Field(None, description="Optional notes about your run")
     category: Optional[str] = Field(None, description="Category: outdoor or treadmill")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "duration_seconds": 1650,
-                "notes": "Updated - actually felt even better!",
-                "category": "treadmill"
-            }
-        }
+    mood: Optional[str] = Field(None, description="How the run felt: easy, good, tough, great")
 
 
 class Celebration(BaseModel):
@@ -112,6 +93,7 @@ class RunResponse(BaseModel):
     distance_km: float
     completed_at: datetime
     notes: Optional[str]
+    mood: Optional[str] = None
     
     # 🎯 Calculated fields for the frontend
     pace_per_km: str = ""  # e.g., "6:30"
@@ -204,6 +186,9 @@ class WeeklyStreakProgress(BaseModel):
     current_streak: int
     longest_streak: int
     message: str
+    is_comeback: bool = False
+    weeks_away: int = 0
+    missed_last_week: bool = False
 
 
 # ==========================================
