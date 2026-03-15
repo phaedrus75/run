@@ -86,18 +86,16 @@ export default function ProfileClient({ handle }: { handle: string }) {
     if (token) authHeaders['Authorization'] = `Bearer ${token}`;
 
     async function loadProfile() {
-      let myHandle: string | null = null;
+      let meData: { handle?: string; name?: string; runner_level?: string; profile_privacy?: string; created_at?: string } | null = null;
 
       if (token) {
         try {
           const meRes = await fetch(`${API_BASE_URL}/user/me`, { headers: authHeaders });
-          if (meRes.ok) {
-            const me = await meRes.json();
-            myHandle = me.handle?.toLowerCase() || null;
-          }
+          if (meRes.ok) meData = await meRes.json();
         } catch {}
       }
 
+      const myHandle = meData?.handle?.toLowerCase() || null;
       const isOwnProfile = myHandle === handle.toLowerCase();
 
       try {
@@ -110,42 +108,73 @@ export default function ProfileClient({ handle }: { handle: string }) {
             return;
           }
           if (isOwnProfile) {
-            data.visible = true;
-            data.is_own_profile = true;
-            setState({ status: 'visible', data, token });
+            const fullData = await buildOwnProfile(handle, meData!, authHeaders);
+            setState({ status: 'visible', data: fullData, token });
             return;
           }
           setState({ status: 'circles', handle, isLoggedIn: !!token });
           return;
         }
 
-        if (res.status === 404 && isOwnProfile) {
-          setState({
-            status: 'visible',
-            data: {
-              privacy: 'private',
-              visible: true,
-              is_own_profile: true,
-              handle,
-              name: myHandle ? undefined : undefined,
-            },
-            token,
-          });
+        if (isOwnProfile) {
+          const fullData = await buildOwnProfile(handle, meData!, authHeaders);
+          setState({ status: 'visible', data: fullData, token });
           return;
         }
 
         setState({ status: 'private', handle });
       } catch {
         if (isOwnProfile) {
-          setState({
-            status: 'visible',
-            data: { privacy: 'private', visible: true, is_own_profile: true, handle },
-            token,
-          });
+          const fullData = await buildOwnProfile(handle, meData!, authHeaders);
+          setState({ status: 'visible', data: fullData, token });
           return;
         }
         setState({ status: 'private', handle });
       }
+    }
+
+    async function buildOwnProfile(
+      profileHandle: string,
+      me: { handle?: string; name?: string; runner_level?: string; profile_privacy?: string },
+      headers: Record<string, string>,
+    ): Promise<ProfileData> {
+      const [statsRes, streakRes, achievementsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/stats`, { headers }).catch(() => null),
+        fetch(`${API_BASE_URL}/streak`, { headers }).catch(() => null),
+        fetch(`${API_BASE_URL}/achievements`, { headers }).catch(() => null),
+      ]);
+
+      const stats = statsRes?.ok ? await statsRes.json() : {};
+      const streak = streakRes?.ok ? await streakRes.json() : {};
+      const achievements = achievementsRes?.ok ? await achievementsRes.json() : {};
+
+      const totalSeconds = stats.total_duration_seconds || 0;
+
+      return {
+        privacy: me.profile_privacy || 'private',
+        visible: true,
+        is_own_profile: true,
+        handle: profileHandle,
+        name: me.name,
+        runner_level: me.runner_level || 'breath',
+        total_runs: stats.total_runs || 0,
+        total_km: stats.total_km || 0,
+        total_hours: totalSeconds ? Math.round((totalSeconds / 3600) * 10) / 10 : 0,
+        current_streak: streak.current_streak || 0,
+        longest_streak: streak.longest_streak || 0,
+        outdoor_runs: stats.outdoor_runs,
+        outdoor_km: stats.outdoor_km,
+        treadmill_runs: stats.treadmill_runs,
+        treadmill_km: stats.treadmill_km,
+        monthly_summary: stats.monthly_summary,
+        scenic_photos: stats.scenic_photos,
+        scenic_runs: stats.scenic_runs,
+        achievements: (achievements.unlocked || []).map((a: { emoji: string; name: string; category: string }) => ({
+          emoji: a.emoji, name: a.name, category: a.category,
+        })),
+        achievements_count: achievements.unlocked_count || 0,
+        achievements_total: achievements.total || 0,
+      };
     }
 
     loadProfile();
