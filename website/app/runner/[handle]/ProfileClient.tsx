@@ -82,29 +82,73 @@ export default function ProfileClient({ handle }: { handle: string }) {
 
   useEffect(() => {
     const token = getCookie('zenrun_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authHeaders: Record<string, string> = {};
+    if (token) authHeaders['Authorization'] = `Bearer ${token}`;
 
-    fetch(`${API_BASE_URL}/profile/${handle}`, { headers })
-      .then(async (res) => {
-        if (res.status === 404) {
-          setState({ status: 'private', handle });
-          return;
-        }
-        if (!res.ok) {
-          setState({ status: 'private', handle });
-          return;
-        }
-        const data: ProfileData = await res.json();
-        if (!data.visible) {
+    async function loadProfile() {
+      let myHandle: string | null = null;
+
+      if (token) {
+        try {
+          const meRes = await fetch(`${API_BASE_URL}/user/me`, { headers: authHeaders });
+          if (meRes.ok) {
+            const me = await meRes.json();
+            myHandle = me.handle?.toLowerCase() || null;
+          }
+        } catch {}
+      }
+
+      const isOwnProfile = myHandle === handle.toLowerCase();
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/profile/${handle}`, { headers: authHeaders });
+
+        if (res.ok) {
+          const data: ProfileData = await res.json();
+          if (data.visible) {
+            setState({ status: 'visible', data, token });
+            return;
+          }
+          if (isOwnProfile) {
+            data.visible = true;
+            data.is_own_profile = true;
+            setState({ status: 'visible', data, token });
+            return;
+          }
           setState({ status: 'circles', handle, isLoggedIn: !!token });
-        } else {
-          setState({ status: 'visible', data, token });
+          return;
         }
-      })
-      .catch(() => {
+
+        if (res.status === 404 && isOwnProfile) {
+          setState({
+            status: 'visible',
+            data: {
+              privacy: 'private',
+              visible: true,
+              is_own_profile: true,
+              handle,
+              name: myHandle ? undefined : undefined,
+            },
+            token,
+          });
+          return;
+        }
+
         setState({ status: 'private', handle });
-      });
+      } catch {
+        if (isOwnProfile) {
+          setState({
+            status: 'visible',
+            data: { privacy: 'private', visible: true, is_own_profile: true, handle },
+            token,
+          });
+          return;
+        }
+        setState({ status: 'private', handle });
+      }
+    }
+
+    loadProfile();
   }, [handle]);
 
   if (state.status === 'loading') {
