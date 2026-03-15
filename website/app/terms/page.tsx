@@ -23,9 +23,9 @@ export default function TermsPage() {
         <section>
           <h2 className="text-xl font-bold text-gray-900 mb-3">2. Description of Service</h2>
           <p>
-            ZenRun is a mobile application that allows users to log running activities,
-            track personal records, build streaks, earn achievements, set goals, and
-            participate in social circles with other runners.
+            ZenRun is a running journal that allows users to log running activities,
+            track personal records, build rhythm, earn milestones, set goals, and
+            share their journey through circles and web profiles.
           </p>
         </section>
 

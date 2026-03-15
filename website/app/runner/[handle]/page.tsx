@@ -7,7 +7,7 @@ const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
 const LEVEL_META: Record<string, { name: string; emoji: string; color: string }> = {
   breath: { name: 'Breath', emoji: '🌱', color: '#4ECDC4' },
-  stride: { name: 'Stride', emoji: '🏃', color: '#FF6B6B' },
+  stride: { name: 'Stride', emoji: '🏃', color: '#E8756F' },
   flow:   { name: 'Flow',   emoji: '🌊', color: '#6C5CE7' },
   zen:    { name: 'Zen',    emoji: '🧘', color: '#1A1A1A' },
 };

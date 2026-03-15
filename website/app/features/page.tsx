@@ -17,8 +17,8 @@ const FEATURES = [
       },
       {
         icon: '🏃',
-        title: '6 Distances',
-        desc: '3K, 5K, 10K, 15K, 18K, and 21K. Outdoor or treadmill. That\'s the full list — because that\'s all you need.',
+        title: '9 Distances',
+        desc: '1K through 21K — including 1K, 2K, 3K, 5K, 8K, 10K, 15K, 18K, and 21K. Outdoor or treadmill. Pick the one that fits your day.',
       },
       {
         icon: '📝',
@@ -28,13 +28,13 @@ const FEATURES = [
     ],
   },
   {
-    category: 'Consistency & Streaks',
+    category: 'Rhythm & Consistency',
     philosophy: 'We reward showing up, not showing off.',
     items: [
       {
-        icon: '🔥',
-        title: 'Weekly Streaks',
-        desc: 'Run at least twice a week to keep your streak alive. Not pace. Not distance. Just presence. That\'s it.',
+        icon: '🌳',
+        title: 'Weekly Rhythm',
+        desc: 'Run at least twice a week to keep your rhythm going. Not pace. Not distance. Just presence. Miss a week? It\'s just a pause — you come back.',
       },
       {
         icon: '🎯',
@@ -44,7 +44,7 @@ const FEATURES = [
       {
         icon: '🎉',
         title: 'Quiet Celebrations',
-        desc: 'A small moment of confetti when you maintain a streak or hit a goal. No push notifications. No pressure.',
+        desc: 'A small moment of confetti when you maintain your rhythm or hit a goal. No push notifications. No pressure.',
       },
     ],
   },
@@ -54,8 +54,8 @@ const FEATURES = [
     items: [
       {
         icon: '🏆',
-        title: '50 Badges',
-        desc: 'Across 8 categories: milestones, distance, first completions, streaks, goals, and more. Every badge celebrates your journey.',
+        title: '100 Milestones',
+        desc: 'Across 8 categories: milestones, distance, first completions, rhythm, goals, and more. Every badge celebrates your journey.',
       },
       {
         icon: '⚡',
@@ -76,17 +76,17 @@ const FEATURES = [
       {
         icon: '👥',
         title: 'Circles',
-        desc: 'Private groups of up to 10 close friends. See who\'s been running. No strangers. No followers. No public profiles.',
+        desc: 'Private groups of up to 10 close friends with a live activity feed. See runs, reactions, and scenic photos. Accountability without competition.',
       },
       {
-        icon: '🏷️',
-        title: 'Your Handle',
-        desc: 'Claim a unique handle. It shows up in your circles. That\'s the extent of your public identity.',
+        icon: '🌐',
+        title: 'Web Profiles',
+        desc: 'Share your running journey on the web. Choose your privacy — private, visible to circles, or fully public. Your profile, your rules.',
       },
       {
         icon: '💬',
-        title: 'Shared Motivation',
-        desc: 'Knowing your friends are running too is the best motivation. No likes, no comments — just quiet mutual accountability.',
+        title: 'Reactions & Activity Feed',
+        desc: 'React to your circle members\' runs and milestones. Celebrate each other\'s journeys with quiet encouragement.',
       },
     ],
   },
@@ -113,7 +113,7 @@ const FEATURES = [
   },
   {
     category: 'Just Enough Data',
-    philosophy: 'Distance. Time. Streak. Goals. That\'s the full list.',
+    philosophy: 'Distance. Time. Rhythm. Goals. That\'s the full list.',
     items: [
       {
         icon: '👟',

@@ -6,10 +6,10 @@ import Image from 'next/image';
 export const metadata: Metadata = {
   title: 'ZenRun — Less tracking. More running.',
   description:
-    'A running app built for consistency, not competition. Log your run in 2 seconds, keep your streak alive, and get back to your life.',
+    'A running journal built for consistency, not competition. Log your run in 2 seconds, find your rhythm, and get back to your life.',
   openGraph: {
     title: 'ZenRun — Less tracking. More running.',
-    description: 'A running app built for consistency, not competition.',
+    description: 'A running journal built for consistency, not competition.',
     url: 'https://zenrun.co',
     siteName: 'ZenRun',
     type: 'website',
@@ -30,6 +30,9 @@ function Header() {
           </Link>
           <Link href="/support" className="text-sm font-medium text-gray-600 hover:text-coral transition-colors">
             Support
+          </Link>
+          <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-coral transition-colors">
+            Log in
           </Link>
           <a
             href="#download"
@@ -62,7 +65,7 @@ function Footer() {
               <span className="text-xl font-bold text-white">ZenRun</span>
             </div>
             <p className="text-sm leading-relaxed max-w-md">
-              Less tracking. More running. A running app built for consistency,
+              Less tracking. More running. A running journal built for consistency,
               not competition.
             </p>
           </div>
@@ -71,6 +74,7 @@ function Footer() {
             <ul className="space-y-3">
               <li><Link href="/features" className="text-sm hover:text-white transition-colors">Features</Link></li>
               <li><Link href="/support" className="text-sm hover:text-white transition-colors">Support</Link></li>
+              <li><Link href="/login" className="text-sm hover:text-white transition-colors">Log in</Link></li>
             </ul>
           </div>
           <div>

@@ -30,8 +30,8 @@ export default function PrivacyPage() {
           <p>Your data is used to:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li>Display your running statistics, personal records, and achievements</li>
-            <li>Calculate streaks, goals progress, and month-in-review summaries</li>
-            <li>Show your name and handle on circle leaderboards you join</li>
+            <li>Calculate rhythm, goals progress, and month-in-review summaries</li>
+            <li>Show your name and handle in circles you join</li>
             <li>Send password reset emails when you request them</li>
           </ul>
           <p>We do not sell, rent, or share your personal data with third parties for marketing purposes.</p>

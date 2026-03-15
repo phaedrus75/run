@@ -8,9 +8,9 @@ module.exports = {
     extend: {
       colors: {
         coral: {
-          DEFAULT: '#FF6B6B',
-          light: '#FF8E8E',
-          dark: '#E85555',
+          DEFAULT: '#E8756F',
+          light: '#F09A95',
+          dark: '#D0615B',
         },
         teal: {
           DEFAULT: '#4ECDC4',

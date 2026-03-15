@@ -12,9 +12,9 @@ export default function Home() {
                 <span className="text-coral">More running.</span>
               </h1>
               <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
-                Running apps turned running into a spreadsheet. ZenRun is the
-                opposite — log your run in 2 seconds, find your rhythm, and
-                get back to your life.
+                Running apps turned running into a spreadsheet. ZenRun is a
+                running journal — log your run in 2 seconds, find your rhythm,
+                and get back to your life.
               </p>
               <div id="download" className="flex flex-wrap gap-4">
                 <a
@@ -55,19 +55,19 @@ export default function Home() {
                     <div className="w-8 h-8 bg-gray-200 rounded-full" />
                   </div>
 
-                  {/* Streak card */}
+                  {/* Rhythm card */}
                   <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-gray-400">Your Rhythm</span>
-                      <span className="text-xs font-semibold text-[#4ECDC4]">Best: 8</span>
+                      <span className="text-xs font-semibold text-[#4ECDC4]">Longest: 8</span>
                     </div>
                     <div className="flex items-baseline gap-1.5 mb-2">
                       <span className="text-3xl font-extrabold text-gray-900">5</span>
                       <span className="text-sm text-gray-400">weeks</span>
                     </div>
                     <div className="flex gap-1">
-                      <div className="h-1.5 flex-1 bg-[#FF6B6B] rounded-full" />
-                      <div className="h-1.5 flex-1 bg-[#FF6B6B] rounded-full" />
+                      <div className="h-1.5 flex-1 bg-[#E8756F] rounded-full" />
+                      <div className="h-1.5 flex-1 bg-[#E8756F] rounded-full" />
                       <div className="h-1.5 flex-1 bg-gray-200 rounded-full" />
                     </div>
                     <p className="text-[11px] text-gray-400 mt-2">1 more run this week</p>
@@ -80,7 +80,7 @@ export default function Home() {
                       <span className="text-[10px] font-semibold text-[#4ECDC4] bg-[#4ECDC4]/10 px-2 py-0.5 rounded-full">On Track</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2.5 mb-1.5">
-                      <div className="bg-[#FF6B6B] h-2.5 rounded-full" style={{width: '38%'}} />
+                      <div className="bg-[#E8756F] h-2.5 rounded-full" style={{width: '38%'}} />
                     </div>
                     <div className="flex justify-between text-[11px] text-gray-400">
                       <span>380 km done</span>
@@ -100,7 +100,7 @@ export default function Home() {
                   </div>
 
                   {/* CTA button */}
-                  <div className="bg-[#FF6B6B] rounded-xl py-3 text-center mt-1">
+                  <div className="bg-[#E8756F] rounded-xl py-3 text-center mt-1">
                     <span className="text-white text-sm font-semibold">Log a run</span>
                   </div>
                 </div>
@@ -259,8 +259,8 @@ export default function Home() {
               },
               {
                 icon: '🏆',
-                title: '50 badges for your journey',
-                desc: 'Earn achievements for milestones in your running life — first 5K, 100th run, a year of consistency. Your journey, celebrated.',
+                title: '100 milestones for your journey',
+                desc: 'Earn achievements across your running life — first 5K, 100th run, a year of consistency, and beyond. Your journey, celebrated.',
               },
             ].map((item) => (
               <div
