@@ -20,7 +20,7 @@ You'll see interactive API documentation!
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 from typing import List, Optional
 import json
 
@@ -1676,9 +1676,10 @@ def get_public_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Public profile endpoint. Respects privacy settings."""
-    from models import CircleMembership
+    """Public profile endpoint. Respects privacy settings. Own profile always visible."""
+    from models import CircleMembership, RunPhoto
     from achievements import get_achievements
+    from collections import defaultdict
 
     handle = handle.strip().lower()
     profile_user = db.query(User).filter(User.handle == handle).first()
@@ -1686,22 +1687,24 @@ def get_public_profile(
         raise HTTPException(status_code=404, detail="Runner not found")
 
     privacy = getattr(profile_user, 'profile_privacy', 'private') or 'private'
+    is_own_profile = current_user is not None and current_user.id == profile_user.id
 
-    if privacy == "private":
-        raise HTTPException(status_code=404, detail="Runner not found")
+    if not is_own_profile:
+        if privacy == "private":
+            raise HTTPException(status_code=404, detail="Runner not found")
 
-    if privacy == "circles":
-        if not current_user:
-            return {"privacy": "circles", "handle": handle, "visible": False}
-        viewer_circles = {m.circle_id for m in db.query(CircleMembership).filter(
-            CircleMembership.user_id == current_user.id
-        ).all()}
-        profile_circles = {m.circle_id for m in db.query(CircleMembership).filter(
-            CircleMembership.user_id == profile_user.id
-        ).all()}
-        shared = viewer_circles & profile_circles
-        if not shared:
-            return {"privacy": "circles", "handle": handle, "visible": False}
+        if privacy == "circles":
+            if not current_user:
+                return {"privacy": "circles", "handle": handle, "visible": False, "is_own_profile": False}
+            viewer_circles = {m.circle_id for m in db.query(CircleMembership).filter(
+                CircleMembership.user_id == current_user.id
+            ).all()}
+            profile_circles = {m.circle_id for m in db.query(CircleMembership).filter(
+                CircleMembership.user_id == profile_user.id
+            ).all()}
+            shared = viewer_circles & profile_circles
+            if not shared:
+                return {"privacy": "circles", "handle": handle, "visible": False, "is_own_profile": False}
 
     stats = crud.get_stats_summary(db, user_id=profile_user.id)
     streak = crud.get_weekly_streak_progress(db, user_id=profile_user.id)
@@ -1718,9 +1721,37 @@ def get_public_profile(
     total_seconds = stats.get("total_duration_seconds", 0)
     total_hours = round(total_seconds / 3600, 1) if total_seconds else 0
 
+    min_date = datetime(2026, 1, 1)
+    all_runs = db.query(Run).filter(
+        Run.user_id == profile_user.id,
+        Run.completed_at >= min_date
+    ).order_by(Run.completed_at.desc()).all()
+
+    outdoor_runs = [r for r in all_runs if (r.category or "outdoor") == "outdoor"]
+    treadmill_runs = [r for r in all_runs if r.category == "treadmill"]
+
+    outdoor_km = round(sum(r.distance_km for r in outdoor_runs), 1)
+    treadmill_km = round(sum(r.distance_km for r in treadmill_runs), 1)
+
+    monthly_summary = defaultdict(lambda: {"runs": 0, "km": 0.0})
+    for r in all_runs:
+        key = r.completed_at.strftime("%Y-%m")
+        monthly_summary[key]["runs"] += 1
+        monthly_summary[key]["km"] += r.distance_km
+    monthly_list = [
+        {"month": k, "runs": v["runs"], "km": round(v["km"], 1)}
+        for k, v in sorted(monthly_summary.items(), reverse=True)
+    ][:6]
+
+    scenic_count = db.query(RunPhoto).filter(RunPhoto.user_id == profile_user.id).count()
+    scenic_runs_count = db.query(func.count(func.distinct(RunPhoto.run_id))).filter(
+        RunPhoto.user_id == profile_user.id
+    ).scalar() or 0
+
     return {
         "privacy": privacy,
         "visible": True,
+        "is_own_profile": is_own_profile,
         "handle": profile_user.handle,
         "name": profile_user.name,
         "runner_level": level,
@@ -1730,6 +1761,13 @@ def get_public_profile(
         "total_hours": total_hours,
         "current_streak": streak.get("current_streak", 0),
         "longest_streak": streak.get("longest_streak", 0),
+        "outdoor_runs": len(outdoor_runs),
+        "outdoor_km": outdoor_km,
+        "treadmill_runs": len(treadmill_runs),
+        "treadmill_km": treadmill_km,
+        "monthly_summary": monthly_list,
+        "scenic_photos": scenic_count,
+        "scenic_runs": scenic_runs_count,
         "achievements": [
             {"emoji": a["emoji"], "name": a["name"], "category": a["category"]}
             for a in achievements_data.get("unlocked", [])

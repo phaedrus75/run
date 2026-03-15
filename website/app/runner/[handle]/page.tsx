@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
-import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import PrivacyToggle from './PrivacyToggle';
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
@@ -32,9 +32,17 @@ function getRhythmStage(weeks: number) {
   return RHYTHM_STAGES[RHYTHM_STAGES.length - 1];
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatMonth(ym: string): string {
+  const [year, month] = ym.split('-');
+  return `${MONTH_NAMES[parseInt(month, 10) - 1]} ${year}`;
+}
+
 interface ProfileData {
   privacy: string;
   visible: boolean;
+  is_own_profile: boolean;
   handle: string;
   name?: string;
   runner_level?: string;
@@ -44,6 +52,13 @@ interface ProfileData {
   total_hours?: number;
   current_streak?: number;
   longest_streak?: number;
+  outdoor_runs?: number;
+  outdoor_km?: number;
+  treadmill_runs?: number;
+  treadmill_km?: number;
+  monthly_summary?: { month: string; runs: number; km: number }[];
+  scenic_photos?: number;
+  scenic_runs?: number;
   achievements?: { emoji: string; name: string; category: string }[];
   achievements_count?: number;
   achievements_total?: number;
@@ -91,7 +106,7 @@ export default async function RunnerProfilePage({ params }: { params: { handle: 
     return <CirclesProfile handle={params.handle} isLoggedIn={!!token} />;
   }
 
-  return <PublicProfile data={profile} />;
+  return <PublicProfile data={profile} token={token} />;
 }
 
 function PrivateProfile({ handle }: { handle: string }) {
@@ -140,16 +155,30 @@ function CirclesProfile({ handle, isLoggedIn }: { handle: string; isLoggedIn: bo
   );
 }
 
-function PublicProfile({ data }: { data: ProfileData }) {
+function PublicProfile({ data, token }: { data: ProfileData; token?: string }) {
   const level = LEVEL_META[data.runner_level || 'breath'] || LEVEL_META.breath;
   const rhythm = getRhythmStage(data.current_streak || 0);
   const memberSince = data.member_since
     ? new Date(data.member_since).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : null;
 
+  const totalRuns = data.total_runs || 0;
+  const outdoorRuns = data.outdoor_runs || 0;
+  const treadmillRuns = data.treadmill_runs || 0;
+  const outdoorPct = totalRuns > 0 ? Math.round((outdoorRuns / totalRuns) * 100) : 0;
+  const treadmillPct = totalRuns > 0 ? Math.round((treadmillRuns / totalRuns) * 100) : 0;
+
+  const monthlySummary = data.monthly_summary || [];
+  const maxMonthlyKm = Math.max(...monthlySummary.map((m) => m.km), 1);
+
   return (
     <section className="py-16 md:py-24">
       <div className="max-w-2xl mx-auto px-6">
+        {/* Own-profile privacy toggle */}
+        {data.is_own_profile && token && (
+          <PrivacyToggle currentPrivacy={data.privacy} token={token} />
+        )}
+
         {/* Header */}
         <div className="text-center mb-12">
           <div
@@ -171,12 +200,49 @@ function PublicProfile({ data }: { data: ProfileData }) {
           )}
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <StatCard value={data.total_runs || 0} label="runs" />
+        {/* Overview Stats */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <StatCard value={totalRuns} label="runs" />
           <StatCard value={`${data.total_km || 0}`} label="km" />
           <StatCard value={`${data.total_hours || 0}`} label="hours" />
         </div>
+
+        {/* Outdoor vs Treadmill */}
+        {totalRuns > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Outdoor vs Treadmill</h2>
+            <div className="flex gap-2 mb-4 h-3 rounded-full overflow-hidden bg-gray-100">
+              {outdoorPct > 0 && (
+                <div
+                  className="bg-teal rounded-full transition-all"
+                  style={{ width: `${outdoorPct}%` }}
+                />
+              )}
+              {treadmillPct > 0 && (
+                <div
+                  className="bg-coral rounded-full transition-all"
+                  style={{ width: `${treadmillPct}%` }}
+                />
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-teal shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">{outdoorRuns} runs · {data.outdoor_km || 0} km</div>
+                  <div className="text-xs text-gray-400">Outdoor ({outdoorPct}%)</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-coral shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">{treadmillRuns} runs · {data.treadmill_km || 0} km</div>
+                  <div className="text-xs text-gray-400">Treadmill ({treadmillPct}%)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Rhythm */}
         <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
@@ -197,6 +263,45 @@ function PublicProfile({ data }: { data: ProfileData }) {
             </div>
           </div>
         </div>
+
+        {/* Monthly Summary */}
+        {monthlySummary.length > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Monthly Summary</h2>
+            <div className="space-y-3">
+              {monthlySummary.map((m) => (
+                <div key={m.month} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400 w-16 shrink-0">{formatMonth(m.month)}</span>
+                  <div className="flex-1 h-6 bg-gray-50 rounded-full overflow-hidden relative">
+                    <div
+                      className="h-full bg-coral/20 rounded-full transition-all"
+                      style={{ width: `${Math.max((m.km / maxMonthlyKm) * 100, 4)}%` }}
+                    />
+                    <span className="absolute inset-0 flex items-center px-3 text-xs font-medium text-gray-700">
+                      {m.runs} runs · {m.km} km
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Scenic Runs */}
+        {(data.scenic_runs || 0) > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Scenic Runs</h2>
+            <div className="flex items-center gap-4">
+              <span className="text-4xl">📸</span>
+              <div>
+                <div className="text-lg font-bold text-gray-900">
+                  {data.scenic_photos} photos across {data.scenic_runs} runs
+                </div>
+                <p className="text-sm text-gray-500">Capturing the views, km by km.</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Achievements */}
         {data.achievements && data.achievements.length > 0 && (
@@ -223,15 +328,17 @@ function PublicProfile({ data }: { data: ProfileData }) {
         )}
 
         {/* CTA */}
-        <div className="text-center mt-12 pt-8 border-t border-gray-100">
-          <p className="text-gray-500 mb-4">Start your own running journey</p>
-          <Link
-            href="/#download"
-            className="inline-block bg-coral hover:bg-coral-dark text-white font-semibold px-8 py-3 rounded-xl transition-colors"
-          >
-            Download ZenRun
-          </Link>
-        </div>
+        {!data.is_own_profile && (
+          <div className="text-center mt-12 pt-8 border-t border-gray-100">
+            <p className="text-gray-500 mb-4">Start your own running journey</p>
+            <Link
+              href="/#download"
+              className="inline-block bg-coral hover:bg-coral-dark text-white font-semibold px-8 py-3 rounded-xl transition-colors"
+            >
+              Download ZenRun
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );
