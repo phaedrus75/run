@@ -40,10 +40,13 @@ import {
   WeekSummaryCard,
 } from '../components';
 import { MonthInReview } from '../components/MonthInReview';
+import { WeeklyReflection } from '../components/WeeklyReflection';
+import { RhythmPlant } from '../components/RhythmPlant';
 import { ScenicRunsModal } from './ScenicRunsScreen';
 import { 
   statsApi,
   levelApi,
+  reflectionsApi,
   type Stats, 
   type MotivationalMessage, 
   type WeeklyStreakProgress, 
@@ -94,6 +97,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [dailyWisdom, setDailyWisdom] = useState<DailyWisdom | null>(null);
   const [seasonalMarkers, setSeasonalMarkers] = useState<SeasonalMarker[]>([]);
   const [streakHistory, setStreakHistory] = useState<StreakPeriod[]>([]);
+  const [currentReflection, setCurrentReflection] = useState<{ has_reflection: boolean; reflection?: string; mood?: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -128,12 +132,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       
       // Fetch secondary data (graceful failure)
       try {
-        const [monthReviewData, wisdomData, markersData, historyData, levelData] = await Promise.all([
+        const [monthReviewData, wisdomData, markersData, historyData, levelData, reflectionData] = await Promise.all([
           statsApi.getMonthReview().catch(() => null),
           statsApi.getDailyWisdom().catch(() => null),
           statsApi.getSeasonalMarkers().catch(() => ({ markers: [] })),
           statsApi.getStreakHistory().catch(() => []),
           levelApi.get().catch(() => null),
+          reflectionsApi.getCurrent().catch(() => null),
         ]);
         
         if (levelData?.upgrade_eligible && levelData.next_level) {
@@ -163,6 +168,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         if (wisdomData) setDailyWisdom(wisdomData);
         setSeasonalMarkers(markersData?.markers || []);
         setStreakHistory(historyData || []);
+        if (reflectionData) setCurrentReflection(reflectionData);
       } catch (e) {
         console.log('Secondary data fetch partial failure');
       }
@@ -258,7 +264,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 style={styles.streakBadge}
                 onPress={() => setShowStreak(true)}
               >
-                <Text style={styles.streakEmoji}>{streakProgress.current_streak >= 26 ? '🌲' : streakProgress.current_streak >= 12 ? '🌳' : streakProgress.current_streak >= 4 ? '🌴' : streakProgress.current_streak >= 2 ? '🌿' : '🌱'}</Text>
+                <RhythmPlant weeks={streakProgress.current_streak} size="small" />
                 <Text style={styles.streakCount}>{streakProgress.current_streak}</Text>
               </TouchableOpacity>
             )}
@@ -324,7 +330,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.comebackEmoji}>👋</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.comebackTitle}>Welcome back.</Text>
-              <Text style={styles.comebackText}>The streak starts fresh. Good to see you.</Text>
+              <Text style={styles.comebackText}>Your rhythm starts fresh. Good to see you.</Text>
             </View>
           </View>
         )}
@@ -384,6 +390,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           kmThisWeek={stats?.km_this_week || 0}
         />
         
+        {/* Weekly Reflection */}
+        <WeeklyReflection
+          weekComplete={streakProgress?.is_complete || false}
+          existingReflection={currentReflection}
+          onSaved={() => reflectionsApi.getCurrent().then(setCurrentReflection).catch(() => {})}
+        />
+
         {/* Quick Action */}
         <TouchableOpacity
           style={[styles.startButton, shadows.medium]}

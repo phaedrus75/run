@@ -129,6 +129,7 @@ export interface Stats {
   km_this_week: number;
   runs_this_month: number;
   km_this_month: number;
+  total_duration_seconds: number;
 }
 
 export interface MotivationalMessage {
@@ -668,6 +669,22 @@ export function getDistance(runType: string): number {
   };
   return distances[runType] || 0;
 }
+
+// Weekly Reflections API
+export const reflectionsApi = {
+  getCurrent: (): Promise<{ has_reflection: boolean; reflection?: string; mood?: string }> => {
+    return apiFetch('/reflections/current');
+  },
+  save: (reflection: string, mood: string): Promise<any> => {
+    return apiFetch('/reflections', {
+      method: 'POST',
+      body: JSON.stringify({ reflection, mood }),
+    });
+  },
+  getAll: (): Promise<any[]> => {
+    return apiFetch('/reflections');
+  },
+};
 
 // Runner Level API
 export const levelApi = {

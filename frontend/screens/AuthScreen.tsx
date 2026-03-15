@@ -169,7 +169,7 @@ export default function AuthScreen() {
           <View style={styles.landingPillars}>
             <Text style={styles.pillarItem}>2-second logging</Text>
             <Text style={styles.pillarDot}>  ·  </Text>
-            <Text style={styles.pillarItem}>Streaks</Text>
+            <Text style={styles.pillarItem}>Rhythm</Text>
             <Text style={styles.pillarDot}>  ·  </Text>
             <Text style={styles.pillarItem}>Progress</Text>
           </View>

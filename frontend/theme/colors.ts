@@ -1,7 +1,7 @@
 export const colors = {
-  primary: '#C0816B',
-  primaryLight: '#D4A08E',
-  primaryDark: '#A66B55',
+  primary: '#E8756F',
+  primaryLight: '#F09A95',
+  primaryDark: '#D0615B',
   
   secondary: '#7BAFA6',
   secondaryLight: '#9DC5BE',
@@ -28,7 +28,7 @@ export const colors = {
   runTypes: {
     '1k': '#A8D8D0',
     '2k': '#8FB8D0',
-    '3k': '#C0816B',
+    '3k': '#E8756F',
     '5k': '#7BAFA6',
     '8k': '#8B7EC7',
     '10k': '#A89BD0',
@@ -38,11 +38,11 @@ export const colors = {
   } as Record<string, string>,
   
   gradients: {
-    primary: ['#C0816B', '#D4A08E'],
+    primary: ['#E8756F', '#F09A95'],
     secondary: ['#7BAFA6', '#9DC5BE'],
-    sunset: ['#C0816B', '#E8D5A3'],
+    sunset: ['#E8756F', '#E8D5A3'],
     ocean: ['#7BAFA6', '#A89BD0'],
-    warmth: ['#C0816B', '#C9907A'],
+    warmth: ['#E8756F', '#C9907A'],
   },
 };
 

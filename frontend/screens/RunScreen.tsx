@@ -50,7 +50,7 @@ const QUOTES = [
   { text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Aristotle" },
   { text: "The miracle isn't that I finished. The miracle is that I had the courage to start.", author: "John Bingham" },
   { text: "You showed up. That's what matters.", author: "ZenRun" },
-  { text: "Another run in the books. The streak continues.", author: "ZenRun" },
+  { text: "Another run in the books. The rhythm continues.", author: "ZenRun" },
   { text: "You didn't run to be fast. You ran to feel alive.", author: "ZenRun" },
   { text: "Consistency is the only metric that matters. You're building it.", author: "ZenRun" },
 ];

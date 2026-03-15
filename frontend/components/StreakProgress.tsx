@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
+import { RhythmPlant } from './RhythmPlant';
 
 interface StreakProgressProps {
   progress: {
@@ -25,9 +26,7 @@ export function StreakProgress({ progress }: StreakProgressProps) {
   return (
     <View style={[styles.container, shadows.small, is_complete && styles.containerComplete]}>
       <View style={styles.streakSection}>
-        <Text style={styles.fireEmoji}>
-          {current_streak >= 26 ? '🌲' : current_streak >= 12 ? '🌳' : current_streak >= 4 ? '🌴' : current_streak >= 2 ? '🌿' : '🌱'}
-        </Text>
+        <RhythmPlant weeks={current_streak} size="small" />
         <View style={styles.streakInfo}>
           <Text style={styles.streakNumber}>{current_streak}</Text>
           <Text style={styles.streakLabel}>week{current_streak !== 1 ? 's' : ''}</Text>
@@ -53,7 +52,7 @@ export function StreakProgress({ progress }: StreakProgressProps) {
 
       {longest_streak > current_streak && (
         <View style={styles.bestBadge}>
-          <Text style={styles.bestText}>Best: {longest_streak}</Text>
+          <Text style={styles.bestText}>Longest: {longest_streak}</Text>
         </View>
       )}
     </View>

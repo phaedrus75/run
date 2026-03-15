@@ -334,6 +334,31 @@ class RunPhoto(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class CircleFeedReaction(Base):
+    """Reactions on circle feed items (runs, check-ins)."""
+    __tablename__ = "circle_feed_reactions"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    circle_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    target_type = Column(String, nullable=False)  # "run" or "checkin"
+    target_id = Column(Integer, nullable=False)
+    emoji = Column(String, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class WeeklyReflection(Base):
+    """End-of-week reflection: how did this week feel?"""
+    __tablename__ = "weekly_reflections"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    week_start = Column(DateTime, nullable=False)
+    reflection = Column(String, nullable=True)
+    mood = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class PasswordResetToken(Base):
     """
     🔐 Password Reset Token - For forgot password flow

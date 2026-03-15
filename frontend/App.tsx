@@ -27,6 +27,7 @@ import { HistoryScreen } from './screens/HistoryScreen';
 import { AddRunScreen } from './screens/AddRunScreen';
 import { StatsScreen } from './screens/StatsScreen';
 import { CirclesScreen } from './screens/CirclesScreen';
+import { CircleSpaceScreen } from './screens/CircleSpaceScreen';
 import AuthScreen from './screens/AuthScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 
@@ -61,6 +62,18 @@ function HistoryStack() {
           headerTintColor: colors.primary,
         }}
       />
+    </Stack.Navigator>
+  );
+}
+
+/**
+ * CirclesStack - List + Space views
+ */
+function CirclesStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="CirclesList" component={CirclesScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -143,7 +156,7 @@ function MainTabs() {
       {/* 👥 Circles Tab */}
       <Tab.Screen 
         name="Circles" 
-        component={CirclesScreen}
+        component={CirclesStack}
         options={{ tabBarLabel: 'Circles' }}
       />
       

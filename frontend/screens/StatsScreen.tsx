@@ -342,7 +342,7 @@ export function StatsScreen() {
         />
         
         {/* Streak Progress */}
-        <Text style={styles.sectionTitle}>🌳 Weekly Streak</Text>
+        <Text style={styles.sectionTitle}>🌳 Your Rhythm</Text>
         {streakProgress && (
           <StreakProgress progress={streakProgress} />
         )}

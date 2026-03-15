@@ -41,8 +41,8 @@ export default function SupportPage() {
                 a: 'Go to the Run tab, pick your distance, enter your time, tap Save. Takes about 2 seconds.',
               },
               {
-                q: 'How do streaks work?',
-                a: 'Run at least twice in a week and your streak continues. Miss a week and it resets. Your longest streak is always saved.',
+                q: 'How does the rhythm work?',
+                a: 'Run at least twice in a week and your rhythm continues. Miss a week and it resets. Your longest rhythm is always saved.',
               },
               {
                 q: 'Can I change my handle?',

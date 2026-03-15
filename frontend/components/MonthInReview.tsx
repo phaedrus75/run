@@ -224,7 +224,7 @@ export function MonthInReview({ data, onDismiss }: Props) {
 
           {/* Streak */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🔥 Best Streak</Text>
+            <Text style={styles.sectionTitle}>🌳 Best Rhythm</Text>
             <View style={styles.streakRow}>
               <Text style={styles.streakValue}>{data.best_streak_in_month}</Text>
               <Text style={styles.streakLabel}>consecutive run days</Text>

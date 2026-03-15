@@ -601,7 +601,7 @@ MOTIVATIONAL_MESSAGES = [
 ]
 
 MILESTONE_MESSAGES = {
-    1: {"message": "First run logged. The streak starts now.", "emoji": "🎉", "achievement": "First Steps"},
+    1: {"message": "First run logged. Your rhythm starts now.", "emoji": "🎉", "achievement": "First Steps"},
     5: {"message": "5 runs in. The habit is forming.", "emoji": "🌱", "achievement": "Taking Root"},
     10: {"message": "10 runs. You're a runner now.", "emoji": "🏃", "achievement": "Double Digits"},
     25: {"message": "25 runs. Consistency is your superpower.", "emoji": "⭐", "achievement": "Quarter Century"},

@@ -26,7 +26,7 @@ import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto
+from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email,
@@ -1256,8 +1256,8 @@ def check_all_celebrations(db: Session, new_run: Run, current_user) -> list:
             if streak >= 3:
                 celebrations.append({
                     "type": "streak",
-                    "title": "🔥 Streak Extended!",
-                    "message": f"{streak} day streak! Keep it going!"
+                    "title": "🌳 Rhythm continues!",
+                    "message": "Your rhythm is growing!"
                 })
     
     # 3. 🎯 Monthly Goal Met Check
@@ -1307,7 +1307,7 @@ def format_plan_response(plan: WeeklyPlan) -> dict:
 # 👥 CIRCLES (SOCIAL FEATURES)
 # ==========================================
 
-from models import Circle, CircleMembership
+from models import Circle, CircleMembership, CircleFeedReaction
 import secrets
 
 @app.post("/circles")
@@ -1547,7 +1547,7 @@ def get_circle_details(
     if all_streaking and len(members) > 1:
         milestones.append({
             "type": "all_streaking",
-            "message": "Everyone's streak is alive this week",
+            "message": "Everyone's rhythm is alive this week",
         })
     
     # This week's check-ins
@@ -1935,6 +1935,312 @@ def get_circle_checkins(
         })
     
     return result
+
+
+# ==========================================
+# WEEKLY REFLECTIONS
+# ==========================================
+
+@app.post("/reflections")
+def save_reflection(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Save an end-of-week reflection."""
+    from datetime import datetime
+    now = datetime.now()
+    week_start, _ = crud.get_week_boundaries_for_date(now)
+
+    existing = db.query(WeeklyReflection).filter(
+        WeeklyReflection.user_id == current_user.id,
+        WeeklyReflection.week_start == week_start,
+    ).first()
+
+    reflection_text = (body.get("reflection") or "")[:200]
+    mood = body.get("mood") or ""
+
+    if existing:
+        existing.reflection = reflection_text
+        existing.mood = mood
+        db.commit()
+        return {"status": "updated"}
+    else:
+        r = WeeklyReflection(
+            user_id=current_user.id,
+            week_start=week_start,
+            reflection=reflection_text,
+            mood=mood,
+        )
+        db.add(r)
+        db.commit()
+        return {"status": "created"}
+
+
+@app.get("/reflections/current")
+def get_current_reflection(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Get this week's reflection if one exists."""
+    from datetime import datetime
+    now = datetime.now()
+    week_start, _ = crud.get_week_boundaries_for_date(now)
+
+    existing = db.query(WeeklyReflection).filter(
+        WeeklyReflection.user_id == current_user.id,
+        WeeklyReflection.week_start == week_start,
+    ).first()
+
+    if existing:
+        return {
+            "has_reflection": True,
+            "reflection": existing.reflection,
+            "mood": existing.mood,
+            "created_at": existing.created_at.isoformat() if existing.created_at else None,
+        }
+    return {"has_reflection": False}
+
+
+@app.get("/reflections")
+def get_all_reflections(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Get all reflections for the current user."""
+    reflections = db.query(WeeklyReflection).filter(
+        WeeklyReflection.user_id == current_user.id,
+    ).order_by(WeeklyReflection.week_start.desc()).all()
+
+    return [{
+        "week_start": r.week_start.isoformat() if r.week_start else None,
+        "reflection": r.reflection,
+        "mood": r.mood,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    } for r in reflections]
+
+
+# ==========================================
+# CIRCLE FEED, PHOTOS & REACTIONS
+# ==========================================
+
+ALLOWED_REACTION_EMOJIS = ["🌿", "👋", "🌊", "☀️", "🏔️"]
+
+
+def _verify_circle_membership(db: Session, circle_id: int, user_id: int):
+    membership = db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id,
+        CircleMembership.user_id == user_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this circle")
+    return membership
+
+
+def _get_reactions_for_items(db: Session, circle_id: int, target_type: str, target_ids: list, current_user_id: int):
+    """Build a dict of target_id -> [{ emoji, count, reacted }]"""
+    if not target_ids:
+        return {}
+    reactions = db.query(CircleFeedReaction).filter(
+        CircleFeedReaction.circle_id == circle_id,
+        CircleFeedReaction.target_type == target_type,
+        CircleFeedReaction.target_id.in_(target_ids),
+    ).all()
+    from collections import defaultdict
+    grouped = defaultdict(lambda: defaultdict(lambda: {"count": 0, "reacted": False}))
+    for r in reactions:
+        grouped[r.target_id][r.emoji]["count"] += 1
+        if r.user_id == current_user_id:
+            grouped[r.target_id][r.emoji]["reacted"] = True
+    result = {}
+    for tid, emojis in grouped.items():
+        result[tid] = [{"emoji": e, "count": d["count"], "reacted": d["reacted"]} for e, d in emojis.items()]
+    return result
+
+
+@app.get("/circles/{circle_id}/feed")
+def get_circle_feed(
+    circle_id: int,
+    limit: int = 30,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Activity feed for a circle: runs and check-ins merged chronologically."""
+    _verify_circle_membership(db, circle_id, current_user.id)
+
+    member_ids = [m.user_id for m in db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id
+    ).all()]
+
+    from datetime import datetime
+    min_date = datetime(2026, 1, 1)
+
+    runs = db.query(Run).filter(
+        Run.user_id.in_(member_ids),
+        Run.completed_at >= min_date
+    ).order_by(Run.completed_at.desc()).limit(limit).all()
+
+    checkins = db.query(CircleCheckin).filter(
+        CircleCheckin.circle_id == circle_id,
+    ).order_by(CircleCheckin.created_at.desc()).limit(limit).all()
+
+    run_reactions = _get_reactions_for_items(db, circle_id, "run", [r.id for r in runs], current_user.id)
+    checkin_reactions = _get_reactions_for_items(db, circle_id, "checkin", [c.id for c in checkins], current_user.id)
+
+    user_cache = {}
+    def get_user(uid):
+        if uid not in user_cache:
+            u = db.query(User).filter(User.id == uid).first()
+            user_cache[uid] = u
+        return user_cache[uid]
+
+    feed_items = []
+
+    for r in runs:
+        u = get_user(r.user_id)
+        photos = db.query(RunPhoto).filter(RunPhoto.run_id == r.id).all()
+        photo_list = [{"id": p.id, "photo_data": p.photo_data[:100] + "..." if len(p.photo_data) > 100 else p.photo_data, "caption": p.caption, "distance_marker_km": p.distance_marker_km} for p in photos]
+        has_photos = len(photos) > 0
+        pace_sec = r.duration_seconds / r.distance_km if r.distance_km > 0 else 0
+        pace_str = f"{int(pace_sec // 60)}:{int(pace_sec % 60):02d}"
+        feed_items.append({
+            "type": "run",
+            "id": r.id,
+            "user_name": u.name if u else "Runner",
+            "user_handle": u.handle if u else None,
+            "is_you": r.user_id == current_user.id,
+            "data": {
+                "distance": r.run_type.upper() if r.run_type else "",
+                "distance_km": r.distance_km,
+                "duration_seconds": r.duration_seconds,
+                "formatted_duration": f"{r.duration_seconds // 60}:{r.duration_seconds % 60:02d}",
+                "pace": pace_str,
+                "category": r.category or "outdoor",
+                "mood": r.mood,
+                "has_photos": has_photos,
+                "photo_count": len(photos),
+            },
+            "reactions": run_reactions.get(r.id, []),
+            "created_at": r.completed_at.isoformat() if r.completed_at else None,
+        })
+
+    for c in checkins:
+        u = get_user(c.user_id)
+        feed_items.append({
+            "type": "checkin",
+            "id": c.id,
+            "user_name": u.name if u else "Runner",
+            "user_handle": u.handle if u else None,
+            "is_you": c.user_id == current_user.id,
+            "data": {
+                "emoji": c.emoji,
+                "message": c.message,
+            },
+            "reactions": checkin_reactions.get(c.id, []),
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+
+    feed_items.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return feed_items[:limit]
+
+
+@app.get("/circles/{circle_id}/photos")
+def get_circle_photos(
+    circle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """All scenic photos from circle members' runs."""
+    _verify_circle_membership(db, circle_id, current_user.id)
+
+    member_ids = [m.user_id for m in db.query(CircleMembership).filter(
+        CircleMembership.circle_id == circle_id
+    ).all()]
+
+    from datetime import datetime
+    min_date = datetime(2026, 1, 1)
+
+    photos = db.query(RunPhoto).filter(
+        RunPhoto.user_id.in_(member_ids),
+        RunPhoto.created_at >= min_date,
+    ).order_by(RunPhoto.created_at.desc()).all()
+
+    user_cache = {}
+    def get_user(uid):
+        if uid not in user_cache:
+            u = db.query(User).filter(User.id == uid).first()
+            user_cache[uid] = u
+        return user_cache[uid]
+
+    run_cache = {}
+    def get_run(rid):
+        if rid not in run_cache:
+            r = db.query(Run).filter(Run.id == rid).first()
+            run_cache[rid] = r
+        return run_cache[rid]
+
+    result = []
+    for p in photos:
+        u = get_user(p.user_id)
+        r = get_run(p.run_id)
+        result.append({
+            "id": p.id,
+            "photo_data": p.photo_data,
+            "caption": p.caption,
+            "distance_marker_km": p.distance_marker_km,
+            "user_name": u.name if u else "Runner",
+            "run_distance": r.run_type.upper() if r else "",
+            "run_date": r.completed_at.isoformat() if r and r.completed_at else None,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+
+    return result
+
+
+@app.post("/circles/{circle_id}/feed/{item_type}/{item_id}/react")
+def toggle_reaction(
+    circle_id: int,
+    item_type: str,
+    item_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Toggle a reaction on a feed item."""
+    _verify_circle_membership(db, circle_id, current_user.id)
+
+    if item_type not in ("run", "checkin"):
+        raise HTTPException(status_code=400, detail="Invalid item type")
+
+    emoji = body.get("emoji", "")
+    if emoji not in ALLOWED_REACTION_EMOJIS:
+        raise HTTPException(status_code=400, detail=f"Emoji not allowed. Use one of: {ALLOWED_REACTION_EMOJIS}")
+
+    existing = db.query(CircleFeedReaction).filter(
+        CircleFeedReaction.circle_id == circle_id,
+        CircleFeedReaction.user_id == current_user.id,
+        CircleFeedReaction.target_type == item_type,
+        CircleFeedReaction.target_id == item_id,
+        CircleFeedReaction.emoji == emoji,
+    ).first()
+
+    if existing:
+        db.delete(existing)
+        db.commit()
+        return {"status": "removed"}
+    else:
+        reaction = CircleFeedReaction(
+            circle_id=circle_id,
+            user_id=current_user.id,
+            target_type=item_type,
+            target_id=item_id,
+            emoji=emoji,
+        )
+        db.add(reaction)
+        db.commit()
+        return {"status": "added"}
+
+
 # ==========================================
 # 📸 SCENIC RUNS (Photo Endpoints)
 # ==========================================

@@ -85,16 +85,16 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
   },
   {
     id: '2',
-    title: 'Consistency\nover speed.',
-    subtitle: 'What actually matters',
-    body: "We don't care about your splits. We care that you showed up. Run twice a week, keep your streak alive, build the habit. That's how real progress happens.",
+    title: 'Find your\nrhythm.',
+    subtitle: 'Your running rhythm',
+    body: "Run at least twice a week. That's your rhythm. Keep it going and watch it grow — research shows 66 days of consistency turns running into a habit that stays. No pressure. Just show up.",
     accent: colors.secondary,
   },
   {
     id: '3',
     title: 'Just enough\ndata.',
     subtitle: 'Progress without noise',
-    body: "Distance. Time. Streak. Goals. That's it. No heart rate graphs, no cadence charts, no GPS maps. Just a clean record of your running journey.",
+    body: "Distance. Time. Rhythm. Goals. That's it. No heart rate graphs, no cadence charts, no GPS maps. Just a clean record of your running journey.",
     accent: colors.primary,
   },
 ];

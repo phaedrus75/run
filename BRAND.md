@@ -79,9 +79,9 @@ The runners who improve year after year aren't the ones with the most data. They
 
 ZenRun exists for one reason: to help you build a consistent running habit and enjoy the process. We believe:
 
-1. **Consistency beats intensity.** A streak of regular runs matters more than any single performance. Our core mechanic -- the weekly streak -- rewards showing up twice a week, every week. Not pace. Not distance. Just presence.
+1. **Consistency beats intensity.** A rhythm of regular runs matters more than any single performance. Our core mechanic -- the weekly rhythm -- rewards showing up twice a week, every week. Not pace. Not distance. Just presence.
 
-2. **Simplicity is a feature, not a limitation.** Log a run in 2 seconds. See your streak. Check your monthly progress. That's it. We deliberately leave out the noise: no live pace tracking, no cadence analysis, no social feeds, no leaderboards against strangers.
+2. **Simplicity is a feature, not a limitation.** Log a run in 2 seconds. See your rhythm. Check your monthly progress. That's it. We deliberately leave out the noise: no live pace tracking, no cadence analysis, no social feeds, no leaderboards against strangers.
 
 3. **Celebration over comparison.** 50 achievement badges reward milestones in *your* journey -- your first 5K, your 100th run, your first year of consistency. Not how you rank against others.
 
@@ -91,16 +91,16 @@ ZenRun exists for one reason: to help you build a consistent running habit and e
 
 ---
 
-## The ZenRun Runner
+## The ZenRunner
 
-ZenRun is for the runner who:
+You are a ZenRunner if you:
 
-- Runs 2-5 times a week and wants to keep doing that for years
+- Run 2-5 times a week and want to keep doing that for years
 - Values the mental clarity of running as much as the physical fitness
-- Has felt the anxiety of tracking apps and wants something calmer
-- Cares about building a sustainable habit, not chasing a PR every week
-- Wants to share their journey with close friends, not perform for followers
-- Believes that the best run is the one you actually did
+- Have felt the anxiety of tracking apps and wants something calmer
+- Care about building a sustainable habit, not chasing a PR every week
+- Want to share your journey with close friends, not perform for followers
+- Believe that the best run is the one you actually did
 
 We're not for the runner optimising their 5K time by 3 seconds. We're not for the runner who needs VO2 max charts and lactate threshold estimates. Those runners are well-served by existing apps.
 

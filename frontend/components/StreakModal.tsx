@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import type { WeeklyStreakProgress, StreakPeriod } from '../services/api';
+import { RhythmPlant } from './RhythmPlant';
 
 interface StreakModalProps {
   visible: boolean;
@@ -46,7 +47,7 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
       <View style={styles.overlay}>
         <View style={[styles.modal, shadows.large]}>
           <View style={styles.header}>
-            <Text style={styles.title}>🌳 Weekly Streak</Text>
+            <Text style={styles.title}>🌳 Your Rhythm</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
@@ -54,15 +55,13 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.streakCard, is_complete && styles.streakCardComplete]}>
-              <Text style={styles.streakEmoji}>
-                {current_streak >= 26 ? '🌲' : current_streak >= 12 ? '🌳' : current_streak >= 4 ? '🌴' : current_streak >= 2 ? '🌿' : '🌱'}
-              </Text>
+              <RhythmPlant weeks={current_streak} size="large" />
               <Text style={styles.streakNumber}>{current_streak}</Text>
               <Text style={styles.streakLabel}>
-                week{current_streak !== 1 ? 's' : ''} streak
+                week{current_streak !== 1 ? 's' : ''}
               </Text>
               {longest_streak > current_streak && (
-                <Text style={styles.bestStreak}>Best: {longest_streak} weeks</Text>
+                <Text style={styles.bestStreak}>Longest: {longest_streak} weeks</Text>
               )}
               {longest_streak === current_streak && current_streak > 0 && (
                 <Text style={styles.bestStreakCurrent}>🌟 Personal Best!</Text>
@@ -100,7 +99,7 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
 
             {streakHistory.length > 0 && (
               <>
-                <Text style={styles.sectionTitle}>Streak History</Text>
+                <Text style={styles.sectionTitle}>Rhythm History</Text>
                 <View style={styles.timelineCard}>
                   {streakHistory.slice().reverse().map((streak, i) => {
                     const maxLen = Math.max(...streakHistory.map(s => s.length), 1);
@@ -137,7 +136,7 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
               </>
             )}
 
-            <Text style={styles.sectionTitle}>How Streaks Work</Text>
+            <Text style={styles.sectionTitle}>How Your Rhythm Works</Text>
             <View style={styles.rulesCard}>
               <Text style={styles.ruleText}>
                 ✅ Complete <Text style={styles.ruleBold}>2 runs of any distance</Text> each week

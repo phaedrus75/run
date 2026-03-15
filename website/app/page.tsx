@@ -13,7 +13,7 @@ export default function Home() {
               </h1>
               <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
                 Running apps turned running into a spreadsheet. ZenRun is the
-                opposite — log your run in 2 seconds, keep your streak alive, and
+                opposite — log your run in 2 seconds, find your rhythm, and
                 get back to your life.
               </p>
               <div id="download" className="flex flex-wrap gap-4">
@@ -58,7 +58,7 @@ export default function Home() {
                   {/* Streak card */}
                   <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-400">Weekly Streak</span>
+                      <span className="text-xs text-gray-400">Your Rhythm</span>
                       <span className="text-xs font-semibold text-[#4ECDC4]">Best: 8</span>
                     </div>
                     <div className="flex items-baseline gap-1.5 mb-2">
@@ -226,7 +226,7 @@ export default function Home() {
             <div className="bg-white rounded-2xl p-6">
               <div className="text-3xl font-extrabold text-coral mb-2">2x/week</div>
               <p className="text-sm text-gray-500">
-                The minimum frequency that maintains your aerobic base and streak
+                The minimum frequency that maintains your aerobic base and rhythm
               </p>
             </div>
           </div>
@@ -253,9 +253,9 @@ export default function Home() {
                 desc: 'Pick your distance, enter your time, done. No GPS needed. Run however you want, log it when you\'re back.',
               },
               {
-                icon: '🔥',
-                title: 'Streaks reward showing up',
-                desc: 'Run at least twice a week to keep your streak alive. Not pace. Not distance. Just presence.',
+                icon: '🌳',
+                title: 'Rhythm rewards showing up',
+                desc: 'Run at least twice a week to keep your rhythm going. Not pace. Not distance. Just presence.',
               },
               {
                 icon: '🏆',
@@ -308,7 +308,7 @@ export default function Home() {
               {
                 icon: '📊',
                 title: 'Just enough data',
-                desc: 'Distance. Time. Streak. Goals. Personal records. That\'s the full list. No cadence, no heart rate zones, no VO2 max.',
+                desc: 'Distance. Time. Rhythm. Goals. Personal records. That\'s the full list. No cadence, no heart rate zones, no VO2 max.',
               },
               {
                 icon: '🏃‍♂️',
