@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Link from 'next/link';
 import Image from 'next/image';
+import AuthNav from '../components/AuthNav';
 
 export const metadata: Metadata = {
   title: 'ZenRun — Less tracking. More running.',
@@ -31,9 +32,7 @@ function Header() {
           <Link href="/support" className="text-sm font-medium text-gray-600 hover:text-coral transition-colors">
             Support
           </Link>
-          <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-coral transition-colors">
-            Log in
-          </Link>
+          <AuthNav variant="header" />
           <a
             href="#download"
             className="text-sm font-semibold text-white bg-coral hover:bg-coral-dark px-5 py-2.5 rounded-full transition-colors"
@@ -41,7 +40,8 @@ function Header() {
             Download
           </a>
         </div>
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center gap-4">
+          <AuthNav variant="header" />
           <a
             href="#download"
             className="text-sm font-semibold text-white bg-coral px-4 py-2 rounded-full"
@@ -74,7 +74,7 @@ function Footer() {
             <ul className="space-y-3">
               <li><Link href="/features" className="text-sm hover:text-white transition-colors">Features</Link></li>
               <li><Link href="/support" className="text-sm hover:text-white transition-colors">Support</Link></li>
-              <li><Link href="/login" className="text-sm hover:text-white transition-colors">Log in</Link></li>
+              <li><AuthNav variant="footer" /></li>
             </ul>
           </div>
           <div>
