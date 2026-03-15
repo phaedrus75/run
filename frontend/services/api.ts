@@ -244,10 +244,11 @@ export const runApi = {
   /**
    * 📖 Get all runs
    */
-  getAll: (params?: { run_type?: string; limit?: number }): Promise<Run[]> => {
+  getAll: (params?: { run_type?: string; limit?: number; category?: string }): Promise<Run[]> => {
     const queryParams = new URLSearchParams();
     if (params?.run_type) queryParams.set('run_type', params.run_type);
     if (params?.limit) queryParams.set('limit', params.limit.toString());
+    if (params?.category) queryParams.set('category', params.category);
     
     const query = queryParams.toString();
     return apiFetch(`/runs${query ? `?${query}` : ''}`);
@@ -345,8 +346,9 @@ export const statsApi = {
   /**
    * 🏆 Get personal records
    */
-  getPersonalRecords: (): Promise<PersonalRecords> => {
-    return apiFetch('/personal-records');
+  getPersonalRecords: (category?: string): Promise<PersonalRecords> => {
+    const query = category ? `?category=${category}` : '';
+    return apiFetch(`/personal-records${query}`);
   },
 
   /**

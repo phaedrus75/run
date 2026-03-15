@@ -487,6 +487,7 @@ def get_runs(
     skip: int = 0, 
     limit: int = 100,
     run_type: str = None,
+    category: str = None,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
@@ -497,9 +498,10 @@ def get_runs(
     - skip: For pagination (skip first N records)
     - limit: Maximum records to return
     - run_type: Filter by type (3k, 5k, etc.)
+    - category: Filter by category (outdoor, treadmill)
     """
     user_id = current_user.id if current_user else None
-    runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type, user_id=user_id)
+    runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type, user_id=user_id, category=category)
     return [format_run_response(run) for run in runs]
 
 
@@ -651,6 +653,7 @@ def get_streak_progress(
 
 @app.get("/personal-records")
 def get_personal_records(
+    category: str = None,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
@@ -658,10 +661,11 @@ def get_personal_records(
     🏆 Get personal records for each distance for current user
     
     Returns fastest time for 3k, 5k, 10k, 15k, 18k, 21k
+    Optional category filter: outdoor, treadmill
     """
     from achievements import get_personal_records
     user_id = current_user.id if current_user else None
-    return get_personal_records(db, user_id=user_id)
+    return get_personal_records(db, user_id=user_id, category=category)
 
 
 @app.get("/goals")
@@ -1067,7 +1071,7 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
 
 def check_personal_best(db: Session, new_run: Run) -> tuple:
     """
-    🏆 Check if a new run is a personal best for the same user.
+    🏆 Check if a new run is a personal best for the same user and category.
     
     Returns (is_pr, pr_type) tuple.
     PR types: "fastest_3k", "fastest_5k", etc.
@@ -1075,13 +1079,14 @@ def check_personal_best(db: Session, new_run: Run) -> tuple:
     from datetime import datetime
     min_date = datetime(2026, 1, 1)
     
-    # Get all previous runs of the same type for the same user (excluding the new run)
+    run_category = getattr(new_run, 'category', 'outdoor') or 'outdoor'
+    
     query = db.query(Run).filter(
         Run.run_type == new_run.run_type,
         Run.id != new_run.id,
-        Run.completed_at >= min_date
+        Run.completed_at >= min_date,
+        Run.category == run_category
     )
-    # Filter by user if the run has a user_id
     if new_run.user_id is not None:
         query = query.filter(Run.user_id == new_run.user_id)
     previous_runs = query.all()

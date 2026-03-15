@@ -33,13 +33,15 @@ import {
 } from '../services/api';
 
 type ViewMode = 'week' | 'month' | 'all';
+type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
 
-// Only show data from 2026 onwards
 const MIN_YEAR = 2026;
 
 export function StatsScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [stats, setStats] = useState<Stats | null>(null);
+  const [allRuns, setAllRuns] = useState<Run[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -65,12 +67,12 @@ export function StatsScreen() {
       setStreakProgress(streakData);
       setStepsSummary(stepsData);
       
-      // Filter runs to only include 2026+
       const filteredRuns = runsData.filter(run => {
         const runDate = new Date(run.completed_at);
         return runDate.getFullYear() >= MIN_YEAR;
       });
-      setRuns(filteredRuns);
+      setAllRuns(filteredRuns);
+      setRuns(applyCategoryFilter(filteredRuns, categoryFilter));
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     } finally {
@@ -78,6 +80,15 @@ export function StatsScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  const applyCategoryFilter = (runsList: Run[], cat: CategoryFilter): Run[] => {
+    if (cat === 'all') return runsList;
+    return runsList.filter(r => (r.category || 'outdoor') === cat);
+  };
+
+  useEffect(() => {
+    setRuns(applyCategoryFilter(allRuns, categoryFilter));
+  }, [categoryFilter, allRuns]);
 
   useEffect(() => {
     fetchData();
@@ -208,7 +219,12 @@ export function StatsScreen() {
     return months;
   };
 
-  // 🎨 Render view mode tabs
+  const CATEGORIES: { key: CategoryFilter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'outdoor', label: 'Outdoor' },
+    { key: 'treadmill', label: 'Treadmill' },
+  ];
+
   const renderTabs = () => (
     <View style={styles.tabContainer}>
       {(['week', 'month', 'all'] as ViewMode[]).map(mode => (
@@ -219,6 +235,22 @@ export function StatsScreen() {
         >
           <Text style={[styles.tabText, viewMode === mode && styles.tabTextActive]}>
             {mode === 'week' ? 'Weekly' : mode === 'month' ? 'Monthly' : 'All Time'}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderCategoryFilter = () => (
+    <View style={styles.categoryRow}>
+      {CATEGORIES.map(({ key, label }) => (
+        <TouchableOpacity
+          key={key}
+          style={[styles.categoryPill, categoryFilter === key && styles.categoryPillActive]}
+          onPress={() => setCategoryFilter(key)}
+        >
+          <Text style={[styles.categoryPillText, categoryFilter === key && styles.categoryPillTextActive]}>
+            {label}
           </Text>
         </TouchableOpacity>
       ))}
@@ -521,6 +553,9 @@ export function StatsScreen() {
         {/* Tabs */}
         {renderTabs()}
 
+        {/* Category Filter */}
+        {renderCategoryFilter()}
+
         {/* Content */}
         {viewMode === 'week' && renderWeeklyView()}
         {viewMode === 'month' && renderMonthlyView()}
@@ -569,7 +604,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginBottom: spacing.lg,
+    gap: spacing.xs,
+  },
+  categoryPill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.textLight,
+  },
+  categoryPillActive: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
+  },
+  categoryPillText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+  },
+  categoryPillTextActive: {
+    color: colors.textOnPrimary,
   },
   tab: {
     flex: 1,

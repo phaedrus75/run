@@ -344,8 +344,8 @@ ACHIEVEMENTS = {
 }
 
 
-def get_personal_records(db: Session, user_id: int = None) -> dict:
-    """Get personal records for each distance."""
+def get_personal_records(db: Session, user_id: int = None, category: str = None) -> dict:
+    """Get personal records for each distance, optionally filtered by category."""
     min_date = datetime(2026, 1, 1)
     
     records = {}
@@ -356,6 +356,8 @@ def get_personal_records(db: Session, user_id: int = None) -> dict:
         )
         if user_id is not None:
             query = query.filter(Run.user_id == user_id)
+        if category is not None:
+            query = query.filter(Run.category == category)
         fastest = query.order_by(Run.duration_seconds.asc()).first()
         
         if fastest:

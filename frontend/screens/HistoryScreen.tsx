@@ -29,6 +29,7 @@ import { MonthInReview } from '../components/MonthInReview';
 import { runApi, statsApi, type Run, type MonthInReview as MonthInReviewType } from '../services/api';
 
 const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '18k', '21k'];
+type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
 
 interface HistoryScreenProps {
   navigation: any;
@@ -59,9 +60,9 @@ const getAvailableMonths = () => {
 };
 
 export function HistoryScreen({ navigation }: HistoryScreenProps) {
-  // 📊 State
   const [runs, setRuns] = useState<Run[]>([]);
   const [filter, setFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -88,10 +89,11 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     }
   };
   
-  // 📡 Fetch runs
   const fetchRuns = useCallback(async () => {
     try {
-      const params = filter === 'all' ? {} : { run_type: filter };
+      const params: { run_type?: string; category?: string } = {};
+      if (filter !== 'all') params.run_type = filter;
+      if (categoryFilter !== 'all') params.category = categoryFilter;
       const data = await runApi.getAll(params);
       setRuns(data);
     } catch (error) {
@@ -101,7 +103,7 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, [filter, categoryFilter]);
   
   useEffect(() => {
     fetchRuns();
@@ -249,6 +251,27 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
         {RUN_TYPES.map(renderFilterButton)}
       </View>
       
+      {/* Category Filter */}
+      <View style={styles.categoryFilterContainer}>
+        {(['all', 'outdoor', 'treadmill'] as CategoryFilter[]).map(cat => (
+          <TouchableOpacity
+            key={cat}
+            style={[
+              styles.categoryChip,
+              categoryFilter === cat && styles.categoryChipActive,
+            ]}
+            onPress={() => setCategoryFilter(cat)}
+          >
+            <Text style={[
+              styles.categoryChipText,
+              categoryFilter === cat && styles.categoryChipTextActive,
+            ]}>
+              {cat === 'all' ? 'All' : cat === 'outdoor' ? '🌳 Outdoor' : '🏋️ Treadmill'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      
       {/* 📊 Stats */}
       {renderHeader()}
       
@@ -360,6 +383,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+  },
+  categoryFilterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs,
+    gap: spacing.xs,
+  },
+  categoryChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.textLight,
+  },
+  categoryChipActive: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
+  },
+  categoryChipText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+  },
+  categoryChipTextActive: {
+    color: colors.textOnPrimary,
   },
   filterButton: {
     paddingHorizontal: spacing.md,

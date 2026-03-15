@@ -2,26 +2,76 @@
  * 🏆 PERSONAL RECORDS COMPONENT
  * ==============================
  * 
- * Shows fastest times for each distance.
+ * Shows fastest times for each distance with outdoor/treadmill toggle.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
-import type { PersonalRecords as PersonalRecordsType } from '../services/api';
+import { statsApi, type PersonalRecords as PersonalRecordsType } from '../services/api';
+
+type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
 
 interface PersonalRecordsProps {
   records: PersonalRecordsType;
 }
 
-export function PersonalRecords({ records }: PersonalRecordsProps) {
+export function PersonalRecords({ records: initialRecords }: PersonalRecordsProps) {
   const distances = ['3k', '5k', '10k', '15k', '18k', '21k'];
+  const [category, setCategory] = useState<CategoryFilter>('all');
+  const [records, setRecords] = useState<PersonalRecordsType>(initialRecords);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setRecords(initialRecords);
+  }, [initialRecords]);
+
+  const handleCategoryChange = async (newCategory: CategoryFilter) => {
+    if (newCategory === category) return;
+    setCategory(newCategory);
+    
+    if (newCategory === 'all') {
+      setRecords(initialRecords);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const data = await statsApi.getPersonalRecords(newCategory);
+      setRecords(data);
+    } catch (e) {
+      console.error('Failed to fetch category records:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const CATEGORIES: { key: CategoryFilter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'outdoor', label: 'Outdoor' },
+    { key: 'treadmill', label: 'Treadmill' },
+  ];
 
   return (
     <View style={[styles.container, shadows.small]}>
-      <Text style={styles.title}>🏆 Personal Records</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>🏆 Personal Records</Text>
+        <View style={styles.toggleRow}>
+          {CATEGORIES.map(({ key, label }) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.toggleBtn, category === key && styles.toggleBtnActive]}
+              onPress={() => handleCategoryChange(key)}
+            >
+              <Text style={[styles.toggleText, category === key && styles.toggleTextActive]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
       
-      <View style={styles.recordsGrid}>
+      <View style={[styles.recordsGrid, loading && { opacity: 0.5 }]}>
         {distances.map(distance => {
           const record = records[distance];
           const hasRecord = record != null;
@@ -62,11 +112,38 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   title: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
-    marginBottom: spacing.md,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: 2,
+  },
+  toggleBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs / 2,
+    borderRadius: radius.sm,
+  },
+  toggleBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  toggleText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+  },
+  toggleTextActive: {
+    color: colors.textOnPrimary,
   },
   recordsGrid: {
     flexDirection: 'row',

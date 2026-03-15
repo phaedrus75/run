@@ -80,7 +80,8 @@ def get_runs(
     skip: int = 0, 
     limit: int = 100,
     run_type: Optional[str] = None,
-    user_id: Optional[int] = None
+    user_id: Optional[int] = None,
+    category: Optional[str] = None
 ) -> List[Run]:
     """
     📖 Get a list of runs for a specific user
@@ -90,21 +91,18 @@ def get_runs(
         limit: Maximum number of records to return
         run_type: Optional filter by run type
         user_id: Filter by user ID (only show their runs)
-    
-    🎓 LEARNING:
-    - query() starts building a database query
-    - filter() adds WHERE conditions
-    - offset() and limit() handle pagination
-    - all() executes and returns results as a list
+        category: Optional filter by category (outdoor/treadmill)
     """
     query = db.query(Run)
     
-    # Filter by user if logged in
     if user_id is not None:
         query = query.filter(Run.user_id == user_id)
     
     if run_type:
         query = query.filter(Run.run_type == run_type)
+    
+    if category:
+        query = query.filter(Run.category == category)
     
     return query.order_by(Run.completed_at.desc()).offset(skip).limit(limit).all()
 
