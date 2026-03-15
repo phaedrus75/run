@@ -231,6 +231,13 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     # Create user
     user = create_user(db, user_data)
     
+    # Send welcome email (fire-and-forget, don't block signup)
+    try:
+        from email_service import send_welcome_email
+        send_welcome_email(user.email, user.name)
+    except Exception as e:
+        print(f"⚠️ Welcome email failed (non-blocking): {e}")
+
     # Create access token
     access_token = create_access_token(data={"sub": user.email})
     
@@ -275,25 +282,26 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
 def forgot_password(email: str, db: Session = Depends(get_db)):
     """
     🔐 Request a password reset code
-    
+
     Generates a 6-digit code that expires in 15 minutes.
-    Code is logged to server logs (check Railway logs to retrieve).
+    Sends the code via email using Resend.
     """
     import random
     from datetime import datetime, timedelta
-    
+    from email_service import send_password_reset
+
     user = get_user_by_email(db, email)
     if not user:
-        return {"message": "If an account exists with this email, a reset code has been generated"}
-    
+        return {"message": "If an account exists with this email, a reset code has been sent"}
+
     reset_code = str(random.randint(100000, 999999))
     expires_at = datetime.utcnow() + timedelta(minutes=15)
-    
+
     db.query(PasswordResetToken).filter(
         PasswordResetToken.email == email,
         PasswordResetToken.used == False
     ).update({"used": True})
-    
+
     reset_token = PasswordResetToken(
         user_id=user.id,
         email=email,
@@ -302,10 +310,10 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
     )
     db.add(reset_token)
     db.commit()
-    
-    print(f"🔐 PASSWORD RESET CODE for {email}: {reset_code} (expires in 15 min)")
-    
-    return {"message": "If an account exists with this email, a reset code has been generated"}
+
+    send_password_reset(email, reset_code)
+
+    return {"message": "If an account exists with this email, a reset code has been sent"}
 
 
 @app.post("/auth/reset-password")
