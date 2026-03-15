@@ -36,7 +36,6 @@ import {
   PersonalRecords,
   Achievements,
   GoalsProgress as GoalsProgressComponent,
-  ProfileModal,
   WeekSummaryCard,
 } from '../components';
 import { MonthInReview } from '../components/MonthInReview';
@@ -74,9 +73,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   // 🎊 Confetti ref
   const confettiRef = useRef<any>(null);
   const [showConfetti, setShowConfetti] = useState(false);
-  
-  // 👤 Profile modal state
-  const [showProfile, setShowProfile] = useState(false);
   
   // 🔥 Streak modal state
   const [showStreak, setShowStreak] = useState(false);
@@ -270,7 +266,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             )}
             <TouchableOpacity 
               style={styles.profileButton}
-              onPress={() => setShowProfile(true)}
+              onPress={() => navigation.navigate('Profile')}
             >
               <View style={styles.profileAvatar}>
                 <Text style={styles.profileAvatarText}>
@@ -442,11 +438,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onClose={() => setShowScenicRuns(false)}
       />
       
-      {/* 👤 Profile Modal */}
-      <ProfileModal 
-        visible={showProfile} 
-        onClose={() => setShowProfile(false)} 
-      />
       
       {/* 🔥 Streak Modal */}
       <StreakModal

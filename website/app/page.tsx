@@ -363,6 +363,35 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Founder Story */}
+      <section className="bg-warm-surface py-20 md:py-28">
+        <div className="max-w-3xl mx-auto px-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
+            Built by a runner who keeps starting over.
+          </h2>
+          <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
+            <p>
+              I&apos;ve started and stopped running more times than I can count.
+              I hardly ran at all in 2025. Then, at the beginning of 2026, I set
+              a simple goal: run 1,000km this year. Not for a race. Just to see
+              if the habit could finally stick.
+            </p>
+            <p>
+              I built ZenRun during the same period &mdash; alongside the runs,
+              through the weeks of motivation and the weeks I nearly quit again.
+              Every feature exists because I needed it. The shift from &ldquo;streaks&rdquo;
+              to &ldquo;rhythm&rdquo; came from my own experience: missing a week
+              felt like failure under a streak. Under a rhythm, it&apos;s just a
+              pause. You come back.
+            </p>
+            <p className="text-gray-900 font-semibold">
+              160km in, both the habit and the app are still going. ZenRun is a
+              running journal built by a runner who&apos;s still journaling.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="bg-gray-900 py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6 text-center">

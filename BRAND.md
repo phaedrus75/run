@@ -132,6 +132,22 @@ We're not for the runner optimising their 5K time by 3 seconds. We're not for th
 
 ---
 
+## The Founder Story
+
+ZenRun wasn't built in a product lab. It was built by a runner who knows what it's like to stop and start.
+
+The creator of ZenRun has been through the cycle that most runners know: stretches of motivation followed by months of nothing. Hardly a run in all of 2025. Then, at the start of 2026, a decision -- run 1,000km this year. Not for a race. Not for a time. Just to see if the habit could stick.
+
+2.5 months and 160km in, the habit is holding. Some weeks are strong. Some weeks are a fight to get out the door. The app was built during that same period, evolving alongside the runs -- through the ebb and flow of real motivation.
+
+The shift from "streaks" to "rhythm" wasn't a branding exercise. It came from lived experience. Streaks felt like pressure. Missing a week felt like failure. "Rhythm" reframed the same idea as something you return to, not something you break. That insight only came from being a runner using the app, not just building it.
+
+This is what makes ZenRun different from Strava, Nike Run Club, or any venture-backed fitness product: it was built by someone who has quit running more than once and keeps coming back. No focus groups. No growth hacking. Just a person learning to stay consistent and building the tool that helps them do it.
+
+**ZenRun is a running journal built by a runner who's still journaling.**
+
+---
+
 ## Inspirations and References
 
 | Source | Key Idea |

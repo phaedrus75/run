@@ -192,6 +192,9 @@ class User(Base):
     # 🏃 Runner level: breath, stride, flow, zen
     runner_level = Column(String, default="breath")
     
+    # 🔒 Profile privacy: private, circles, public
+    profile_privacy = Column(String, default="private")
+    
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
 

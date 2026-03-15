@@ -57,7 +57,11 @@ WHO IT'S FOR
 
 You run 2-5 times a week and want to keep doing that for years. You value the mental clarity of running as much as the fitness. You've felt the anxiety of tracking apps and want something calmer. You believe the best run is the one you actually did.
 
-Built on ideas from Born to Run, Murakami's What I Talk About When I Talk About Running, and the growing movement of runners leaving their GPS watches at home.
+BUILT BY A RUNNER, NOT A FITNESS COMPANY
+
+ZenRun was built by a runner who has started and stopped more times than they can count. Hardly ran in 2025. Set a goal of 1,000km in 2026. Built the app alongside the journey -- 160km and counting. Through the motivated weeks and the weeks they nearly quit again. No venture capital. No subscriptions. No ads. Just a runner building the tool they wished existed.
+
+Inspired by Born to Run, Murakami's What I Talk About When I Talk About Running, and the growing movement of runners leaving their GPS watches at home.
 
 Less tracking. More running.
 ```
@@ -159,25 +163,35 @@ Reddit is the best free channel for indie apps because the audience self-selects
 **Post template for r/running:**
 
 ```
-Title: I built a running app with no GPS, no leaderboards, and no pace alerts
+Title: I've started and stopped running more times than I can count. This year I'm trying something different.
 
-I've been running for [X years] and got tired of every app trying to turn my runs
-into a data science project. Strava made me sprint the last 200m just to fix my
-average pace. Garmin made me feel bad about my heart rate zones. I just wanted to
-log my run and find my rhythm.
+I hardly ran at all last year. Before that, the same pattern: a few good months,
+then nothing. Start, stop, start, stop. This January I set a goal -- 1,000km in
+2026. Not for a race. Just to see if the habit could finally stick.
 
-So I built ZenRun. Here's the philosophy:
+2.5 months in, I've done 160km. Some weeks were great. Some weeks I barely
+dragged myself out the door. I also built a running app during the same period --
+partly to keep myself accountable, partly because every existing app made running
+feel like homework.
 
-- Log a run in 2 seconds. Pick distance, enter time, done.
+Strava made me anxious about pace. Garmin made me feel bad about heart rate zones.
+I just wanted to log my run and move on. So I built ZenRun.
+
+What it does:
+- Log a run in 2 seconds. Pick distance, enter time, done. No GPS needed.
 - Weekly rhythm. Run twice a week, rhythm continues. That's it.
 - 100 milestone badges for your personal journey. No rankings.
 - Circles of up to 10 friends. Share your runs without competing.
 - No GPS. No live tracking. Run without your phone if you want.
 
-The science is clear: consistency matters more than any single workout. So that's
-all ZenRun tracks -- whether you showed up.
+The biggest lesson from my own journey: consistency is everything. The weeks I
+showed up -- even for short, slow runs -- I felt better than the weeks I skipped
+while "resting." The science backs this up. That's why the app only tracks one
+thing: did you show up?
 
-It's free, no ads, on iOS. Would love feedback from fellow runners.
+It's free, no ads, on iOS. Built by someone who has quit running more times than
+they can count and keeps coming back. Not a fitness company. Not a subscription.
+Just a runner building the tool they wish existed. Would love feedback.
 
 [App Store link]
 ```
@@ -202,18 +216,22 @@ It's free, no ads, on iOS. Would love feedback from fellow runners.
 **First comment (post as maker):**
 
 ```
-Hey Product Hunt! I'm [name], and I built ZenRun because I was tired of
-running apps that made running stressful.
+Hey Product Hunt! I've started and stopped running more times than I can count.
+Hardly ran at all last year. This January I set a goal: 1,000km in 2026. I
+built ZenRun alongside my own journey. 160km and 2.5 months later, both the
+habit and the app are still going.
 
-The insight is simple: research shows consistency is the #1 factor in running
-progress. Not pace, not VO2 max, not cadence. Just showing up regularly.
+The insight I kept coming back to: consistency is the only metric that matters.
+Not pace, not VO2 max, not cadence. Just showing up, week after week.
 
-So ZenRun only tracks what matters:
+Every existing running app made that harder, not easier. So ZenRun only tracks
+what matters:
 - Did you run this week? (rhythm)
 - How far have you come? (milestones)
 - Are your friends running too? (circles)
 
-Everything else is noise. Happy to answer any questions!
+Everything else is noise. The app is free, no ads, no subscriptions.
+Built by a runner who's still figuring it out. Happy to answer any questions!
 ```
 
 ### Day 3-5: Social Media
@@ -222,11 +240,11 @@ Everything else is noise. Happy to answer any questions!
 
 Post a 5-tweet thread:
 
-1. "I stopped using Strava 6 months ago and started running more. Here's why (and what I built instead):"
-2. The problem: running apps turned running into performance for an audience. Easy runs became embarrassing to post. Data anxiety replaced runner's high.
-3. The research: consistency > intensity. Runners who show up 2x/week for years beat runners who crush it for 3 months and burn out. Every time.
-4. So I built @ZenRunApp. Log a run in 2 seconds. Find your rhythm. Earn milestones. Share with friends. No GPS, no leaderboards, no noise.
-5. It's free on iOS. Link in bio. Would love to hear from runners who feel the same way.
+1. "I've started and stopped running more times than I can count. This January I set a goal: 1,000km. I also built an app. Here's the story:"
+2. I hardly ran last year. Every time I tried to come back, running apps made it worse. Strava showed me how slow I was. Garmin showed me how unfit I'd become. I just wanted to show up without judgment.
+3. The research is clear: consistency > intensity. Runners who show up 2x/week for years beat runners who crush it for 3 months and burn out. Every time.
+4. So I built @ZenRunApp. Log a run in 2 seconds. Find your rhythm. Earn milestones. Share with friends. No GPS, no leaderboards, no noise. Built while learning to run, not in a product lab.
+5. 160km in, both the habit and the app are still going. It's free on iOS, no ads, no subscriptions. Built by a runner still figuring it out. Link in bio.
 
 **Instagram:**
 
@@ -251,20 +269,24 @@ Send a short, personal email to indie app reviewers and running bloggers. Not a 
 **Email template:**
 
 ```
-Subject: A running app with no GPS, no leaderboards (genuinely different)
+Subject: I started running in January and built an app along the way
 
 Hi [name],
 
-I built a free iOS running app called ZenRun that takes the opposite approach
-to Strava/Nike Run Club. No GPS tracking, no live pace alerts, no social
-leaderboards. You log your run in 2 seconds after you're done, keep a weekly
-rhythm, and earn milestone badges.
+I've started and stopped running more times than I can count. Hardly ran at
+all last year. This January I set a goal -- 1,000km in 2026. 160km and 2.5
+months later, I've also built a running app called ZenRun.
 
-The philosophy comes from Born to Run and Murakami's running memoir -- the idea
-that consistency and joy matter more than metrics.
+It takes the opposite approach to Strava/Nike Run Club. No GPS tracking, no
+live pace alerts, no social leaderboards. You log your run in 2 seconds after
+you're done, keep a weekly rhythm, and earn milestone badges.
 
-Would you be open to trying it? Happy to share more context if it's a fit for
-[their blog/publication].
+I built it because every time I tried to come back to running, existing apps
+made it harder. They showed me how slow I was, how unfit I'd become. I just
+wanted something that rewarded showing up. The app evolved alongside my own
+running journey, through the good weeks and the weeks I nearly quit again.
+
+It's free, no ads, no subscription. Would love for you to try it.
 
 [Your name]
 [App Store link]

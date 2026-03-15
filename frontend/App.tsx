@@ -28,6 +28,7 @@ import { AddRunScreen } from './screens/AddRunScreen';
 import { StatsScreen } from './screens/StatsScreen';
 import { CirclesScreen } from './screens/CirclesScreen';
 import { CircleSpaceScreen } from './screens/CircleSpaceScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
 import AuthScreen from './screens/AuthScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 
@@ -62,6 +63,18 @@ function HistoryStack() {
           headerTintColor: colors.primary,
         }}
       />
+    </Stack.Navigator>
+  );
+}
+
+/**
+ * HomeStack - Home + Profile
+ */
+function HomeStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="HomeMain" component={HomeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -142,7 +155,7 @@ function MainTabs() {
       {/* 🏠 Home Tab */}
       <Tab.Screen 
         name="Home" 
-        component={HomeScreen}
+        component={HomeStack}
         options={{ tabBarLabel: 'Home' }}
       />
       

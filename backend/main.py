@@ -497,6 +497,17 @@ def set_user_level(level_data: dict, current_user: User = Depends(require_auth),
     }
 
 
+@app.put("/user/privacy")
+def set_user_privacy(body: dict, current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """Set the user's profile privacy level."""
+    privacy = body.get("privacy", "").lower()
+    if privacy not in ("private", "circles", "public"):
+        raise HTTPException(status_code=400, detail="Invalid privacy setting. Must be: private, circles, or public")
+    current_user.profile_privacy = privacy
+    db.commit()
+    return {"privacy": privacy}
+
+
 def _check_upgrade_eligibility(db: Session, user_id: int, max_distance: str) -> tuple:
     """Check if user has logged at least 1 run at max_distance in each of the last 4 weeks."""
     from datetime import datetime, timedelta
@@ -1599,6 +1610,7 @@ def get_current_user_info(
         "name": current_user.name,
         "handle": current_user.handle,
         "onboarding_complete": current_user.onboarding_complete,
+        "profile_privacy": getattr(current_user, 'profile_privacy', 'private') or 'private',
     }
 
 
@@ -1644,6 +1656,79 @@ def check_handle_available(
     handle = handle.strip().lower()
     existing = db.query(User).filter(User.handle == handle).first()
     return {"handle": handle, "available": existing is None}
+
+
+# ==========================================
+# 🌐 PUBLIC PROFILE
+# ==========================================
+
+@app.get("/profile/{handle}")
+def get_public_profile(
+    handle: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Public profile endpoint. Respects privacy settings."""
+    from models import CircleMembership
+    from achievements import get_achievements
+
+    handle = handle.strip().lower()
+    profile_user = db.query(User).filter(User.handle == handle).first()
+    if not profile_user:
+        raise HTTPException(status_code=404, detail="Runner not found")
+
+    privacy = getattr(profile_user, 'profile_privacy', 'private') or 'private'
+
+    if privacy == "private":
+        raise HTTPException(status_code=404, detail="Runner not found")
+
+    if privacy == "circles":
+        if not current_user:
+            return {"privacy": "circles", "handle": handle, "visible": False}
+        viewer_circles = {m.circle_id for m in db.query(CircleMembership).filter(
+            CircleMembership.user_id == current_user.id
+        ).all()}
+        profile_circles = {m.circle_id for m in db.query(CircleMembership).filter(
+            CircleMembership.user_id == profile_user.id
+        ).all()}
+        shared = viewer_circles & profile_circles
+        if not shared:
+            return {"privacy": "circles", "handle": handle, "visible": False}
+
+    stats = crud.get_stats_summary(db, user_id=profile_user.id)
+    streak = crud.get_weekly_streak_progress(db, user_id=profile_user.id)
+
+    level = getattr(profile_user, 'runner_level', 'breath') or 'breath'
+    from schemas import LEVEL_GOALS
+    level_goals = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
+    achievements_data = get_achievements(
+        db, stats, user_id=profile_user.id,
+        yearly_goal=level_goals["yearly_km"],
+        monthly_goal=level_goals["monthly_km"],
+    )
+
+    total_seconds = stats.get("total_duration_seconds", 0)
+    total_hours = round(total_seconds / 3600, 1) if total_seconds else 0
+
+    return {
+        "privacy": privacy,
+        "visible": True,
+        "handle": profile_user.handle,
+        "name": profile_user.name,
+        "runner_level": level,
+        "member_since": profile_user.created_at.isoformat() if profile_user.created_at else None,
+        "total_runs": stats.get("total_runs", 0),
+        "total_km": round(stats.get("total_km", 0), 1),
+        "total_hours": total_hours,
+        "current_streak": streak.get("current_streak", 0),
+        "longest_streak": streak.get("longest_streak", 0),
+        "achievements": [
+            {"emoji": a["emoji"], "name": a["name"], "category": a["category"]}
+            for a in achievements_data.get("unlocked", [])
+        ],
+        "achievements_count": achievements_data.get("unlocked_count", 0),
+        "achievements_total": achievements_data.get("total", 0),
+    }
 
 
 # ==========================================
