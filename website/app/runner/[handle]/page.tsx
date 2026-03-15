@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import PrivacyToggle from './PrivacyToggle';
+import OwnProfileFallback from './OwnProfileFallback';
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
@@ -99,11 +100,19 @@ export default async function RunnerProfilePage({ params }: { params: { handle: 
   const profile = await fetchProfile(params.handle, token);
 
   if (!profile) {
-    return <PrivateProfile handle={params.handle} />;
+    return (
+      <OwnProfileFallback handle={params.handle}>
+        <PrivateProfile handle={params.handle} />
+      </OwnProfileFallback>
+    );
   }
 
   if (!profile.visible) {
-    return <CirclesProfile handle={params.handle} isLoggedIn={!!token} />;
+    return (
+      <OwnProfileFallback handle={params.handle}>
+        <CirclesProfile handle={params.handle} isLoggedIn={!!token} />
+      </OwnProfileFallback>
+    );
   }
 
   return <PublicProfile data={profile} token={token} />;

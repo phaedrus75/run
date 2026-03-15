@@ -9,6 +9,39 @@
 
 ---
 
+## Positioning: Early Access, Built in the Open
+
+ZenRun is not a finished product being launched — it's a running journal being **built alongside its first users**. The app is being actively developed, and early users are not just customers; they're co-builders shaping what ZenRun becomes.
+
+This is the core message for launch and all outreach:
+
+> **ZenRun is in early access. We're building it in the open, and we want you to help shape it.**
+
+Every piece of copy — App Store description, Reddit posts, Product Hunt, emails — should make this clear. Early users should feel:
+
+1. **Ownership** — "My feedback actually changes the app."
+2. **Community** — "I'm part of a small group of early runners, not downloading another app from a faceless company."
+3. **Honesty** — "This is a real person building something real, and they're not pretending it's perfect."
+
+### How to weave this into every channel:
+
+- **App Store subtitle**: "Less tracking. More running." (stays — the philosophy doesn't change)
+- **App Store description**: Add an "EARLY ACCESS" section (see updated description below)
+- **Reddit posts**: Lead with "I'm building this and I need runners to tell me what's wrong"
+- **Product Hunt**: Frame as "early access, help me build this"
+- **Circles**: Position as the way early users stay connected and give feedback
+- **Web profiles**: Encourage early users to make profiles public — their journeys become social proof
+- **Support page / in-app**: Make it dead simple to share feedback (email, circle discussions)
+
+### What early users get:
+
+- They shape the roadmap — features they ask for get built
+- They're the founding members of the first circles
+- Their feedback is acknowledged and acted on visibly (changelog, in-app notes)
+- When ZenRun grows, they were there from the start
+
+---
+
 ## Week 1: Pre-Launch
 
 ### App Store Connect Setup
@@ -62,6 +95,12 @@ BUILT BY A RUNNER, NOT A FITNESS COMPANY
 ZenRun was built by a runner who has started and stopped more times than they can count. Hardly ran in 2025. Set a goal of 1,000km in 2026. Built the app alongside the journey -- 160km and counting. Through the motivated weeks and the weeks they nearly quit again. No venture capital. No subscriptions. No ads. Just a runner building the tool they wished existed.
 
 Inspired by Born to Run, Murakami's What I Talk About When I Talk About Running, and the growing movement of runners leaving their GPS watches at home.
+
+EARLY ACCESS — HELP BUILD ZENRUN
+
+ZenRun is being actively built and improved. You're not downloading a finished product -- you're joining a small group of early runners whose feedback directly shapes what ZenRun becomes. Features you ask for get built. Bugs you find get fixed. Your voice matters here.
+
+Share your thoughts at support@zenrun.co or in your circle. Every piece of feedback makes ZenRun better for the next runner.
 
 Less tracking. More running.
 ```
@@ -189,9 +228,12 @@ showed up -- even for short, slow runs -- I felt better than the weeks I skipped
 while "resting." The science backs this up. That's why the app only tracks one
 thing: did you show up?
 
-It's free, no ads, on iOS. Built by someone who has quit running more times than
-they can count and keeps coming back. Not a fitness company. Not a subscription.
-Just a runner building the tool they wish existed. Would love feedback.
+It's free, no ads, on iOS. Still early -- I'm building it in the open and want
+runners to help shape what it becomes. If something's missing or broken, I want
+to hear about it. Every feature so far came from my own running, and I'd love
+it to come from yours too.
+
+If you give it a try, I'm genuinely reading every email at support@zenrun.co.
 
 [App Store link]
 ```
@@ -231,7 +273,11 @@ what matters:
 - Are your friends running too? (circles)
 
 Everything else is noise. The app is free, no ads, no subscriptions.
-Built by a runner who's still figuring it out. Happy to answer any questions!
+
+This is early access -- I'm building ZenRun in the open and I want runners
+to help shape it. Features you ask for get built. Bugs you find get fixed.
+If you've ever felt overwhelmed by a running app, I'd love your feedback.
+Every email to support@zenrun.co gets read by me personally.
 ```
 
 ### Day 3-5: Social Media
@@ -244,7 +290,7 @@ Post a 5-tweet thread:
 2. I hardly ran last year. Every time I tried to come back, running apps made it worse. Strava showed me how slow I was. Garmin showed me how unfit I'd become. I just wanted to show up without judgment.
 3. The research is clear: consistency > intensity. Runners who show up 2x/week for years beat runners who crush it for 3 months and burn out. Every time.
 4. So I built @ZenRunApp. Log a run in 2 seconds. Find your rhythm. Earn milestones. Share with friends. No GPS, no leaderboards, no noise. Built while learning to run, not in a product lab.
-5. 160km in, both the habit and the app are still going. It's free on iOS, no ads, no subscriptions. Built by a runner still figuring it out. Link in bio.
+5. 160km in, both the habit and the app are still going. It's in early access on iOS -- free, no ads. I'm building it in the open and want runners to help shape it. Try it and tell me what's missing. Link in bio.
 
 **Instagram:**
 
@@ -286,7 +332,9 @@ made it harder. They showed me how slow I was, how unfit I'd become. I just
 wanted something that rewarded showing up. The app evolved alongside my own
 running journey, through the good weeks and the weeks I nearly quit again.
 
-It's free, no ads, no subscription. Would love for you to try it.
+It's free, no ads, no subscription. It's in early access right now -- I'm
+building it in the open and early users' feedback directly shapes what gets
+built next. Would love for you to try it and tell me what's missing.
 
 [Your name]
 [App Store link]
@@ -448,10 +496,12 @@ railway up
 
 ## Summary
 
-The ZenRun launch strategy relies on three things:
+The ZenRun launch strategy relies on four things:
 
 1. **A clear, contrarian position.** "Less tracking. More running." is a message that resonates emotionally with runners who feel overwhelmed by Strava/Garmin. Lead with the philosophy, not the features.
 
-2. **Authentic distribution.** Reddit maker posts, Product Hunt, and personal emails to bloggers. No paid ads. The $0 constraint is actually an advantage -- it forces genuine, human outreach that converts better than ads for niche apps.
+2. **Built in the open.** ZenRun is in early access. Every touchpoint should make it clear: this is a product being built alongside its first users, not a polished release from a faceless company. Early users shape the roadmap. Their feedback is heard and acted on. This turns users into advocates.
 
-3. **Retention over acquisition.** The rhythm mechanic and circles create natural return loops. A small, loyal user base that keeps coming back is worth more than thousands of downloads with 5% retention. Optimize for week-over-week rhythm activation, not day-1 downloads.
+3. **Authentic distribution.** Reddit maker posts, Product Hunt, and personal emails to bloggers. No paid ads. The $0 constraint is actually an advantage -- it forces genuine, human outreach that converts better than ads for niche apps.
+
+4. **Retention over acquisition.** The rhythm mechanic and circles create natural return loops. A small, loyal user base that keeps coming back is worth more than thousands of downloads with 5% retention. Optimize for week-over-week rhythm activation, not day-1 downloads.

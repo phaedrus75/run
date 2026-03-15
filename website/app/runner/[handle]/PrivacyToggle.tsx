@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
@@ -18,13 +17,14 @@ export default function PrivacyToggle({
   currentPrivacy: string;
   token: string;
 }) {
-  const router = useRouter();
   const [privacy, setPrivacy] = useState(currentPrivacy);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   async function changePrivacy(newPrivacy: string) {
     if (newPrivacy === privacy || saving) return;
     setSaving(true);
+    setSaved(false);
     try {
       const res = await fetch(`${API_BASE_URL}/user/privacy`, {
         method: 'PUT',
@@ -36,7 +36,8 @@ export default function PrivacyToggle({
       });
       if (res.ok) {
         setPrivacy(newPrivacy);
-        router.refresh();
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
       }
     } catch {}
     setSaving(false);
@@ -48,7 +49,9 @@ export default function PrivacyToggle({
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
           Profile Visibility
         </h2>
-        <span className="text-xs text-gray-400">This is your profile</span>
+        {saved
+          ? <span className="text-xs text-teal font-medium">Saved</span>
+          : <span className="text-xs text-gray-400">This is your profile</span>}
       </div>
       <div className="grid grid-cols-3 gap-2">
         {PRIVACY_OPTIONS.map((opt) => {
