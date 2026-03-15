@@ -40,3 +40,4 @@ yarn-error.log*
 *.apk
 *.aab
 *.ipa
+.vercel

@@ -1,66 +1,48 @@
-/**
- * 🎨 COLOR THEME
- * ==============
- * 
- * A vibrant, energetic color palette for a running app!
- * 
- * 🎓 LEARNING NOTES:
- * - Using a consistent color system makes your app look professional
- * - CSS variables (in web) or constant objects (in React Native) help maintain consistency
- * - We export these so any component can use them
- */
-
 export const colors = {
-  // 🌈 Primary - Energetic Coral/Salmon
-  primary: '#FF6B6B',
-  primaryLight: '#FF8E8E',
-  primaryDark: '#E85555',
+  primary: '#C0816B',
+  primaryLight: '#D4A08E',
+  primaryDark: '#A66B55',
   
-  // 🌟 Secondary - Fresh Teal
-  secondary: '#4ECDC4',
-  secondaryLight: '#7EDDD6',
-  secondaryDark: '#3DBDB5',
+  secondary: '#7BAFA6',
+  secondaryLight: '#9DC5BE',
+  secondaryDark: '#5E9990',
   
-  // 🎯 Accent - Sunny Yellow
-  accent: '#FFE66D',
-  accentDark: '#FFD93D',
+  accent: '#E8D5A3',
+  accentDark: '#D4BF85',
   
-  // 🌙 Background tones
-  background: '#FFF9F5',      // Warm off-white
+  background: '#FAF7F2',
   surface: '#FFFFFF',
-  surfaceAlt: '#FFF5F0',
+  surfaceAlt: '#F5F0EA',
   
-  // 📝 Text colors
-  text: '#2D3436',
-  textSecondary: '#636E72',
-  textLight: '#B2BEC3',
+  text: '#3D3D3D',
+  textSecondary: '#6B7280',
+  textLight: '#A8B0B8',
   textOnPrimary: '#FFFFFF',
   
-  // 🔲 Border
-  border: '#E8E8E8',
+  border: '#E5E1DB',
   
-  // 🎨 Status colors
-  success: '#00B894',
-  warning: '#FDCB6E',
-  error: '#E17055',
+  success: '#6BA386',
+  warning: '#D4BF85',
+  error: '#C97B6B',
   
-  // 🏃 Run type colors
   runTypes: {
-    '3k': '#FF6B6B',   // Coral
-    '5k': '#4ECDC4',   // Teal
-    '10k': '#A29BFE',  // Purple
-    '15k': '#FDCB6E',  // Yellow
-    '18k': '#FF7F50',  // Coral Orange
-    '21k': '#1A1A1A',  // Deep Black (Half Marathon)
+    '1k': '#A8D8D0',
+    '2k': '#8FB8D0',
+    '3k': '#C0816B',
+    '5k': '#7BAFA6',
+    '8k': '#8B7EC7',
+    '10k': '#A89BD0',
+    '15k': '#D4BF85',
+    '18k': '#C9907A',
+    '21k': '#3D3D3D',
   } as Record<string, string>,
   
-  // 🌊 Gradients (for LinearGradient)
   gradients: {
-    primary: ['#FF6B6B', '#FF8E8E'],
-    secondary: ['#4ECDC4', '#7EDDD6'],
-    sunset: ['#FF6B6B', '#FFE66D'],
-    ocean: ['#4ECDC4', '#A29BFE'],
-    fire: ['#FF6B6B', '#E17055'],
+    primary: ['#C0816B', '#D4A08E'],
+    secondary: ['#7BAFA6', '#9DC5BE'],
+    sunset: ['#C0816B', '#E8D5A3'],
+    ocean: ['#7BAFA6', '#A89BD0'],
+    warmth: ['#C0816B', '#C9907A'],
   },
 };
 

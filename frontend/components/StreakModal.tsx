@@ -46,7 +46,7 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
       <View style={styles.overlay}>
         <View style={[styles.modal, shadows.large]}>
           <View style={styles.header}>
-            <Text style={styles.title}>🔥 Weekly Streak</Text>
+            <Text style={styles.title}>🌳 Weekly Streak</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
@@ -54,7 +54,9 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={[styles.streakCard, is_complete && styles.streakCardComplete]}>
-              <Text style={styles.streakEmoji}>🔥</Text>
+              <Text style={styles.streakEmoji}>
+                {current_streak >= 26 ? '🌲' : current_streak >= 12 ? '🌳' : current_streak >= 4 ? '🌴' : current_streak >= 2 ? '🌿' : '🌱'}
+              </Text>
               <Text style={styles.streakNumber}>{current_streak}</Text>
               <Text style={styles.streakLabel}>
                 week{current_streak !== 1 ? 's' : ''} streak
@@ -63,7 +65,7 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
                 <Text style={styles.bestStreak}>Best: {longest_streak} weeks</Text>
               )}
               {longest_streak === current_streak && current_streak > 0 && (
-                <Text style={styles.bestStreakCurrent}>🏆 Personal Best!</Text>
+                <Text style={styles.bestStreakCurrent}>🌟 Personal Best!</Text>
               )}
             </View>
 

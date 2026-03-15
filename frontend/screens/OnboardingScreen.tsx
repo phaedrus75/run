@@ -19,15 +19,53 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
+import { levelApi } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+
+const LEVEL_GOAL_DEFAULTS: Record<string, { yearly: string; monthly: string }> = {
+  breath: { yearly: '250', monthly: '20' },
+  stride: { yearly: '500', monthly: '40' },
+  flow:   { yearly: '1000', monthly: '80' },
+};
+
+const LEVELS = [
+  {
+    key: 'breath',
+    name: 'Breath',
+    tagline: 'Every journey begins with a single breath',
+    distances: '1K  ·  2K  ·  3K  ·  5K',
+    description: 'Perfect for getting started or getting back into running.',
+    color: colors.secondary,
+    emoji: '🌱',
+  },
+  {
+    key: 'stride',
+    name: 'Stride',
+    tagline: "You've found your stride",
+    distances: '2K  ·  3K  ·  5K  ·  8K  ·  10K',
+    description: "You run regularly and want to push a little further.",
+    color: colors.primary,
+    emoji: '🏃',
+  },
+  {
+    key: 'flow',
+    name: 'Flow',
+    tagline: 'Running in flow',
+    distances: '3K  ·  5K  ·  8K  ·  10K  ·  15K  ·  18K  ·  21K',
+    description: 'Seasoned runner. From casual 3Ks to half marathons.',
+    color: '#6C5CE7',
+    emoji: '🌊',
+  },
+];
 
 interface OnboardingSlide {
   id: string;
@@ -68,11 +106,13 @@ interface OnboardingScreenProps {
 export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   const { refreshUser } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showLevelPicker, setShowLevelPicker] = useState(false);
+  const [selectedLevel, setSelectedLevel] = useState<string>('breath');
   const [showGoalSetup, setShowGoalSetup] = useState(false);
   const [handle, setHandle] = useState('');
   const [handleError, setHandleError] = useState('');
-  const [yearlyGoal, setYearlyGoal] = useState('1000');
-  const [monthlyGoal, setMonthlyGoal] = useState('100');
+  const [yearlyGoal, setYearlyGoal] = useState('250');
+  const [monthlyGoal, setMonthlyGoal] = useState('20');
   const [startWeight, setStartWeight] = useState('');
   const [goalWeight, setGoalWeight] = useState('');
   const [saving, setSaving] = useState(false);
@@ -84,11 +124,16 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
       setCurrentIndex(currentIndex + 1);
     } else {
-      setShowGoalSetup(true);
+      setShowLevelPicker(true);
     }
   };
 
   const handleSkip = () => {
+    setShowLevelPicker(true);
+  };
+
+  const handleLevelContinue = () => {
+    setShowLevelPicker(false);
     setShowGoalSetup(true);
   };
 
@@ -132,12 +177,14 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          yearly_km_goal: parseFloat(yearlyGoal) || 1000,
-          monthly_km_goal: parseFloat(monthlyGoal) || 100,
+          yearly_km_goal: parseFloat(yearlyGoal) || parseFloat(LEVEL_GOAL_DEFAULTS[selectedLevel]?.yearly || '250'),
+          monthly_km_goal: parseFloat(monthlyGoal) || parseFloat(LEVEL_GOAL_DEFAULTS[selectedLevel]?.monthly || '20'),
           start_weight_lbs: startWeight ? parseFloat(startWeight) : null,
           goal_weight_lbs: goalWeight ? parseFloat(goalWeight) : null,
         }),
       });
+      
+      await levelApi.set(selectedLevel);
       
       await fetch(`${API_BASE_URL}/user/complete-onboarding`, {
         method: 'POST',
@@ -200,6 +247,63 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
     </View>
   );
 
+  if (showLevelPicker) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.levelScrollContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.setupSubtitle}>Your running journey</Text>
+          <Text style={styles.setupTitle}>Where are you today?</Text>
+          <Text style={styles.setupDescription}>
+            Pick what feels right. This controls which distances you see. You can always change it later.
+          </Text>
+
+          {LEVELS.map(level => {
+            const isSelected = selectedLevel === level.key;
+            return (
+              <TouchableOpacity
+                key={level.key}
+                style={[
+                  styles.levelCard,
+                  isSelected && { borderColor: level.color, borderWidth: 2 },
+                  !isSelected && { borderColor: colors.border, borderWidth: 1 },
+                ]}
+                onPress={() => {
+                  setSelectedLevel(level.key);
+                  const defaults = LEVEL_GOAL_DEFAULTS[level.key];
+                  if (defaults) {
+                    setYearlyGoal(defaults.yearly);
+                    setMonthlyGoal(defaults.monthly);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.levelCardHeader}>
+                  <Text style={styles.levelEmoji}>{level.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.levelName}>{level.name}</Text>
+                    <Text style={styles.levelTagline}>{level.tagline}</Text>
+                  </View>
+                  <View style={[
+                    styles.levelRadio,
+                    isSelected && { backgroundColor: level.color, borderColor: level.color },
+                  ]}>
+                    {isSelected && <View style={styles.levelRadioInner} />}
+                  </View>
+                </View>
+                <Text style={styles.levelDistances}>{level.distances}</Text>
+                <Text style={styles.levelDescription}>{level.description}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        <TouchableOpacity style={styles.completeButton} onPress={handleLevelContinue}>
+          <Text style={styles.completeButtonText}>Continue</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   if (showGoalSetup) {
     return (
       <SafeAreaView style={styles.container}>
@@ -257,7 +361,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
                       value={yearlyGoal}
                       onChangeText={setYearlyGoal}
                       keyboardType="number-pad"
-                      placeholder="1000"
+                      placeholder={LEVEL_GOAL_DEFAULTS[selectedLevel]?.yearly || '250'}
                       placeholderTextColor={colors.textLight}
                     />
                     <Text style={styles.goalCardUnit}>km</Text>
@@ -272,7 +376,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
                       value={monthlyGoal}
                       onChangeText={setMonthlyGoal}
                       keyboardType="number-pad"
-                      placeholder="100"
+                      placeholder={LEVEL_GOAL_DEFAULTS[selectedLevel]?.monthly || '20'}
                       placeholderTextColor={colors.textLight}
                     />
                     <Text style={styles.goalCardUnit}>km</Text>
@@ -341,7 +445,10 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerBrand}>ZenRun</Text>
+        <View style={styles.headerBrandRow}>
+          <Image source={require('../assets/logo.png')} style={styles.headerLogo} />
+          <Text style={styles.headerBrand}>ZenRun</Text>
+        </View>
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
@@ -390,6 +497,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  headerBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headerLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
   },
   headerBrand: {
     fontSize: typography.sizes.lg,
@@ -613,5 +730,64 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+
+  // Level Picker
+  levelScrollContent: {
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl,
+  },
+  levelCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.small,
+  },
+  levelCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+  },
+  levelEmoji: {
+    fontSize: 32,
+  },
+  levelName: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  levelTagline: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  levelRadio: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#fff',
+  },
+  levelDistances: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.primary,
+    marginBottom: spacing.xs,
+    letterSpacing: 0.5,
+  },
+  levelDescription: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
 });

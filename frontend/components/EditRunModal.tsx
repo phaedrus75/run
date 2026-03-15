@@ -3,6 +3,7 @@
  * ==================
  * 
  * A modal for editing past runs.
+ * Outdoor runs can add/view/delete scenic photos tagged to distance markers.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -14,12 +15,17 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ScrollView,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from './RunTypeButton';
-import type { Run } from '../services/api';
+import { photoApi, levelApi, type Run, type RunPhoto } from '../services/api';
 
-const RUN_TYPES = ['3k', '5k', '10k', '15k', '18k', '21k'];
+const ALL_RUN_TYPES = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
 
 interface EditRunModalProps {
   visible: boolean;
@@ -30,6 +36,7 @@ interface EditRunModalProps {
 }
 
 export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRunModalProps) {
+  const [availableTypes, setAvailableTypes] = useState<string[]>(ALL_RUN_TYPES);
   const [runType, setRunType] = useState('');
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
@@ -37,7 +44,24 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   const [category, setCategory] = useState('outdoor');
   const [saving, setSaving] = useState(false);
 
-  // Update state when run changes
+  useEffect(() => {
+    if (visible) {
+      levelApi.get().then(data => {
+        if (data?.distances) setAvailableTypes(data.distances);
+      }).catch(() => {});
+    }
+  }, [visible]);
+
+  // Scenic photo state
+  const [photos, setPhotos] = useState<RunPhoto[]>([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [photoStep, setPhotoStep] = useState<'idle' | 'marker' | 'caption'>('idle');
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [pendingPhotoBase64, setPendingPhotoBase64] = useState<string | null>(null);
+  const [pendingMarker, setPendingMarker] = useState<number | null>(null);
+  const [pendingCaption, setPendingCaption] = useState('');
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
     if (run) {
       setRunType(run.run_type);
@@ -47,12 +71,108 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
       setSeconds(secs.toString());
       setNotes(run.notes || '');
       setCategory(run.category || 'outdoor');
+      resetPhotoFlow();
     }
   }, [run]);
 
+  useEffect(() => {
+    if (visible && run && (run.category || 'outdoor') === 'outdoor') {
+      fetchPhotos();
+    }
+  }, [visible, run]);
+
+  const fetchPhotos = async () => {
+    if (!run) return;
+    setLoadingPhotos(true);
+    try {
+      const data = await photoApi.getForRun(run.id);
+      setPhotos(data);
+    } catch {
+      setPhotos([]);
+    } finally {
+      setLoadingPhotos(false);
+    }
+  };
+
+  const resetPhotoFlow = () => {
+    setPhotoStep('idle');
+    setPendingPhotoUri(null);
+    setPendingPhotoBase64(null);
+    setPendingMarker(null);
+    setPendingCaption('');
+  };
+
+  const getDistanceMarkers = (): number[] => {
+    if (!run) return [];
+    const markers: number[] = [];
+    for (let km = 1; km <= run.distance_km; km++) {
+      markers.push(km);
+    }
+    return markers;
+  };
+
+  const pickPhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 800 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      setPendingPhotoUri(manipulated.uri);
+      setPendingPhotoBase64(manipulated.base64 || null);
+      setPhotoStep('marker');
+    }
+  };
+
+  const handleSelectMarker = (km: number) => {
+    setPendingMarker(km);
+    setPhotoStep('caption');
+  };
+
+  const handleUploadPhoto = async () => {
+    if (!run || !pendingPhotoBase64 || !pendingMarker) return;
+    setUploading(true);
+    try {
+      await photoApi.upload(run.id, {
+        photo_data: pendingPhotoBase64,
+        distance_marker_km: pendingMarker,
+        caption: pendingCaption.trim() || undefined,
+      });
+      resetPhotoFlow();
+      fetchPhotos();
+    } catch {
+      Alert.alert('Upload Failed', 'Could not upload photo. Try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeletePhoto = (photoId: number) => {
+    if (!run) return;
+    Alert.alert('Delete Photo?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await photoApi.delete(run.id, photoId);
+            setPhotos(prev => prev.filter(p => p.id !== photoId));
+          } catch {
+            Alert.alert('Error', 'Failed to delete photo');
+          }
+        },
+      },
+    ]);
+  };
+
   const handleSave = async () => {
     if (!run) return;
-    
     setSaving(true);
     try {
       const durationSeconds = (parseInt(minutes) || 0) * 60 + (parseInt(seconds) || 0);
@@ -72,7 +192,6 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
 
   const handleDelete = () => {
     if (!run) return;
-    
     Alert.alert(
       'Delete Run?',
       'This action cannot be undone.',
@@ -94,19 +213,26 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
     );
   };
 
+  const handleClose = () => {
+    resetPhotoFlow();
+    onClose();
+  };
+
   if (!run) return null;
+
+  const isOutdoor = category === 'outdoor';
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose}>
+          <TouchableOpacity onPress={handleClose}>
             <Text style={styles.cancelButton}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Edit Run</Text>
@@ -117,94 +243,194 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
           </TouchableOpacity>
         </View>
 
-        {/* Run Type Selection */}
-        <Text style={styles.label}>Distance</Text>
-        <View style={styles.typeRow}>
-          {RUN_TYPES.map(type => (
-            <RunTypeButton
-              key={type}
-              type={type}
-              size="small"
-              selected={runType === type}
-              onPress={() => setRunType(type)}
-            />
-          ))}
-        </View>
-
-        {/* Duration */}
-        <Text style={styles.label}>Duration</Text>
-        <View style={styles.durationRow}>
-          <View style={styles.durationInput}>
-            <TextInput
-              style={styles.input}
-              value={minutes}
-              onChangeText={setMinutes}
-              keyboardType="number-pad"
-              placeholder="0"
-              maxLength={3}
-            />
-            <Text style={styles.durationLabel}>min</Text>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* Run Type Selection */}
+          <Text style={styles.label}>Distance</Text>
+          <View style={styles.typeRow}>
+            {availableTypes.map(type => (
+              <RunTypeButton
+                key={type}
+                type={type}
+                size="small"
+                selected={runType === type}
+                onPress={() => setRunType(type)}
+              />
+            ))}
           </View>
-          <Text style={styles.colon}>:</Text>
-          <View style={styles.durationInput}>
-            <TextInput
-              style={styles.input}
-              value={seconds}
-              onChangeText={setSeconds}
-              keyboardType="number-pad"
-              placeholder="00"
-              maxLength={2}
-            />
-            <Text style={styles.durationLabel}>sec</Text>
+
+          {/* Duration */}
+          <Text style={styles.label}>Duration</Text>
+          <View style={styles.durationRow}>
+            <View style={styles.durationInput}>
+              <TextInput
+                style={styles.input}
+                value={minutes}
+                onChangeText={setMinutes}
+                keyboardType="number-pad"
+                placeholder="0"
+                maxLength={3}
+              />
+              <Text style={styles.durationLabel}>min</Text>
+            </View>
+            <Text style={styles.colon}>:</Text>
+            <View style={styles.durationInput}>
+              <TextInput
+                style={styles.input}
+                value={seconds}
+                onChangeText={setSeconds}
+                keyboardType="number-pad"
+                placeholder="00"
+                maxLength={2}
+              />
+              <Text style={styles.durationLabel}>sec</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Category */}
-        <Text style={styles.label}>Category</Text>
-        <View style={styles.categoryRow}>
-          <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              category === 'outdoor' && styles.categoryButtonActive,
-            ]}
-            onPress={() => setCategory('outdoor')}
-          >
-            <Text style={styles.categoryEmoji}>🌳</Text>
-            <Text style={[
-              styles.categoryText,
-              category === 'outdoor' && styles.categoryTextActive,
-            ]}>Outdoor</Text>
+          {/* Category */}
+          <Text style={styles.label}>Category</Text>
+          <View style={styles.categoryRow}>
+            <TouchableOpacity
+              style={[styles.categoryButton, category === 'outdoor' && styles.categoryButtonActive]}
+              onPress={() => setCategory('outdoor')}
+            >
+              <Text style={styles.categoryEmoji}>🌳</Text>
+              <Text style={[styles.categoryText, category === 'outdoor' && styles.categoryTextActive]}>Outdoor</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.categoryButton, category === 'treadmill' && styles.categoryButtonActive]}
+              onPress={() => setCategory('treadmill')}
+            >
+              <Text style={styles.categoryEmoji}>🏃</Text>
+              <Text style={[styles.categoryText, category === 'treadmill' && styles.categoryTextActive]}>Treadmill</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Notes */}
+          <Text style={styles.label}>Notes</Text>
+          <TextInput
+            style={[styles.input, styles.notesInput]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="How did the run feel?"
+            multiline
+            numberOfLines={3}
+          />
+
+          {/* Scenic Photos - outdoor only */}
+          {isOutdoor && (
+            <View style={styles.photosSection}>
+              <Text style={styles.label}>📸 Scenic Photos</Text>
+
+              {loadingPhotos ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
+              ) : (
+                <>
+                  {/* Existing photos */}
+                  {photos.length > 0 && (
+                    <View style={styles.photosGrid}>
+                      {photos.map(photo => (
+                        <View key={photo.id} style={styles.photoThumbWrap}>
+                          <Image
+                            source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
+                            style={styles.photoThumb}
+                          />
+                          <View style={styles.photoThumbOverlay}>
+                            <Text style={styles.photoThumbMarker}>{photo.distance_marker_km}K</Text>
+                            <TouchableOpacity
+                              style={styles.photoDeleteBtn}
+                              onPress={() => handleDeletePhoto(photo.id)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Text style={styles.photoDeleteText}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                          {photo.caption ? (
+                            <Text style={styles.photoThumbCaption} numberOfLines={1}>{photo.caption}</Text>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Photo flow: idle -> pick -> marker -> caption -> upload */}
+                  {photoStep === 'idle' && (
+                    <TouchableOpacity style={styles.addPhotoBtn} onPress={pickPhoto}>
+                      <Text style={styles.addPhotoBtnText}>
+                        {photos.length > 0 ? '+ Add another photo' : '+ Add a scenic photo'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {photoStep === 'marker' && pendingPhotoUri && (
+                    <View style={styles.flowSection}>
+                      <Image source={{ uri: pendingPhotoUri }} style={styles.previewImage} />
+                      <Text style={styles.flowLabel}>Where was this taken?</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View style={styles.markerRow}>
+                          {getDistanceMarkers().map(km => (
+                            <TouchableOpacity
+                              key={km}
+                              style={[styles.markerChip, pendingMarker === km && styles.markerChipActive]}
+                              onPress={() => handleSelectMarker(km)}
+                            >
+                              <Text style={[styles.markerChipText, pendingMarker === km && styles.markerChipTextActive]}>
+                                {km}K
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </ScrollView>
+                      <TouchableOpacity style={styles.flowCancelBtn} onPress={resetPhotoFlow}>
+                        <Text style={styles.flowCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {photoStep === 'caption' && pendingPhotoUri && (
+                    <View style={styles.flowSection}>
+                      <View style={styles.captionRow}>
+                        <Image source={{ uri: pendingPhotoUri }} style={styles.previewSmall} />
+                        <View style={{ flex: 1, marginLeft: spacing.md }}>
+                          <Text style={styles.captionMarkerTag}>📍 At the {pendingMarker}K mark</Text>
+                          <TextInput
+                            style={styles.captionInput}
+                            placeholder="Caption (optional)"
+                            placeholderTextColor={colors.textLight}
+                            value={pendingCaption}
+                            onChangeText={setPendingCaption}
+                            maxLength={80}
+                            returnKeyType="done"
+                          />
+                        </View>
+                      </View>
+                      <View style={styles.flowButtons}>
+                        <TouchableOpacity style={styles.flowCancelBtn} onPress={resetPhotoFlow}>
+                          <Text style={styles.flowCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.uploadBtn}
+                          onPress={handleUploadPhoto}
+                          disabled={uploading}
+                        >
+                          {uploading ? (
+                            <ActivityIndicator size="small" color={colors.textOnPrimary} />
+                          ) : (
+                            <Text style={styles.uploadBtnText}>Save photo</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
+          {/* Delete Button */}
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+            <Text style={styles.deleteButtonText}>🗑️ Delete Run</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              category === 'treadmill' && styles.categoryButtonActive,
-            ]}
-            onPress={() => setCategory('treadmill')}
-          >
-            <Text style={styles.categoryEmoji}>🏃</Text>
-            <Text style={[
-              styles.categoryText,
-              category === 'treadmill' && styles.categoryTextActive,
-            ]}>Treadmill</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Notes */}
-        <Text style={styles.label}>Notes</Text>
-        <TextInput
-          style={[styles.input, styles.notesInput]}
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="How did the run feel?"
-          multiline
-          numberOfLines={3}
-        />
-
-        {/* Delete Button */}
-        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-          <Text style={styles.deleteButtonText}>🗑️ Delete Run</Text>
-        </TouchableOpacity>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -215,6 +441,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     padding: spacing.lg,
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
@@ -331,5 +560,168 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     color: colors.error,
     fontWeight: typography.weights.medium,
+  },
+
+  // Scenic photo styles
+  photosSection: {
+    marginTop: spacing.sm,
+  },
+  photosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  photoThumbWrap: {
+    width: 100,
+  },
+  photoThumb: {
+    width: 100,
+    height: 100,
+    borderRadius: radius.md,
+  },
+  photoThumbOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 4,
+  },
+  photoThumbMarker: {
+    backgroundColor: colors.primary,
+    color: colors.textOnPrimary,
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  photoDeleteBtn: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoDeleteText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  photoThumbCaption: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+  addPhotoBtn: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary + '40',
+    borderStyle: 'dashed',
+  },
+  addPhotoBtnText: {
+    color: colors.primary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+  },
+  flowSection: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
+  previewImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+  },
+  flowLabel: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.semibold,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  markerRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingBottom: spacing.sm,
+  },
+  markerChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.textLight,
+  },
+  markerChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  markerChipText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: colors.textSecondary,
+  },
+  markerChipTextActive: {
+    color: colors.textOnPrimary,
+  },
+  captionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  previewSmall: {
+    width: 70,
+    height: 70,
+    borderRadius: radius.md,
+  },
+  captionMarkerTag: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    fontWeight: typography.weights.medium,
+    marginBottom: spacing.xs,
+  },
+  captionInput: {
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+  },
+  flowButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  flowCancelBtn: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  flowCancelText: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
+  },
+  uploadBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  uploadBtnText: {
+    color: colors.textOnPrimary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
   },
 });

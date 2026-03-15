@@ -25,7 +25,9 @@ export function StreakProgress({ progress }: StreakProgressProps) {
   return (
     <View style={[styles.container, shadows.small, is_complete && styles.containerComplete]}>
       <View style={styles.streakSection}>
-        <Text style={styles.fireEmoji}>🔥</Text>
+        <Text style={styles.fireEmoji}>
+          {current_streak >= 26 ? '🌲' : current_streak >= 12 ? '🌳' : current_streak >= 4 ? '🌴' : current_streak >= 2 ? '🌿' : '🌱'}
+        </Text>
         <View style={styles.streakInfo}>
           <Text style={styles.streakNumber}>{current_streak}</Text>
           <Text style={styles.streakLabel}>week{current_streak !== 1 ? 's' : ''}</Text>

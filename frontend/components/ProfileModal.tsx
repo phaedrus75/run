@@ -21,8 +21,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
+import { levelApi } from '../services/api';
 
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+
+const LEVEL_META: Record<string, { name: string; emoji: string; color: string; tagline: string }> = {
+  breath: { name: 'Breath', emoji: '🌱', color: '#4ECDC4', tagline: 'Every journey begins with a single breath' },
+  stride: { name: 'Stride', emoji: '🏃', color: '#FF6B6B', tagline: "You've found your stride" },
+  flow: { name: 'Flow', emoji: '🌊', color: '#6C5CE7', tagline: 'Running in flow' },
+  zen: { name: 'Zen', emoji: '🧘', color: '#1A1A1A', tagline: 'Pure running, pure zen' },
+};
+
+const LEVEL_GOAL_DEFAULTS: Record<string, { yearly: string; monthly: string }> = {
+  breath: { yearly: '250', monthly: '20' },
+  stride: { yearly: '500', monthly: '40' },
+  flow:   { yearly: '1000', monthly: '80' },
+  zen:    { yearly: '1000', monthly: '80' },
+};
 
 interface ProfileModalProps {
   visible: boolean;
@@ -50,16 +65,43 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
   // Goals state
   const [startWeight, setStartWeight] = useState('');
   const [goalWeight, setGoalWeight] = useState('');
-  const [yearlyGoal, setYearlyGoal] = useState('1000');
-  const [monthlyGoal, setMonthlyGoal] = useState('100');
+  const [yearlyGoal, setYearlyGoal] = useState('250');
+  const [monthlyGoal, setMonthlyGoal] = useState('20');
+  
+  // Level state
+  const [currentLevel, setCurrentLevel] = useState('breath');
+  const [showLevelPicker, setShowLevelPicker] = useState(false);
 
-  // Fetch current goals and handle when modal opens
   useEffect(() => {
     if (visible) {
       fetchGoals();
       fetchHandle();
+      fetchLevel();
     }
   }, [visible]);
+
+  async function fetchLevel() {
+    try {
+      const data = await levelApi.get();
+      if (data?.level) setCurrentLevel(data.level);
+    } catch {}
+  }
+
+  async function changeLevel(newLevel: string) {
+    try {
+      await levelApi.set(newLevel);
+      setCurrentLevel(newLevel);
+      setShowLevelPicker(false);
+      const defaults = LEVEL_GOAL_DEFAULTS[newLevel];
+      if (defaults) {
+        setYearlyGoal(defaults.yearly);
+        setMonthlyGoal(defaults.monthly);
+      }
+      Alert.alert('Level Updated', `You're now a ${LEVEL_META[newLevel]?.name || newLevel} runner. Goals updated to match.`);
+    } catch {
+      Alert.alert('Error', 'Failed to update level');
+    }
+  }
 
   async function fetchGoals() {
     setIsLoading(true);
@@ -72,8 +114,8 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
         const goals: UserGoals = await response.json();
         setStartWeight(goals.start_weight_lbs?.toString() || '');
         setGoalWeight(goals.goal_weight_lbs?.toString() || '');
-        setYearlyGoal(goals.yearly_km_goal?.toString() || '1000');
-        setMonthlyGoal(goals.monthly_km_goal?.toString() || '100');
+        setYearlyGoal(goals.yearly_km_goal?.toString() || '250');
+        setMonthlyGoal(goals.monthly_km_goal?.toString() || '20');
       }
     } catch (error) {
       console.log('Failed to fetch goals:', error);
@@ -155,8 +197,8 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
       const payload = {
         start_weight_lbs: startWeight ? parseFloat(startWeight) : null,
         goal_weight_lbs: goalWeight ? parseFloat(goalWeight) : null,
-        yearly_km_goal: parseFloat(yearlyGoal) || 1000,
-        monthly_km_goal: parseFloat(monthlyGoal) || 100,
+        yearly_km_goal: parseFloat(yearlyGoal) || 250,
+        monthly_km_goal: parseFloat(monthlyGoal) || 20,
       };
       
       console.log('Saving goals:', payload);
@@ -252,6 +294,49 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                   )}
                 </View>
               </View>
+            </View>
+
+            {/* Runner Level */}
+            <View style={[styles.section, shadows.small]}>
+              <Text style={styles.sectionTitle}>🏃 Runner Level</Text>
+              <TouchableOpacity
+                style={styles.levelDisplay}
+                onPress={() => setShowLevelPicker(!showLevelPicker)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.levelDisplayEmoji}>{LEVEL_META[currentLevel]?.emoji || '🏃'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.levelDisplayName}>{LEVEL_META[currentLevel]?.name || currentLevel}</Text>
+                  <Text style={styles.levelDisplayTagline}>{LEVEL_META[currentLevel]?.tagline || ''}</Text>
+                </View>
+                <Ionicons name={showLevelPicker ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {showLevelPicker && (
+                <View style={styles.levelOptions}>
+                  {(['breath', 'stride', 'flow'] as const).map(key => {
+                    const meta = LEVEL_META[key];
+                    const isActive = currentLevel === key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          styles.levelOption,
+                          isActive && { backgroundColor: meta.color + '15', borderColor: meta.color },
+                        ]}
+                        onPress={() => changeLevel(key)}
+                      >
+                        <Text style={styles.levelOptionEmoji}>{meta.emoji}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.levelOptionName, isActive && { color: meta.color }]}>{meta.name}</Text>
+                          <Text style={styles.levelOptionTagline}>{meta.tagline}</Text>
+                        </View>
+                        {isActive && <Ionicons name="checkmark-circle" size={20} color={meta.color} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             {/* Handle Section - Only show if not set */}
@@ -556,6 +641,53 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textLight,
     marginBottom: spacing.xl,
+  },
+  levelDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  levelDisplayEmoji: {
+    fontSize: 28,
+  },
+  levelDisplayName: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  levelDisplayTagline: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  levelOptions: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  levelOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  levelOptionEmoji: {
+    fontSize: 22,
+  },
+  levelOptionName: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  levelOptionTagline: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
   },
 });
 

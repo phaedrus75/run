@@ -36,7 +36,7 @@ from schemas import (
     RunCreate, RunUpdate, RunResponse, 
     WeeklyPlanCreate, WeeklyPlanResponse,
     StatsResponse, MotivationalMessage, WeeklyStreakProgress,
-    RUN_DISTANCES
+    RUN_DISTANCES, LEVEL_DISTANCES, LEVEL_MAX, LEVEL_ORDER, LEVEL_INFO, LEVEL_GOALS
 )
 import crud
 
@@ -365,15 +365,17 @@ def get_user_goals(current_user: User = Depends(require_auth), db: Session = Dep
     """
     🎯 Get current user's goals
     """
+    level = getattr(current_user, 'runner_level', 'breath') or 'breath'
+    level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
+    
     goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
     if not goals:
-        # Return defaults
         return {
             "start_weight_lbs": None,
             "goal_weight_lbs": None,
             "weight_goal_date": None,
-            "yearly_km_goal": 1000.0,
-            "monthly_km_goal": 100.0,
+            "yearly_km_goal": level_defaults["yearly_km"],
+            "monthly_km_goal": level_defaults["monthly_km"],
             "onboarding_complete": current_user.onboarding_complete,
         }
     return {
@@ -437,6 +439,86 @@ def complete_onboarding(current_user: User = Depends(require_auth), db: Session 
     current_user.onboarding_complete = True
     db.commit()
     return {"message": "Onboarding complete", "onboarding_complete": True}
+
+
+# ==========================================
+# 🏃 RUNNER LEVEL ENDPOINTS
+# ==========================================
+
+@app.get("/user/level")
+def get_user_level(current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """Get the user's runner level, available distances, and upgrade eligibility."""
+    level = getattr(current_user, 'runner_level', None) or 'breath'
+    distances = LEVEL_DISTANCES.get(level, LEVEL_DISTANCES['breath'])
+    level_idx = LEVEL_ORDER.index(level) if level in LEVEL_ORDER else 0
+    next_level = LEVEL_ORDER[level_idx + 1] if level_idx < len(LEVEL_ORDER) - 1 else None
+    
+    upgrade_eligible = False
+    upgrade_weeks = 0
+    if next_level and level in LEVEL_MAX:
+        max_distance = LEVEL_MAX[level]
+        upgrade_eligible, upgrade_weeks = _check_upgrade_eligibility(db, current_user.id, max_distance)
+    
+    return {
+        "level": level,
+        "level_info": LEVEL_INFO.get(level, {}),
+        "distances": distances,
+        "next_level": next_level,
+        "next_level_info": LEVEL_INFO.get(next_level) if next_level else None,
+        "upgrade_eligible": upgrade_eligible,
+        "upgrade_weeks": upgrade_weeks,
+        "all_levels": {k: {**v, "distances": LEVEL_DISTANCES[k]} for k, v in LEVEL_INFO.items() if k != "zen"},
+    }
+
+
+@app.put("/user/level")
+def set_user_level(level_data: dict, current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """Set the user's runner level and update goals to level defaults."""
+    new_level = level_data.get("level", "").lower()
+    if new_level not in LEVEL_ORDER:
+        raise HTTPException(status_code=400, detail=f"Invalid level. Must be one of: {LEVEL_ORDER}")
+
+    current_user.runner_level = new_level
+    
+    level_goals = LEVEL_GOALS.get(new_level, LEVEL_GOALS['breath'])
+    goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+    if not goals:
+        goals = UserGoals(user_id=current_user.id)
+        db.add(goals)
+    goals.yearly_km_goal = level_goals["yearly_km"]
+    goals.monthly_km_goal = level_goals["monthly_km"]
+    
+    db.commit()
+    return {
+        "message": f"Level updated to {new_level}",
+        "level": new_level,
+        "yearly_km_goal": level_goals["yearly_km"],
+        "monthly_km_goal": level_goals["monthly_km"],
+    }
+
+
+def _check_upgrade_eligibility(db: Session, user_id: int, max_distance: str) -> tuple:
+    """Check if user has logged at least 1 run at max_distance in each of the last 4 weeks."""
+    from datetime import datetime, timedelta
+    
+    now = datetime.now()
+    weeks_hit = 0
+    
+    for w in range(4):
+        week_end = now - timedelta(weeks=w)
+        week_start = week_end - timedelta(days=7)
+        count = db.query(Run).filter(
+            Run.user_id == user_id,
+            Run.run_type == max_distance,
+            Run.completed_at >= week_start,
+            Run.completed_at <= week_end,
+        ).count()
+        if count > 0:
+            weeks_hit += 1
+        else:
+            break
+    
+    return (weeks_hit >= 4, weeks_hit)
 
 
 # ==========================================
@@ -680,17 +762,22 @@ def get_goals(
     """
     from achievements import get_goals_progress
     
-    # Get user's personal goals if logged in
-    yearly_goal = 1000.0
-    monthly_goal = 100.0
     user_id = None
     
     if current_user:
         user_id = current_user.id
+        level = getattr(current_user, 'runner_level', 'breath') or 'breath'
+        level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
+        yearly_goal = level_defaults["yearly_km"]
+        monthly_goal = level_defaults["monthly_km"]
+        
         user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
         if user_goals:
-            yearly_goal = user_goals.yearly_km_goal or 1000.0
-            monthly_goal = user_goals.monthly_km_goal or 100.0
+            yearly_goal = user_goals.yearly_km_goal or yearly_goal
+            monthly_goal = user_goals.monthly_km_goal or monthly_goal
+    else:
+        yearly_goal = LEVEL_GOALS['breath']["yearly_km"]
+        monthly_goal = LEVEL_GOALS['breath']["monthly_km"]
     
     return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id)
 
@@ -707,13 +794,18 @@ def get_achievements(
     user_id = current_user.id if current_user else None
     stats = crud.get_stats_summary(db, user_id=user_id)
 
-    yearly_goal = 1000.0
-    monthly_goal = 100.0
     if current_user:
+        level = getattr(current_user, 'runner_level', 'breath') or 'breath'
+        level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
+        yearly_goal = level_defaults["yearly_km"]
+        monthly_goal = level_defaults["monthly_km"]
         user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
         if user_goals:
-            yearly_goal = user_goals.yearly_km_goal or 1000.0
-            monthly_goal = user_goals.monthly_km_goal or 100.0
+            yearly_goal = user_goals.yearly_km_goal or yearly_goal
+            monthly_goal = user_goals.monthly_km_goal or monthly_goal
+    else:
+        yearly_goal = LEVEL_GOALS['breath']["yearly_km"]
+        monthly_goal = LEVEL_GOALS['breath']["monthly_km"]
 
     return get_achievements(db, stats, user_id=user_id, yearly_goal=yearly_goal, monthly_goal=monthly_goal)
 
@@ -1062,7 +1154,7 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
         "completed_at": run.completed_at,
         "notes": run.notes,
         "mood": getattr(run, 'mood', None),
-        "category": getattr(run, 'category', None) or "outdoor",
+        "category": getattr(run, 'category', None),
         "pace_per_km": pace,
         "formatted_duration": formatted,
         "is_personal_best": is_personal_best,
@@ -1088,8 +1180,11 @@ def check_personal_best(db: Session, new_run: Run) -> tuple:
         Run.run_type == new_run.run_type,
         Run.id != new_run.id,
         Run.completed_at >= min_date,
-        Run.category == run_category
     )
+    if run_category == 'outdoor':
+        query = query.filter((Run.category == 'outdoor') | (Run.category == None))
+    else:
+        query = query.filter(Run.category == run_category)
     if new_run.user_id is not None:
         query = query.filter(Run.user_id == new_run.user_id)
     previous_runs = query.all()
@@ -1169,9 +1264,13 @@ def check_all_celebrations(db: Session, new_run: Run, current_user) -> list:
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
-    # Get user's monthly goal
     user_goals = db.query(UserGoals).filter(UserGoals.user_id == user_id).first()
-    monthly_goal = user_goals.monthly_km_goal if user_goals else 100.0
+    if user_goals:
+        monthly_goal = user_goals.monthly_km_goal
+    else:
+        user_obj = db.query(User).filter(User.id == user_id).first()
+        level = getattr(user_obj, 'runner_level', 'breath') or 'breath' if user_obj else 'breath'
+        monthly_goal = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])["monthly_km"]
     
     # Get all runs this month (including the new one)
     monthly_runs = db.query(Run).filter(

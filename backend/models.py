@@ -18,17 +18,22 @@ import enum
 
 
 class RunType(str, enum.Enum):
-    """
-    🏃 Run Types
-    
-    Using an Enum ensures only valid run types can be stored.
-    This prevents typos and invalid data!
-    """
+    ONE_K = "1k"
+    TWO_K = "2k"
     THREE_K = "3k"
     FIVE_K = "5k"
+    EIGHT_K = "8k"
     TEN_K = "10k"
     FIFTEEN_K = "15k"
-    TWENTY_K = "20k"
+    EIGHTEEN_K = "18k"
+    TWENTY_ONE_K = "21k"
+
+
+class RunnerLevel(str, enum.Enum):
+    BREATH = "breath"
+    STRIDE = "stride"
+    FLOW = "flow"
+    ZEN = "zen"
 
 
 class Run(Base):
@@ -184,6 +189,9 @@ class User(Base):
     # 🎯 Has completed onboarding?
     onboarding_complete = Column(Boolean, default=False)
     
+    # 🏃 Runner level: breath, stride, flow, zen
+    runner_level = Column(String, default="breath")
+    
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
 
@@ -235,9 +243,9 @@ class UserGoals(Base):
     goal_weight_lbs = Column(Float, nullable=True)
     weight_goal_date = Column(DateTime, nullable=True)
     
-    # 🏃 Running Goals
-    yearly_km_goal = Column(Float, default=1000.0)
-    monthly_km_goal = Column(Float, default=100.0)
+    # 🏃 Running Goals (defaults match Breath level)
+    yearly_km_goal = Column(Float, default=250.0)
+    monthly_km_goal = Column(Float, default=20.0)
     
     # 📅 Timestamps
     created_at = Column(DateTime, server_default=func.now())

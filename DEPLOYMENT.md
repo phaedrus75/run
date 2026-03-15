@@ -1,18 +1,39 @@
-# 🚀 Deployment Guide
-
-This guide will help you deploy your ZenRun app so others can use it!
+# Deployment Guide
 
 ---
 
-## 📋 Overview
+## CRITICAL: Vercel Project Mapping
+
+| Vercel Project | Domain         | Content           |
+|----------------|----------------|-------------------|
+| `run`          | **zenrun.co**  | ZenRun website    |
+| `website`      | endura.eco     | Endura website    |
+| `web`          | live2read.co   | Live2Read website |
+
+**NEVER deploy ZenRun changes to the `website` project. Always use the `run` project.**
+
+To deploy the ZenRun website:
+```bash
+cd /Users/munshi/Downloads/Run
+vercel link --project run --yes   # only needed once, or if .vercel/project.json is wrong
+vercel --prod --yes               # deploy from project root (root dir setting = "website")
+```
+
+The `run` project has its root directory set to `website/` in Vercel settings,
+so you must run `vercel` from the project root (`/Users/munshi/Downloads/Run`), not from `website/`.
+
+---
+
+## Overview
 
 You'll need to deploy two things:
-1. **Backend** (Python API) → Railway or Render
+1. **Backend** (Python API) → Railway (project: `positive-clarity`)
 2. **Frontend** (React Native App) → Expo EAS
+3. **Website** (Next.js) → Vercel (project: `run`, domain: zenrun.co)
 
 ---
 
-## 🐍 Part 1: Deploy the Backend
+## Part 1: Deploy the Backend
 
 ### Option A: Railway (Recommended for Beginners)
 
@@ -191,11 +212,34 @@ eas submit --platform android
 
 ---
 
-## 📚 Next Steps
+## Part 3: Deploy the Website
 
-1. **Add Authentication**: Users can save their own data
-2. **Add Push Notifications**: Remind users to run
-3. **Add Social Features**: Share runs with friends
-4. **Custom Domain**: Point your own domain to the app
+The ZenRun website is a Next.js static export hosted on Vercel.
 
-Happy deploying! 🚀
+### Deploy
+```bash
+cd /Users/munshi/Downloads/Run
+vercel link --project run --yes   # if not already linked
+vercel --prod --yes
+```
+
+Confirm the output shows `Aliased: https://zenrun.co` — NOT endura.eco.
+
+### Rollback
+```bash
+vercel ls --scope phaedrus75s-projects website   # for endura
+vercel ls --scope phaedrus75s-projects run        # for zenrun
+vercel promote <deployment-url> --yes
+```
+
+---
+
+## Railway Backend Deployment
+
+```bash
+cd /Users/munshi/Downloads/Run
+railway link --project "positive-clarity"
+railway service Run
+railway up
+railway logs
+```

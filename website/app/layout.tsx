@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export const metadata: Metadata = {
   title: 'ZenRun — Less tracking. More running.',
@@ -20,7 +21,7 @@ function Header() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
       <nav className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
-          <span className="text-2xl">🏃</span>
+          <Image src="/images/logo.png" alt="ZenRun" width={32} height={32} className="rounded-md" />
           <span className="text-xl font-bold text-gray-900">ZenRun</span>
         </Link>
         <div className="hidden md:flex items-center gap-8">
@@ -57,7 +58,7 @@ function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-2xl">🏃</span>
+              <Image src="/images/logo.png" alt="ZenRun" width={32} height={32} className="rounded-md" />
               <span className="text-xl font-bold text-white">ZenRun</span>
             </div>
             <p className="text-sm leading-relaxed max-w-md">

@@ -21,6 +21,7 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  Image,
 } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
@@ -208,6 +209,7 @@ export default function AuthScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
+          <Image source={require('../assets/logo.png')} style={styles.headerLogo} />
           <Text style={styles.headerBrand}>ZenRun</Text>
           <Text style={styles.headerTitle}>{getTitle()}</Text>
         </View>
@@ -435,6 +437,12 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: spacing.xl,
+  },
+  headerLogo: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    marginBottom: spacing.sm,
   },
   headerBrand: {
     fontSize: typography.sizes.xl,

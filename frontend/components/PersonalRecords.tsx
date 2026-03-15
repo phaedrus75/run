@@ -17,7 +17,7 @@ interface PersonalRecordsProps {
 }
 
 export function PersonalRecords({ records: initialRecords }: PersonalRecordsProps) {
-  const distances = ['3k', '5k', '10k', '15k', '18k', '21k'];
+  const distances = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [records, setRecords] = useState<PersonalRecordsType>(initialRecords);
   const [loading, setLoading] = useState(false);
@@ -54,21 +54,19 @@ export function PersonalRecords({ records: initialRecords }: PersonalRecordsProp
 
   return (
     <View style={[styles.container, shadows.small]}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>🏆 Personal Records</Text>
-        <View style={styles.toggleRow}>
-          {CATEGORIES.map(({ key, label }) => (
-            <TouchableOpacity
-              key={key}
-              style={[styles.toggleBtn, category === key && styles.toggleBtnActive]}
-              onPress={() => handleCategoryChange(key)}
-            >
-              <Text style={[styles.toggleText, category === key && styles.toggleTextActive]}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      <Text style={styles.title}>🏆 Personal Records</Text>
+      <View style={styles.toggleRow}>
+        {CATEGORIES.map(({ key, label }) => (
+          <TouchableOpacity
+            key={key}
+            style={[styles.toggleBtn, category === key && styles.toggleBtnActive]}
+            onPress={() => handleCategoryChange(key)}
+          >
+            <Text style={[styles.toggleText, category === key && styles.toggleTextActive]}>
+              {label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
       
       <View style={[styles.recordsGrid, loading && { opacity: 0.5 }]}>
@@ -112,26 +110,23 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
   title: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
+    marginBottom: spacing.sm,
   },
   toggleRow: {
     flexDirection: 'row',
+    alignSelf: 'center',
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: 2,
+    marginBottom: spacing.md,
   },
   toggleBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs / 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
     borderRadius: radius.sm,
   },
   toggleBtnActive: {

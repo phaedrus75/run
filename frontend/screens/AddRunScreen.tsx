@@ -5,7 +5,7 @@
  * Add a past run with a custom date.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,21 +19,28 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from '../components/RunTypeButton';
-import { runApi } from '../services/api';
+import { runApi, levelApi } from '../services/api';
 
-const RUN_TYPES = ['3k', '5k', '10k', '15k', '18k', '21k'];
+const ALL_RUN_TYPES = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
 
 interface AddRunScreenProps {
   navigation: any;
 }
 
 export function AddRunScreen({ navigation }: AddRunScreenProps) {
+  const [availableTypes, setAvailableTypes] = useState<string[]>(ALL_RUN_TYPES);
   const [runType, setRunType] = useState<string | null>(null);
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
   const [notes, setNotes] = useState('');
   const [category, setCategory] = useState('outdoor');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    levelApi.get().then(data => {
+      if (data?.distances) setAvailableTypes(data.distances);
+    }).catch(() => {});
+  }, []);
   
   // Date state - default to today
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -205,7 +212,7 @@ export function AddRunScreen({ navigation }: AddRunScreenProps) {
         {/* Run Type Selection */}
         <Text style={styles.label}>Distance</Text>
         <View style={styles.typeRow}>
-          {RUN_TYPES.map(type => (
+          {availableTypes.map(type => (
             <RunTypeButton
               key={type}
               type={type}

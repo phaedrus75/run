@@ -21,22 +21,68 @@ from enum import Enum
 
 
 class RunType(str, Enum):
-    """Valid run types - matches the database model"""
+    ONE_K = "1k"
+    TWO_K = "2k"
     THREE_K = "3k"
     FIVE_K = "5k"
+    EIGHT_K = "8k"
     TEN_K = "10k"
     FIFTEEN_K = "15k"
-    TWENTY_K = "20k"
+    EIGHTEEN_K = "18k"
+    TWENTY_ONE_K = "21k"
 
 
-# 🗺️ Map run types to distances
 RUN_DISTANCES = {
+    "1k": 1.0,
+    "2k": 2.0,
     "3k": 3.0,
     "5k": 5.0,
+    "8k": 8.0,
     "10k": 10.0,
     "15k": 15.0,
     "18k": 18.0,
     "21k": 21.0,
+}
+
+LEVEL_DISTANCES = {
+    "breath": ["1k", "2k", "3k", "5k"],
+    "stride": ["2k", "3k", "5k", "8k", "10k"],
+    "flow":   ["3k", "5k", "8k", "10k", "15k", "18k", "21k"],
+    "zen":    list(RUN_DISTANCES.keys()),
+}
+
+LEVEL_MAX = {"breath": "5k", "stride": "10k", "flow": "21k", "zen": "21k"}
+
+LEVEL_GOALS = {
+    "breath": {"yearly_km": 250.0, "monthly_km": 20.0},
+    "stride": {"yearly_km": 500.0, "monthly_km": 40.0},
+    "flow":   {"yearly_km": 1000.0, "monthly_km": 80.0},
+    "zen":    {"yearly_km": 1000.0, "monthly_km": 80.0},
+}
+
+LEVEL_ORDER = ["breath", "stride", "flow", "zen"]
+
+LEVEL_INFO = {
+    "breath": {
+        "name": "Breath",
+        "tagline": "Every journey begins with a single breath",
+        "description": "Perfect for getting started. Build the habit with shorter distances.",
+    },
+    "stride": {
+        "name": "Stride",
+        "tagline": "You've found your stride",
+        "description": "You're consistent. Time to explore longer distances.",
+    },
+    "flow": {
+        "name": "Flow",
+        "tagline": "Running in flow",
+        "description": "The distances of a seasoned runner. From 3K to half marathon.",
+    },
+    "zen": {
+        "name": "Zen",
+        "tagline": "Pure running, pure zen",
+        "description": "Every distance unlocked. The ultimate ZenRunner.",
+    },
 }
 
 
@@ -51,7 +97,7 @@ class RunCreate(BaseModel):
     This is what the frontend sends when you complete a run.
     The completed_at field is optional - defaults to now if not provided.
     """
-    run_type: str = Field(..., description="Type of run: 3k, 5k, 10k, 15k, 18k, or 21k")
+    run_type: str = Field(..., description="Type of run: 1k, 2k, 3k, 5k, 8k, 10k, 15k, 18k, or 21k")
     duration_seconds: int = Field(..., ge=0, description="How long the run took in seconds")
     notes: Optional[str] = Field(None, description="Optional notes about your run")
     completed_at: Optional[datetime] = Field(None, description="When the run was completed (for backdating)")
@@ -65,7 +111,7 @@ class RunUpdate(BaseModel):
     
     All fields are optional - only provided fields are updated.
     """
-    run_type: Optional[str] = Field(None, description="Type of run: 3k, 5k, 10k, 15k, 18k, or 21k")
+    run_type: Optional[str] = Field(None, description="Type of run: 1k, 2k, 3k, 5k, 8k, 10k, 15k, 18k, or 21k")
     duration_seconds: Optional[int] = Field(None, ge=0, description="How long the run took in seconds")
     notes: Optional[str] = Field(None, description="Optional notes about your run")
     category: Optional[str] = Field(None, description="Category: outdoor or treadmill")
@@ -94,6 +140,7 @@ class RunResponse(BaseModel):
     completed_at: datetime
     notes: Optional[str]
     mood: Optional[str] = None
+    category: Optional[str] = None
     
     # 🎯 Calculated fields for the frontend
     pace_per_km: str = ""  # e.g., "6:30"
@@ -154,6 +201,7 @@ class StatsResponse(BaseModel):
     """
     total_runs: int
     total_km: float
+    total_duration_seconds: int = 0
     current_streak: int
     longest_streak: int
     average_pace: str  # Calculated

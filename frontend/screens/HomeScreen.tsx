@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   Alert,
   Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,34 +30,26 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   StatCard, 
-  RunHistoryCard, 
+
   StreakProgress,
   StreakModal,
   PersonalRecords,
   Achievements,
   GoalsProgress as GoalsProgressComponent,
-  WeightTracker,
   ProfileModal,
-  StepsTracker,
   WeekSummaryCard,
 } from '../components';
 import { MonthInReview } from '../components/MonthInReview';
 import { ScenicRunsModal } from './ScenicRunsScreen';
 import { 
-  runApi, 
-  statsApi, 
-  weightApi,
-  stepsApi,
-  type Run, 
+  statsApi,
+  levelApi,
   type Stats, 
   type MotivationalMessage, 
   type WeeklyStreakProgress, 
   type GoalsProgress,
   type PersonalRecords as PersonalRecordsType,
   type AchievementsData,
-  type WeightProgress,
-  type WeightChartData,
-  type StepsSummary,
   type MonthInReview as MonthInReviewType,
   type DailyWisdom,
   type SeasonalMarker,
@@ -90,15 +83,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
-  const [recentRuns, setRecentRuns] = useState<Run[]>([]);
+
   const [motivation, setMotivation] = useState<MotivationalMessage | null>(null);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
   const [goals, setGoals] = useState<GoalsProgress | null>(null);
   const [records, setRecords] = useState<PersonalRecordsType | null>(null);
   const [achievements, setAchievements] = useState<AchievementsData | null>(null);
-  const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
-  const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
-  const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
   const [monthReview, setMonthReview] = useState<MonthInReviewType | null>(null);
   const [showMonthReview, setShowMonthReview] = useState(false);
   const [dailyWisdom, setDailyWisdom] = useState<DailyWisdom | null>(null);
@@ -107,41 +97,65 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   
+  // Level upgrade state
+  const [upgradeInfo, setUpgradeInfo] = useState<{
+    eligible: boolean;
+    nextLevel: string | null;
+    nextLevelName: string;
+    nextLevelEmoji: string;
+    currentLevelName: string;
+    maxDistance: string;
+  } | null>(null);
+  
   // 📡 Fetch data from API
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, runsData, motivationData, streakData, goalsData, recordsData, achievementsData, weightProgressData, weightChartData, stepsData] = await Promise.all([
+      const [statsData, motivationData, streakData, goalsData, recordsData, achievementsData] = await Promise.all([
         statsApi.get(),
-        runApi.getAll({ limit: 3 }),
         statsApi.getMotivation(),
         statsApi.getStreakProgress(),
         statsApi.getGoals(),
         statsApi.getPersonalRecords(),
         statsApi.getAchievements(),
-        weightApi.getProgress(),
-        weightApi.getChartData(),
-        stepsApi.getSummary(),
       ]);
       
       setStats(statsData);
-      setRecentRuns(runsData);
       setMotivation(motivationData);
       setStreakProgress(streakData);
       setGoals(goalsData);
       setRecords(recordsData);
       setAchievements(achievementsData);
-      setWeightProgress(weightProgressData);
-      setWeightChart(weightChartData);
-      setStepsSummary(stepsData);
       
       // Fetch secondary data (graceful failure)
       try {
-        const [monthReviewData, wisdomData, markersData, historyData] = await Promise.all([
+        const [monthReviewData, wisdomData, markersData, historyData, levelData] = await Promise.all([
           statsApi.getMonthReview().catch(() => null),
           statsApi.getDailyWisdom().catch(() => null),
           statsApi.getSeasonalMarkers().catch(() => ({ markers: [] })),
           statsApi.getStreakHistory().catch(() => []),
+          levelApi.get().catch(() => null),
         ]);
+        
+        if (levelData?.upgrade_eligible && levelData.next_level) {
+          const LEVEL_META: Record<string, { name: string; emoji: string }> = {
+            breath: { name: 'Breath', emoji: '🌱' },
+            stride: { name: 'Stride', emoji: '🏃' },
+            flow: { name: 'Flow', emoji: '🌊' },
+            zen: { name: 'Zen', emoji: '🧘' },
+          };
+          const next = LEVEL_META[levelData.next_level] || { name: levelData.next_level, emoji: '⬆️' };
+          const current = LEVEL_META[levelData.level] || { name: levelData.level, emoji: '' };
+          setUpgradeInfo({
+            eligible: true,
+            nextLevel: levelData.next_level,
+            nextLevelName: next.name,
+            nextLevelEmoji: next.emoji,
+            currentLevelName: current.name,
+            maxDistance: levelData.level === 'breath' ? '5K' : levelData.level === 'stride' ? '10K' : '21K',
+          });
+        } else {
+          setUpgradeInfo(null);
+        }
         if (monthReviewData && monthReviewData.should_show) {
           setMonthReview(monthReviewData);
           setShowMonthReview(true);
@@ -233,7 +247,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       >
         {/* 👋 Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>ZenRun</Text>
+          <View style={styles.titleRow}>
+            <Image source={require('../assets/logo.png')} style={styles.titleLogo} />
+            <Text style={styles.title}>ZenRun</Text>
+          </View>
           <View style={styles.headerRight}>
             {/* 🔥 Streak Badge */}
             {streakProgress && (
@@ -241,7 +258,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 style={styles.streakBadge}
                 onPress={() => setShowStreak(true)}
               >
-                <Text style={styles.streakEmoji}>🔥</Text>
+                <Text style={styles.streakEmoji}>{streakProgress.current_streak >= 26 ? '🌲' : streakProgress.current_streak >= 12 ? '🌳' : streakProgress.current_streak >= 4 ? '🌴' : streakProgress.current_streak >= 2 ? '🌿' : '🌱'}</Text>
                 <Text style={styles.streakCount}>{streakProgress.current_streak}</Text>
               </TouchableOpacity>
             )}
@@ -269,6 +286,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.wisdomText}>"{dailyWisdom.text}"</Text>
             <Text style={styles.wisdomAuthor}>— {dailyWisdom.author}</Text>
           </View>
+        )}
+
+        {/* Level Upgrade Banner */}
+        {upgradeInfo?.eligible && upgradeInfo.nextLevel && (
+          <TouchableOpacity
+            style={[styles.upgradeBanner, shadows.small]}
+            onPress={async () => {
+              try {
+                await levelApi.set(upgradeInfo.nextLevel!);
+                Alert.alert(
+                  `${upgradeInfo.nextLevelEmoji} Your path deepens`,
+                  `You've grown into ${upgradeInfo.nextLevelName}. New distances await you.`
+                );
+                setUpgradeInfo(null);
+                fetchData();
+              } catch {
+                Alert.alert('Error', 'Failed to upgrade level');
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.upgradeEmoji}>{upgradeInfo.nextLevelEmoji}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.upgradeTitle}>Your practice is deepening</Text>
+              <Text style={styles.upgradeText}>
+                You've been running {upgradeInfo.maxDistance} every week for a month. {upgradeInfo.nextLevelName} distances are calling.
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color={colors.primary} />
+          </TouchableOpacity>
         )}
 
         {/* Comeback / Rest Banner */}
@@ -317,8 +364,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
             <View style={styles.lifetimeDivider} />
             <View style={styles.lifetimeStat}>
-              <Text style={styles.lifetimeValue}>{stepsSummary?.all_time?.total_entries || 0}</Text>
-              <Text style={styles.lifetimeLabel}>step days</Text>
+              <Text style={styles.lifetimeValue}>{Math.floor((stats?.total_duration_seconds || 0) / 3600)}</Text>
+              <Text style={styles.lifetimeLabel}>hours</Text>
             </View>
           </View>
           
@@ -351,56 +398,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <GoalsProgressComponent goals={goals} />
         )}
         
-        {/* 👟 Steps Tracker */}
-        <StepsTracker 
-          summary={stepsSummary}
-          onUpdate={fetchData}
-          onCelebrate={() => setShowConfetti(true)}
-        />
-        
-        {/* ⚖️ Weight Tracker */}
-        {weightProgress && (
-          <WeightTracker 
-            progress={weightProgress} 
-            chartData={weightChart}
-            onUpdate={fetchData}
-          />
-        )}
-        
-        {/* 🏆 Personal Records */}
-        {records && (
-          <PersonalRecords records={records} />
-        )}
-        
-        {/* 🎖️ Achievements */}
-        {achievements && (
-          <Achievements data={achievements} />
-        )}
-        
-        {/* 📜 Recent Runs */}
-        <View style={styles.recentSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Runs</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('History')}>
-              <Text style={styles.seeAllText}>See All →</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {recentRuns.length > 0 ? (
-            recentRuns.map(run => (
-              <RunHistoryCard key={run.id} run={run} />
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🏃</Text>
-              <Text style={styles.emptyText}>Your first run awaits</Text>
-              <Text style={styles.emptySubtext}>
-                Go run. Come back. Log it when you're ready.
-              </Text>
-            </View>
-          )}
-        </View>
-        
         {/* 📸 Scenic Runs */}
         <TouchableOpacity 
           style={[styles.scenicRunsButton, shadows.small]}
@@ -413,6 +410,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.scenicRunsSubtitle}>Photos from your outdoor runs</Text>
           </View>
         </TouchableOpacity>
+
+        {/* 🏆 Personal Records */}
+        {records && (
+          <PersonalRecords records={records} />
+        )}
+        
+        {/* 🎖️ Achievements */}
+        {achievements && (
+          <Achievements data={achievements} />
+        )}
+        
       </ScrollView>
       
       {/* 📸 Scenic Runs Modal */}
@@ -531,10 +539,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  titleLogo: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+  },
   title: {
-    fontSize: typography.sizes.xxl,
+    fontSize: 26,
     fontWeight: typography.weights.bold,
     color: colors.text,
+    letterSpacing: -0.3,
   },
   sectionTitle: {
     fontSize: typography.sizes.lg,
@@ -670,6 +689,31 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     color: colors.textLight,
     marginTop: spacing.xs,
+  },
+  upgradeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.secondary + '15',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.secondary,
+    gap: spacing.md,
+  },
+  upgradeEmoji: {
+    fontSize: 28,
+  },
+  upgradeTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  upgradeText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginTop: 2,
   },
   comebackBanner: {
     flexDirection: 'row',

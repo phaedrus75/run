@@ -102,7 +102,10 @@ def get_runs(
         query = query.filter(Run.run_type == run_type)
     
     if category:
-        query = query.filter(Run.category == category)
+        if category == 'outdoor':
+            query = query.filter((Run.category == 'outdoor') | (Run.category == None))
+        else:
+            query = query.filter(Run.category == category)
     
     return query.order_by(Run.completed_at.desc()).offset(skip).limit(limit).all()
 
@@ -466,8 +469,8 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
     total_km = sum(r.distance_km for r in all_runs)
     
     # Calculate average pace
+    total_seconds = sum(r.duration_seconds for r in all_runs) if all_runs else 0
     if all_runs and total_km > 0:
-        total_seconds = sum(r.duration_seconds for r in all_runs)
         avg_seconds_per_km = total_seconds / total_km
         avg_mins = int(avg_seconds_per_km // 60)
         avg_secs = int(avg_seconds_per_km % 60)
@@ -481,6 +484,7 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
     return {
         "total_runs": total_runs,
         "total_km": round(total_km, 2),
+        "total_duration_seconds": total_seconds,
         "current_streak": current_streak,
         "longest_streak": longest_streak,
         "average_pace": average_pace,
@@ -782,13 +786,21 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
         best_streak = max(best_streak, current_streak)
         prev_date = d
     
-    # Goals - get from user goals
-    from models import UserGoals
+    from models import UserGoals, User as UserModel
+    from schemas import LEVEL_GOALS
     goals_query = db.query(UserGoals)
     if user_id:
         goals_query = goals_query.filter(UserGoals.user_id == user_id)
     user_goals = goals_query.first()
-    monthly_km_goal = user_goals.monthly_km_goal if user_goals else 80.0
+    if user_goals:
+        monthly_km_goal = user_goals.monthly_km_goal
+    else:
+        level = 'breath'
+        if user_id:
+            u = db.query(UserModel).filter(UserModel.id == user_id).first()
+            if u:
+                level = getattr(u, 'runner_level', 'breath') or 'breath'
+        monthly_km_goal = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])["monthly_km"]
     goal_percent = min((total_km / monthly_km_goal) * 100, 100) if monthly_km_goal > 0 else 0
     goal_met = total_km >= monthly_km_goal
     

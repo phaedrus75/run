@@ -8,19 +8,24 @@ interface AchievementsProps {
 }
 
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
-  milestone: { label: 'Run Count', emoji: '🏁' },
-  distance: { label: 'Total Distance', emoji: '📏' },
-  distance_type: { label: 'First Completions', emoji: '🎯' },
-  specialist: { label: 'Specialist', emoji: '🔄' },
-  streak: { label: 'Streaks', emoji: '🔥' },
-  goals: { label: 'Monthly Goals', emoji: '🎯' },
-  category: { label: 'Run Category', emoji: '🗺️' },
-  steps: { label: 'Steps', emoji: '👟' },
+  milestone: { label: 'First Steps', emoji: '🌱' },
+  distance: { label: 'The Long Road', emoji: '🛤️' },
+  distance_type: { label: 'New Ground', emoji: '🌿' },
+  specialist: { label: 'Finding Your Rhythm', emoji: '🍃' },
+  streak: { label: 'Practice', emoji: '🌳' },
+  goals: { label: 'Horizons', emoji: '🌅' },
+  category: { label: 'Outdoor & Indoor', emoji: '🏞️' },
+  steps: { label: 'Daily Movement', emoji: '🚶' },
+  scenic: { label: 'Trail Album', emoji: '📷' },
+  levels: { label: 'Your Path', emoji: '🌊' },
+  dedication: { label: 'Showing Up', emoji: '🌤️' },
+  mood: { label: 'Reflection', emoji: '🪞' },
 };
 
 const CATEGORY_ORDER = [
   'milestone', 'distance', 'distance_type', 'specialist',
   'streak', 'goals', 'category', 'steps',
+  'scenic', 'levels', 'dedication', 'mood',
 ];
 
 function groupByCategory(achievements: Achievement[]): Record<string, Achievement[]> {
@@ -52,13 +57,11 @@ export function Achievements({ data }: AchievementsProps) {
       </Text>
       <Text
         style={[styles.badgeName, !achievement.unlocked && styles.lockedText]}
-        numberOfLines={1}
       >
         {achievement.name}
       </Text>
       <Text
         style={[styles.badgeDesc, !achievement.unlocked && styles.lockedText]}
-        numberOfLines={2}
       >
         {achievement.description}
       </Text>
@@ -75,19 +78,10 @@ export function Achievements({ data }: AchievementsProps) {
   return (
     <View style={[styles.container, shadows.small]}>
       <View style={styles.header}>
-        <Text style={styles.title}>🎖️ Achievements</Text>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{unlocked_count}/{total}</Text>
-        </View>
-      </View>
-
-      <View style={styles.progressBar}>
-        <View
-          style={[
-            styles.progressFill,
-            { width: `${(unlocked_count / total) * 100}%` },
-          ]}
-        />
+        <Text style={styles.title}>Milestones</Text>
+        {unlocked_count > 0 && (
+          <Text style={styles.countSubtle}>{unlocked_count} earned</Text>
+        )}
       </View>
 
       {visibleCategories.map(cat => {
@@ -113,7 +107,7 @@ export function Achievements({ data }: AchievementsProps) {
         onPress={() => setShowLocked(!showLocked)}
       >
         <Text style={styles.toggleText}>
-          {showLocked ? '▼ Hide Locked' : '▶ Show All'} ({locked.length} locked)
+          {showLocked ? 'Show earned' : 'See what\u2019s ahead'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -138,28 +132,10 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  countBadge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs / 2,
-    borderRadius: radius.full,
-  },
-  countText: {
+  countSubtle: {
     fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.bold,
-    color: colors.textOnPrimary,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: colors.background,
-    borderRadius: 3,
-    marginBottom: spacing.md,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.accent,
-    borderRadius: 3,
+    color: colors.textLight,
+    fontWeight: typography.weights.medium,
   },
   categorySection: {
     marginBottom: spacing.md,

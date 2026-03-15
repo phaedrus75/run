@@ -277,6 +277,11 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
             {[
               {
+                icon: '📸',
+                title: 'Scenic run photos',
+                desc: 'Tag photos to distance markers on outdoor runs. Build a visual album of your running journey, km by km.',
+              },
+              {
                 icon: '👥',
                 title: 'Circles, not leaderboards',
                 desc: 'Share your running journey with up to 10 close friends. Accountability without the pressure of public competition.',
@@ -286,10 +291,34 @@ export default function Home() {
                 title: 'Goals that keep you honest',
                 desc: 'Set yearly and monthly km targets. A simple progress bar shows where you are and where you should be.',
               },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="bg-warm-bg rounded-2xl p-8 text-center hover:shadow-lg transition-shadow"
+              >
+                <div className="text-5xl mb-5">{item.icon}</div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+            {[
               {
                 icon: '📊',
                 title: 'Just enough data',
                 desc: 'Distance. Time. Streak. Goals. Personal records. That\'s the full list. No cadence, no heart rate zones, no VO2 max.',
+              },
+              {
+                icon: '🏃‍♂️',
+                title: 'Outdoor & treadmill',
+                desc: 'Log runs by type. Filter your stats and personal records by outdoor or treadmill to see what matters to you.',
+              },
+              {
+                icon: '✏️',
+                title: 'Edit anytime',
+                desc: 'Made a typo? Added the wrong distance? Edit or delete any run, anytime. Your log, your rules.',
               },
             ].map((item) => (
               <div

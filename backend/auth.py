@@ -63,6 +63,7 @@ class UserResponse(BaseModel):
     name: Optional[str]
     is_active: bool
     onboarding_complete: bool = False
+    runner_level: Optional[str] = "breath"
     created_at: datetime
 
     class Config:

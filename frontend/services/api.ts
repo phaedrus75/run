@@ -656,11 +656,28 @@ export function formatDuration(seconds: number): string {
  */
 export function getDistance(runType: string): number {
   const distances: Record<string, number> = {
+    '1k': 1,
+    '2k': 2,
     '3k': 3,
     '5k': 5,
+    '8k': 8,
     '10k': 10,
     '15k': 15,
-    '20k': 20,
+    '18k': 18,
+    '21k': 21,
   };
   return distances[runType] || 0;
 }
+
+// Runner Level API
+export const levelApi = {
+  get: async (): Promise<any> => {
+    return apiFetch('/user/level');
+  },
+  set: async (level: string): Promise<any> => {
+    return apiFetch('/user/level', {
+      method: 'PUT',
+      body: JSON.stringify({ level }),
+    });
+  },
+};

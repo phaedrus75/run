@@ -132,7 +132,7 @@ export function MonthInReview({ data, onDismiss }: Props) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>🏃 Runs by Distance</Text>
             <View style={styles.typeGrid}>
-              {['3k', '5k', '10k', '15k', '18k', '21k'].map(type => {
+              {['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'].map(type => {
                 const count = data.runs_by_type[type] || 0;
                 const totalForType = count * (
                   type === '3k' ? 3 : type === '5k' ? 5 : type === '10k' ? 10 : type === '15k' ? 15 : type === '18k' ? 18 : 21

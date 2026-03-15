@@ -2,8 +2,8 @@
  * 👥 CIRCLES SCREEN
  * ==================
  * 
- * Social feature - compete with friends in circles.
- * Create circles, join via invite code, see leaderboards.
+ * Social feature - run alongside friends in circles.
+ * Create circles, join via invite code, share your journey.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -273,16 +273,9 @@ export function CirclesScreen() {
     }
   };
 
-  const CHECKIN_EMOJIS = ['👋', '🏃', '💪', '😊', '🔥', '✌️', '🌿', '⚡'];
+  const CHECKIN_EMOJIS = ['👋', '🏃', '🌱', '😊', '🍃', '✌️', '🌿', '☀️'];
 
-  const getRankEmoji = (rank: number) => {
-    switch (rank) {
-      case 1: return '🥇';
-      case 2: return '🥈';
-      case 3: return '🥉';
-      default: return `#${rank}`;
-    }
-  };
+  const getMemberIcon = (_rank: number) => '🌿';
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -570,7 +563,7 @@ export function CirclesScreen() {
                     member.is_you && styles.memberCardYou,
                   ]}
                 >
-                  <Text style={styles.memberRank}>{getRankEmoji(member.rank)}</Text>
+                  <Text style={styles.memberRank}>{getMemberIcon(member.rank)}</Text>
                   <View style={styles.memberInfo}>
                     <Text style={styles.memberName}>
                       {member.name}

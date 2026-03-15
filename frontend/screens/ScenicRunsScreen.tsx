@@ -2,7 +2,7 @@
  * 📸 SCENIC RUNS SCREEN
  * ======================
  * 
- * Gallery of outdoor runs with photos, displayed as journey timelines.
+ * Photo album for outdoor runs — immersive cards and journey timelines.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -22,7 +22,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { photoApi, type ScenicRun, type RunPhoto } from '../services/api';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.45;
 
 interface ScenicRunsModalProps {
   visible: boolean;
@@ -73,7 +74,7 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
   const formatDuration = (seconds: number) => {
@@ -82,28 +83,42 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const renderRunCard = (run: ScenicRun) => (
+  const totalPhotos = scenicRuns.reduce((sum, r) => sum + r.photo_count, 0);
+
+  const renderRunCard = (run: ScenicRun, index: number) => (
     <TouchableOpacity
       key={run.id}
-      style={[styles.runCard, shadows.small]}
+      style={[styles.runCard, shadows.medium]}
       onPress={() => handleRunPress(run)}
-      activeOpacity={0.8}
+      activeOpacity={0.9}
     >
-      {run.cover_photo && (
+      {run.cover_photo ? (
         <Image
           source={{ uri: `data:image/jpeg;base64,${run.cover_photo}` }}
           style={styles.coverImage}
         />
-      )}
-      <View style={styles.runCardInfo}>
-        <View style={styles.runCardTop}>
-          <Text style={styles.runCardDate}>{formatDate(run.completed_at)}</Text>
-          <Text style={styles.runCardPhotos}>📸 {run.photo_count}</Text>
+      ) : (
+        <View style={[styles.coverImage, styles.coverPlaceholder]}>
+          <Text style={styles.coverPlaceholderEmoji}>🏞️</Text>
         </View>
-        <View style={styles.runCardStats}>
-          <Text style={styles.runCardDistance}>{run.run_type.toUpperCase()}</Text>
-          <Text style={styles.runCardPace}>{run.pace}/km</Text>
-          <Text style={styles.runCardTime}>{formatDuration(run.duration_seconds)}</Text>
+      )}
+      {/* Gradient overlay for text readability */}
+      <View style={styles.cardOverlay} />
+      <View style={styles.cardContent}>
+        <View style={styles.cardTopRow}>
+          <View style={styles.photoBadge}>
+            <Text style={styles.photoBadgeText}>{run.photo_count} photo{run.photo_count !== 1 ? 's' : ''}</Text>
+          </View>
+        </View>
+        <View style={styles.cardBottomRow}>
+          <Text style={styles.cardDate}>{formatDate(run.completed_at)}</Text>
+          <View style={styles.cardStatsRow}>
+            <Text style={styles.cardDistance}>{run.run_type.toUpperCase()}</Text>
+            <Text style={styles.cardDivider}>·</Text>
+            <Text style={styles.cardPace}>{run.pace}/km</Text>
+            <Text style={styles.cardDivider}>·</Text>
+            <Text style={styles.cardTime}>{formatDuration(run.duration_seconds)}</Text>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -111,44 +126,60 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
 
   const renderJourneyView = () => {
     if (!selectedRun) return null;
-
     const maxDistance = selectedRun.distance_km;
 
     return (
       <View style={styles.journeyContainer}>
         <View style={styles.journeyHeader}>
-          <TouchableOpacity onPress={() => { setSelectedRun(null); setRunPhotos([]); }}>
-            <Text style={styles.backBtn}>← Back</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => { setSelectedRun(null); setRunPhotos([]); }}
+          >
+            <Text style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.journeyTitle}>
-            {selectedRun.run_type.toUpperCase()} — {formatDate(selectedRun.completed_at)}
-          </Text>
+          <View style={styles.journeyHeaderInfo}>
+            <Text style={styles.journeyTitle}>
+              {selectedRun.run_type.toUpperCase()} Run
+            </Text>
+            <Text style={styles.journeySubtitle}>
+              {formatDate(selectedRun.completed_at)} · {selectedRun.pace}/km · {formatDuration(selectedRun.duration_seconds)}
+            </Text>
+          </View>
         </View>
 
         {loadingPhotos ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
         ) : (
           <ScrollView style={styles.journeyScroll} showsVerticalScrollIndicator={false}>
             <View style={styles.timeline}>
               {/* Start marker */}
               <View style={styles.timelineNode}>
-                <View style={styles.timelineDot} />
-                <Text style={styles.timelineKm}>Start</Text>
+                <View style={styles.timelineDotStart}>
+                  <Text style={styles.dotEmoji}>🏃</Text>
+                </View>
+                <Text style={styles.timelineKmStart}>Start</Text>
               </View>
               <View style={styles.timelineLine} />
 
-              {/* Photo nodes along the route */}
+              {/* Km markers */}
               {Array.from({ length: Math.floor(maxDistance) }, (_, i) => i + 1).map(km => {
-                const photo = runPhotos.find(p => p.distance_marker_km === km);
+                const photosAtMarker = runPhotos.filter(p => p.distance_marker_km === km);
+                const hasPhotos = photosAtMarker.length > 0;
                 return (
                   <React.Fragment key={km}>
                     <View style={styles.timelineNode}>
-                      <View style={[styles.timelineDot, photo && styles.timelineDotActive]} />
-                      <Text style={[styles.timelineKm, photo && styles.timelineKmActive]}>{km}K</Text>
+                      <View style={[styles.timelineDot, hasPhotos && styles.timelineDotActive]} />
+                      <Text style={[styles.timelineKm, hasPhotos && styles.timelineKmActive]}>
+                        {km}K
+                      </Text>
+                      {hasPhotos && photosAtMarker.length > 1 && (
+                        <Text style={styles.timelinePhotoCount}>{photosAtMarker.length} photos</Text>
+                      )}
                     </View>
-                    {photo && (
+                    {photosAtMarker.map(photo => (
                       <TouchableOpacity
-                        style={styles.timelinePhoto}
+                        key={photo.id}
+                        style={[styles.timelinePhoto, shadows.small]}
                         onPress={() => setFullScreenPhoto(photo)}
                         activeOpacity={0.9}
                       >
@@ -157,22 +188,26 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
                           style={styles.timelineImage}
                         />
                         {photo.caption && (
-                          <Text style={styles.timelineCaption}>{photo.caption}</Text>
+                          <View style={styles.captionBar}>
+                            <Text style={styles.timelineCaption}>{photo.caption}</Text>
+                          </View>
                         )}
                       </TouchableOpacity>
-                    )}
-                    <View style={styles.timelineLine} />
+                    ))}
+                    <View style={[styles.timelineLine, hasPhotos && styles.timelineLineActive]} />
                   </React.Fragment>
                 );
               })}
 
               {/* Finish marker */}
               <View style={styles.timelineNode}>
-                <View style={[styles.timelineDot, styles.timelineDotFinish]} />
-                <Text style={[styles.timelineKm, styles.timelineKmActive]}>🏁 Finish</Text>
+                <View style={styles.timelineDotFinish}>
+                  <Text style={styles.dotEmoji}>🏁</Text>
+                </View>
+                <Text style={styles.timelineKmFinish}>Finish</Text>
               </View>
             </View>
-            <View style={{ height: 60 }} />
+            <View style={{ height: 80 }} />
           </ScrollView>
         )}
       </View>
@@ -182,43 +217,58 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>📸 Scenic Runs</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.closeBtn}>Done</Text>
-          </TouchableOpacity>
-        </View>
-
         {selectedRun ? (
           renderJourneyView()
         ) : (
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => {
-                setRefreshing(true);
-                fetchScenicRuns();
-              }} />
-            }
-            showsVerticalScrollIndicator={false}
-          >
-            {loading ? (
-              <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
-            ) : scenicRuns.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyEmoji}>🏞️</Text>
-                <Text style={styles.emptyTitle}>No scenic runs yet</Text>
-                <Text style={styles.emptyText}>
-                  Log an outdoor run and add photos to get started.
-                  Each photo gets tagged to a distance marker along your route.
-                </Text>
+          <>
+            {/* Header */}
+            <View style={styles.header}>
+              <View>
+                <Text style={styles.title}>Scenic Runs</Text>
+                {scenicRuns.length > 0 && (
+                  <Text style={styles.subtitle}>
+                    {scenicRuns.length} run{scenicRuns.length !== 1 ? 's' : ''} · {totalPhotos} photo{totalPhotos !== 1 ? 's' : ''}
+                  </Text>
+                )}
               </View>
-            ) : (
-              scenicRuns.map(renderRunCard)
-            )}
-          </ScrollView>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtnWrap}>
+                <Text style={styles.closeBtn}>Done</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={[styles.scrollContent, scenicRuns.length <= 1 && styles.scrollContentCentered]}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={() => {
+                  setRefreshing(true);
+                  fetchScenicRuns();
+                }} />
+              }
+              showsVerticalScrollIndicator={false}
+            >
+              {loading ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
+              ) : scenicRuns.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <View style={styles.emptyIconWrap}>
+                    <Text style={styles.emptyEmoji}>🏞️</Text>
+                  </View>
+                  <Text style={styles.emptyTitle}>Your trail album</Text>
+                  <Text style={styles.emptyText}>
+                    Add photos to your outdoor runs and they'll appear here as a beautiful journey log.
+                  </Text>
+                  <View style={styles.emptyHint}>
+                    <Text style={styles.emptyHintText}>
+                      Tap any outdoor run in History → Edit → Add scenic photo
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                scenicRuns.map((run, i) => renderRunCard(run, i))
+              )}
+            </ScrollView>
+          </>
         )}
 
         {/* Full-screen photo viewer */}
@@ -240,12 +290,15 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
                   style={styles.fullScreenImage}
                   resizeMode="contain"
                 />
-                <Text style={styles.fullScreenMarker}>
-                  📍 {fullScreenPhoto.distance_marker_km}K mark
-                </Text>
-                {fullScreenPhoto.caption && (
-                  <Text style={styles.fullScreenCaption}>{fullScreenPhoto.caption}</Text>
-                )}
+                <View style={styles.fullScreenInfo}>
+                  <Text style={styles.fullScreenMarker}>
+                    {fullScreenPhoto.distance_marker_km}K mark
+                  </Text>
+                  {fullScreenPhoto.caption && (
+                    <Text style={styles.fullScreenCaption}>{fullScreenPhoto.caption}</Text>
+                  )}
+                </View>
+                <Text style={styles.fullScreenHint}>Tap anywhere to close</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -260,79 +313,127 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
   },
   title: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
     color: colors.text,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  closeBtnWrap: {
+    paddingTop: 6,
   },
   closeBtn: {
     fontSize: typography.sizes.md,
     color: colors.primary,
     fontWeight: typography.weights.semibold,
   },
+
+  // Scroll
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: spacing.lg,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.xxl,
   },
+  scrollContentCentered: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
 
-  // Run cards
+  // Run cards — immersive album style
   runCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    marginBottom: spacing.md,
+    borderRadius: radius.xl,
+    marginBottom: spacing.lg,
     overflow: 'hidden',
+    height: CARD_HEIGHT,
   },
   coverImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
-  runCardInfo: {
-    padding: spacing.md,
+  coverPlaceholder: {
+    backgroundColor: colors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  runCardTop: {
-    flexDirection: 'row',
+  coverPlaceholderEmoji: {
+    fontSize: 48,
+    opacity: 0.4,
+  },
+  cardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: radius.xl,
+  },
+  cardContent: {
+    flex: 1,
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    padding: spacing.lg,
   },
-  runCardDate: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-  },
-  runCardPhotos: {
-    fontSize: typography.sizes.sm,
-    color: colors.primary,
-    fontWeight: typography.weights.medium,
-  },
-  runCardStats: {
+  cardTopRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    justifyContent: 'flex-end',
   },
-  runCardDistance: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
+  photoBadge: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  photoBadgeText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
     color: colors.text,
   },
-  runCardPace: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    alignSelf: 'center',
+  cardBottomRow: {},
+  cardDate: {
+    fontSize: typography.sizes.sm,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
   },
-  runCardTime: {
+  cardStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardDistance: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: '#fff',
+  },
+  cardDivider: {
     fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    alignSelf: 'center',
+    color: 'rgba(255,255,255,0.6)',
+    marginHorizontal: 8,
+  },
+  cardPace: {
+    fontSize: typography.sizes.md,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: typography.weights.medium,
+  },
+  cardTime: {
+    fontSize: typography.sizes.md,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: typography.weights.medium,
   },
 
   // Journey view
@@ -340,41 +441,59 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   journeyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  backBtn: {
-    fontSize: typography.sizes.md,
-    color: colors.primary,
-    fontWeight: typography.weights.medium,
-    marginBottom: spacing.xs,
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  backBtnText: {
+    fontSize: 18,
+    color: colors.text,
+    fontWeight: typography.weights.bold,
+  },
+  journeyHeaderInfo: {
+    flex: 1,
   },
   journeyTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
+  journeySubtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   journeyScroll: {
     flex: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
   },
 
   // Timeline
   timeline: {
-    paddingLeft: 20,
+    paddingLeft: 8,
   },
   timelineNode: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.textLight,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.textLight + '60',
     marginRight: spacing.md,
   },
   timelineDotActive: {
@@ -382,12 +501,29 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
+    borderWidth: 2,
+    borderColor: colors.primaryLight,
+  },
+  timelineDotStart: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.secondary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.sm,
   },
   timelineDotFinish: {
-    backgroundColor: colors.accent,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.accent + '30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  dotEmoji: {
+    fontSize: 14,
   },
   timelineKm: {
     fontSize: typography.sizes.sm,
@@ -398,46 +534,75 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: typography.weights.bold,
   },
+  timelineKmStart: {
+    fontSize: typography.sizes.md,
+    color: colors.secondary,
+    fontWeight: typography.weights.bold,
+  },
+  timelineKmFinish: {
+    fontSize: typography.sizes.md,
+    color: colors.text,
+    fontWeight: typography.weights.bold,
+  },
+  timelinePhotoCount: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
+  },
   timelineLine: {
     width: 2,
-    height: 20,
-    backgroundColor: colors.textLight + '40',
-    marginLeft: 5,
+    height: 16,
+    backgroundColor: colors.textLight + '30',
+    marginLeft: 4,
+    marginVertical: 2,
+  },
+  timelineLineActive: {
+    backgroundColor: colors.primary + '40',
   },
   timelinePhoto: {
-    marginLeft: 30,
+    marginLeft: 32,
     marginVertical: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.surface,
-    ...shadows.small,
   },
   timelineImage: {
-    width: SCREEN_WIDTH - 90,
-    height: 200,
-    borderTopLeftRadius: radius.md,
-    borderTopRightRadius: radius.md,
+    width: SCREEN_WIDTH - 100,
+    height: 220,
   },
-  timelineCaption: {
+  captionBar: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+  timelineCaption: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     fontStyle: 'italic',
+    lineHeight: 18,
   },
 
   // Empty state
   emptyState: {
     alignItems: 'center',
-    paddingVertical: spacing.xxl,
+    paddingTop: SCREEN_HEIGHT * 0.12,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
   },
   emptyEmoji: {
-    fontSize: 64,
-    marginBottom: spacing.md,
+    fontSize: 44,
   },
   emptyTitle: {
     fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.semibold,
+    fontWeight: typography.weights.bold,
     color: colors.text,
     marginBottom: spacing.sm,
   },
@@ -445,34 +610,57 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: spacing.lg,
+    lineHeight: 24,
+    marginBottom: spacing.lg,
+  },
+  emptyHint: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  emptyHintText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+    textAlign: 'center',
   },
 
   // Full-screen photo viewer
   fullScreenOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.95)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   fullScreenContent: {
     alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: spacing.lg,
   },
   fullScreenImage: {
-    width: SCREEN_WIDTH - 40,
-    height: SCREEN_WIDTH - 40,
+    width: SCREEN_WIDTH - 32,
+    height: SCREEN_WIDTH - 32,
+    borderRadius: radius.md,
+  },
+  fullScreenInfo: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
   },
   fullScreenMarker: {
     color: '#fff',
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.medium,
-    marginTop: spacing.md,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
   },
   fullScreenCaption: {
-    color: '#ccc',
-    fontSize: typography.sizes.sm,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: typography.sizes.md,
     fontStyle: 'italic',
     marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  fullScreenHint: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: typography.sizes.xs,
+    marginTop: spacing.xl,
   },
 });

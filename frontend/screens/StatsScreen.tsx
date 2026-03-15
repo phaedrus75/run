@@ -6,7 +6,7 @@
  * Only shows data from 2026 onwards.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,23 +32,32 @@ import {
   type StepsSummary,
 } from '../services/api';
 
-type ViewMode = 'week' | 'month' | 'all';
+type Section = 'runs' | 'steps' | 'weight';
+type RunViewMode = 'week' | 'month' | 'all';
+type StepsViewMode = 'month' | 'all';
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
 
 const MIN_YEAR = 2026;
 
 export function StatsScreen() {
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [section, setSection] = useState<Section>('runs');
+  const [viewMode, setViewMode] = useState<RunViewMode>('week');
+  const [stepsViewMode, setStepsViewMode] = useState<StepsViewMode>('month');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [stats, setStats] = useState<Stats | null>(null);
   const [allRuns, setAllRuns] = useState<Run[]>([]);
-  const [runs, setRuns] = useState<Run[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
   const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
   const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
+
+  // Derived synchronously — no useEffect delay
+  const runs = useMemo(() => {
+    if (categoryFilter === 'all') return allRuns;
+    return allRuns.filter(r => (r.category || 'outdoor') === categoryFilter);
+  }, [allRuns, categoryFilter]);
 
   // 📡 Fetch data
   const fetchData = useCallback(async () => {
@@ -67,12 +76,20 @@ export function StatsScreen() {
       setStreakProgress(streakData);
       setStepsSummary(stepsData);
       
-      const filteredRuns = runsData.filter(run => {
+      const filteredRuns = runsData.filter((run: Run) => {
         const runDate = new Date(run.completed_at);
         return runDate.getFullYear() >= MIN_YEAR;
       });
+
+      // Debug: log category distribution
+      const catBreakdown: Record<string, number> = {};
+      filteredRuns.forEach((r: Run) => {
+        const cat = r.category ?? 'NULL';
+        catBreakdown[cat] = (catBreakdown[cat] || 0) + 1;
+      });
+      console.log('[Stats] Category breakdown from API:', JSON.stringify(catBreakdown));
+
       setAllRuns(filteredRuns);
-      setRuns(applyCategoryFilter(filteredRuns, categoryFilter));
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     } finally {
@@ -80,15 +97,6 @@ export function StatsScreen() {
       setRefreshing(false);
     }
   }, []);
-
-  const applyCategoryFilter = (runsList: Run[], cat: CategoryFilter): Run[] => {
-    if (cat === 'all') return runsList;
-    return runsList.filter(r => (r.category || 'outdoor') === cat);
-  };
-
-  useEffect(() => {
-    setRuns(applyCategoryFilter(allRuns, categoryFilter));
-  }, [categoryFilter, allRuns]);
 
   useEffect(() => {
     fetchData();
@@ -225,9 +233,29 @@ export function StatsScreen() {
     { key: 'treadmill', label: 'Treadmill' },
   ];
 
-  const renderTabs = () => (
+  const renderSectionTabs = () => (
+    <View style={styles.sectionTabContainer}>
+      {([
+        { key: 'runs' as Section, label: 'Runs' },
+        { key: 'steps' as Section, label: 'High Step Days' },
+        { key: 'weight' as Section, label: 'Weight' },
+      ]).map(({ key, label }) => (
+        <TouchableOpacity
+          key={key}
+          style={[styles.sectionTab, section === key && styles.sectionTabActive]}
+          onPress={() => setSection(key)}
+        >
+          <Text style={[styles.sectionTabText, section === key && styles.sectionTabTextActive]}>
+            {label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderRunTabs = () => (
     <View style={styles.tabContainer}>
-      {(['week', 'month', 'all'] as ViewMode[]).map(mode => (
+      {(['week', 'month', 'all'] as RunViewMode[]).map(mode => (
         <TouchableOpacity
           key={mode}
           style={[styles.tab, viewMode === mode && styles.tabActive]}
@@ -235,6 +263,22 @@ export function StatsScreen() {
         >
           <Text style={[styles.tabText, viewMode === mode && styles.tabTextActive]}>
             {mode === 'week' ? 'Weekly' : mode === 'month' ? 'Monthly' : 'All Time'}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderStepsTabs = () => (
+    <View style={styles.tabContainer}>
+      {(['month', 'all'] as StepsViewMode[]).map(mode => (
+        <TouchableOpacity
+          key={mode}
+          style={[styles.tab, stepsViewMode === mode && styles.tabActive]}
+          onPress={() => setStepsViewMode(mode)}
+        >
+          <Text style={[styles.tabText, stepsViewMode === mode && styles.tabTextActive]}>
+            {mode === 'month' ? 'Monthly' : 'All Time'}
           </Text>
         </TouchableOpacity>
       ))}
@@ -298,7 +342,7 @@ export function StatsScreen() {
         />
         
         {/* Streak Progress */}
-        <Text style={styles.sectionTitle}>🔥 Weekly Streak</Text>
+        <Text style={styles.sectionTitle}>🌳 Weekly Streak</Text>
         {streakProgress && (
           <StreakProgress progress={streakProgress} />
         )}
@@ -367,37 +411,6 @@ export function StatsScreen() {
           title="Monthly Overview (2026+)" 
         />
         
-        {/* This Month's Steps */}
-        {stepsSummary?.current_month && (
-          <View style={{ marginTop: spacing.md }}>
-            <Text style={styles.sectionTitle}>👟 {stepsSummary.current_month.month} Steps</Text>
-            <View style={[styles.monthlyStepsCard, shadows.small]}>
-              <View style={styles.monthlyStepsRow}>
-                <View style={styles.monthlyStepItem}>
-                  <Text style={styles.monthlyStepValue}>{stepsSummary.current_month.days_15k}</Text>
-                  <Text style={styles.monthlyStepLabel}>15K+ days</Text>
-                </View>
-                <View style={styles.monthlyStepItem}>
-                  <Text style={styles.monthlyStepValue}>{stepsSummary.current_month.days_20k}</Text>
-                  <Text style={styles.monthlyStepLabel}>20K+ days</Text>
-                </View>
-                <View style={styles.monthlyStepItem}>
-                  <Text style={styles.monthlyStepValue}>{stepsSummary.current_month.days_25k}</Text>
-                  <Text style={styles.monthlyStepLabel}>25K+ days</Text>
-                </View>
-              </View>
-              {stepsSummary.current_month.highest > 0 && (
-                <View style={styles.monthlyStepsHighest}>
-                  <Text style={styles.monthlyStepsHighestLabel}>🏆 Highest this month:</Text>
-                  <Text style={styles.monthlyStepsHighestValue}>
-                    {stepsSummary.current_month.highest.toLocaleString()} steps
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-        
         {/* Monthly Details */}
         <Text style={styles.sectionTitle}>Month Details</Text>
         {chartData.slice().reverse().slice(0, 6).map((month, index) => (
@@ -457,11 +470,11 @@ export function StatsScreen() {
         {/* Run Type Breakdown */}
         <Text style={styles.sectionTitle}>Runs by Distance</Text>
         <View style={styles.typeGrid}>
-          {['3k', '5k', '10k', '15k', '18k', '21k'].map(type => {
+          {['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'].map(type => {
             const count = allStats.byType[type] || 0;
-            const totalForType = count * (
-              type === '3k' ? 3 : type === '5k' ? 5 : type === '10k' ? 10 : type === '15k' ? 15 : type === '18k' ? 18 : 21
-            );
+            if (count === 0) return null;
+            const distMap: Record<string, number> = { '1k': 1, '2k': 2, '3k': 3, '5k': 5, '8k': 8, '10k': 10, '15k': 15, '18k': 18, '21k': 21 };
+            const totalForType = count * (distMap[type] || 0);
             return (
               <View key={type} style={[styles.typeCard, shadows.small]}>
                 <View style={[styles.typeIcon, { backgroundColor: colors.runTypes[type] }]}>
@@ -475,54 +488,102 @@ export function StatsScreen() {
           })}
         </View>
         
-        {/* High Step Days */}
-        {stepsSummary && (
-          <View style={{ marginTop: spacing.lg }}>
-            <Text style={styles.sectionTitle}>👟 High Step Days</Text>
-            <View style={[styles.stepDaysCard, shadows.small]}>
-              <View style={styles.stepDaysRow}>
-                <View style={styles.stepDayItem}>
-                  <Text style={styles.stepDayEmoji}>🚶</Text>
-                  <Text style={styles.stepDayValue}>{stepsSummary.all_time?.days_15k || 0}</Text>
-                  <Text style={styles.stepDayLabel}>15K+ days</Text>
-                </View>
-                <View style={styles.stepDayDivider} />
-                <View style={styles.stepDayItem}>
-                  <Text style={styles.stepDayEmoji}>🏃</Text>
-                  <Text style={styles.stepDayValue}>{stepsSummary.all_time?.days_20k || 0}</Text>
-                  <Text style={styles.stepDayLabel}>20K+ days</Text>
-                </View>
-                <View style={styles.stepDayDivider} />
-                <View style={styles.stepDayItem}>
-                  <Text style={styles.stepDayEmoji}>🔥</Text>
-                  <Text style={styles.stepDayValue}>{stepsSummary.all_time?.days_25k || 0}</Text>
-                  <Text style={styles.stepDayLabel}>25K+ days</Text>
-                </View>
-              </View>
-              <View style={styles.stepDaysFooter}>
-                <Text style={styles.stepDaysTotal}>
-                  {stepsSummary.all_time?.total_entries || 0} total step entries logged
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-        
-        {/* Weight Tracking */}
-        {weightProgress && (
-          <View style={{ marginTop: spacing.md }}>
-            <Text style={styles.sectionTitle}>⚖️ Weight Journey</Text>
-            <WeightTracker 
-              progress={weightProgress}
-              chartData={weightChart}
-              onUpdate={fetchData}
-              showChart={true}
-            />
-          </View>
-        )}
       </View>
     );
   };
+
+  const renderStepsMonthly = () => (
+    <View>
+      {stepsSummary?.current_month ? (
+        <View>
+          <Text style={styles.sectionTitle}>{stepsSummary.current_month.month}</Text>
+          <View style={[styles.stepDaysCard, shadows.small]}>
+            <View style={styles.stepDaysRow}>
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🚶</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.current_month.days_15k}</Text>
+                <Text style={styles.stepDayLabel}>15K+ days</Text>
+              </View>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🏃</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.current_month.days_20k}</Text>
+                <Text style={styles.stepDayLabel}>20K+ days</Text>
+              </View>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🌿</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.current_month.days_25k}</Text>
+                <Text style={styles.stepDayLabel}>25K+ days</Text>
+              </View>
+            </View>
+            {stepsSummary.current_month.highest > 0 && (
+              <View style={styles.monthlyStepsHighest}>
+                <Text style={styles.monthlyStepsHighestLabel}>Best this month:</Text>
+                <Text style={styles.monthlyStepsHighestValue}>
+                  {stepsSummary.current_month.highest.toLocaleString()} steps
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.emptyText}>No step data this month</Text>
+      )}
+    </View>
+  );
+
+  const renderStepsAllTime = () => (
+    <View>
+      {stepsSummary?.all_time ? (
+        <View>
+          <View style={[styles.stepDaysCard, shadows.small]}>
+            <View style={styles.stepDaysRow}>
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🚶</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.all_time.days_15k}</Text>
+                <Text style={styles.stepDayLabel}>15K+ days</Text>
+              </View>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🏃</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.all_time.days_20k}</Text>
+                <Text style={styles.stepDayLabel}>20K+ days</Text>
+              </View>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🌿</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.all_time.days_25k}</Text>
+                <Text style={styles.stepDayLabel}>25K+ days</Text>
+              </View>
+            </View>
+            <View style={styles.stepDaysFooter}>
+              <Text style={styles.stepDaysTotal}>
+                {stepsSummary.all_time.total_entries} total step entries logged
+              </Text>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.emptyText}>No step data yet</Text>
+      )}
+    </View>
+  );
+
+  const renderWeightSection = () => (
+    <View>
+      {weightProgress ? (
+        <WeightTracker
+          progress={weightProgress}
+          chartData={weightChart}
+          onUpdate={fetchData}
+          showChart={true}
+        />
+      ) : (
+        <Text style={styles.emptyText}>No weight data yet. Log your first entry to start tracking.</Text>
+      )}
+    </View>
+  );
 
   if (loading) {
     return (
@@ -550,16 +611,31 @@ export function StatsScreen() {
           <Text style={styles.subtitle}>Since 2026</Text>
         </View>
 
-        {/* Tabs */}
-        {renderTabs()}
+        {/* Section Tabs */}
+        {renderSectionTabs()}
 
-        {/* Category Filter */}
-        {renderCategoryFilter()}
+        {/* Runs Section */}
+        {section === 'runs' && (
+          <>
+            {renderRunTabs()}
+            {renderCategoryFilter()}
+            {viewMode === 'week' && renderWeeklyView()}
+            {viewMode === 'month' && renderMonthlyView()}
+            {viewMode === 'all' && renderAllTimeView()}
+          </>
+        )}
 
-        {/* Content */}
-        {viewMode === 'week' && renderWeeklyView()}
-        {viewMode === 'month' && renderMonthlyView()}
-        {viewMode === 'all' && renderAllTimeView()}
+        {/* Steps Section */}
+        {section === 'steps' && (
+          <>
+            {renderStepsTabs()}
+            {stepsViewMode === 'month' && renderStepsMonthly()}
+            {stepsViewMode === 'all' && renderStepsAllTime()}
+          </>
+        )}
+
+        {/* Weight Section */}
+        {section === 'weight' && renderWeightSection()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -599,12 +675,45 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs / 2,
   },
+  sectionTabContainer: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  sectionTab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sectionTabActive: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
+  },
+  sectionTabText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+  },
+  sectionTabTextActive: {
+    color: colors.textOnPrimary,
+    fontWeight: typography.weights.semibold,
+  },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.xs,
     marginBottom: spacing.sm,
+  },
+  emptyText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+    textAlign: 'center',
+    padding: spacing.xl,
   },
   categoryRow: {
     flexDirection: 'row',

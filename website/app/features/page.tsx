@@ -22,8 +22,8 @@ const FEATURES = [
       },
       {
         icon: '📝',
-        title: 'Backdate Runs',
-        desc: 'Forgot to log? Add runs from previous days. Because the run matters, not when you recorded it.',
+        title: 'Backdate & Edit',
+        desc: 'Forgot to log? Add runs from previous days. Made a mistake? Edit distance, time, or category anytime.',
       },
     ],
   },
@@ -60,7 +60,7 @@ const FEATURES = [
       {
         icon: '⚡',
         title: 'Personal Records',
-        desc: 'Your fastest time at each distance, tracked automatically. Compete with yourself — the way you used to be.',
+        desc: 'Your fastest time at each distance, tracked automatically. Filter by outdoor or treadmill. Compete with yourself — the way you used to be.',
       },
       {
         icon: '📅',
@@ -91,6 +91,27 @@ const FEATURES = [
     ],
   },
   {
+    category: 'Scenic Photos',
+    philosophy: 'Remember the views, not just the numbers.',
+    items: [
+      {
+        icon: '📸',
+        title: 'Tag Photos to Km Markers',
+        desc: 'Snap a photo during your outdoor run, then tag it to a km marker. Build a visual record of the places you run through.',
+      },
+      {
+        icon: '🖼️',
+        title: 'Scenic Runs Gallery',
+        desc: 'Browse all your scenic runs in a beautiful album. Full-screen photos, captions, and a timeline of each run\'s journey.',
+      },
+      {
+        icon: '🗺️',
+        title: 'Your Running Journey',
+        desc: 'See every photo placed along your run\'s distance. A visual timeline from start to finish, for every run you photograph.',
+      },
+    ],
+  },
+  {
     category: 'Just Enough Data',
     philosophy: 'Distance. Time. Streak. Goals. That\'s the full list.',
     items: [
@@ -106,8 +127,8 @@ const FEATURES = [
       },
       {
         icon: '📊',
-        title: 'Stats That Matter',
-        desc: 'Weekly, monthly, and all-time views. Distance, runs, pace trend. No cadence, no heart rate zones, no VO2 max.',
+        title: 'Stats by Category',
+        desc: 'Weekly, monthly, and all-time views. Filter by outdoor or treadmill. Distance, runs, pace trend — no noise.',
       },
     ],
   },

@@ -2,7 +2,7 @@
  * LOG RUN SCREEN
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,11 +28,11 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunTypeButton } from '../components/RunTypeButton';
 import { Timer } from '../components/Timer';
-import { runApi, photoApi, getDistance } from '../services/api';
+import { runApi, photoApi, getDistance, levelApi } from '../services/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const RUN_TYPES = ['3k', '5k', '10k', '15k', '18k', '21k'];
+const ALL_RUN_TYPES = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
 const CATEGORIES = [
   { id: 'outdoor', label: '🌳 Outdoor', emoji: '🌳' },
   { id: 'treadmill', label: '🏃 Treadmill', emoji: '🏃' },
@@ -73,6 +73,7 @@ interface RunResult {
 }
 
 export function RunScreen({ navigation }: RunScreenProps) {
+  const [availableTypes, setAvailableTypes] = useState<string[]>(ALL_RUN_TYPES);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [category, setCategory] = useState<string>('outdoor');
   const [useTimer, setUseTimer] = useState(false);
@@ -93,7 +94,14 @@ export function RunScreen({ navigation }: RunScreenProps) {
   const [pendingCaption, setPendingCaption] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const breatheAnim = useRef(new Animated.Value(0.85)).current;
   const confettiRef = useRef<any>(null);
+
+  useEffect(() => {
+    levelApi.get().then(data => {
+      if (data?.distances) setAvailableTypes(data.distances);
+    }).catch(() => {});
+  }, []);
 
   const openCelebration = (result: RunResult) => {
     setRunResult(result);
@@ -107,6 +115,12 @@ export function RunScreen({ navigation }: RunScreenProps) {
     }).start(() => {
       confettiRef.current?.start();
     });
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(breatheAnim, { toValue: 1.15, duration: 3000, useNativeDriver: true }),
+        Animated.timing(breatheAnim, { toValue: 0.85, duration: 3000, useNativeDriver: true }),
+      ]),
+    ).start();
   };
 
   const closeCelebration = async (action: 'done' | 'another') => {
@@ -328,7 +342,7 @@ export function RunScreen({ navigation }: RunScreenProps) {
           {/* Distance */}
           <Text style={styles.sectionTitle}>Distance</Text>
           <View style={styles.typeGrid}>
-            {RUN_TYPES.map(type => {
+            {availableTypes.map(type => {
               const typeColor = colors.runTypes[type] || colors.primary;
               const isSelected = selectedType === type;
               return (
@@ -453,7 +467,10 @@ export function RunScreen({ navigation }: RunScreenProps) {
 
             {runResult && (
               <View style={styles.celebrationContent}>
-                <Text style={styles.celebrationEmoji}>🏃</Text>
+                <View style={styles.breatheContainer}>
+                  <Animated.View style={[styles.breatheCircle, { transform: [{ scale: breatheAnim }] }]} />
+                  <Text style={styles.celebrationEmoji}>🌿</Text>
+                </View>
                 <Text style={styles.celebrationTitle}>Run logged.</Text>
 
                 <View style={styles.runSummary}>
@@ -853,9 +870,22 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     alignItems: 'center',
   },
-  celebrationEmoji: {
-    fontSize: 48,
+  breatheContainer: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.sm,
+  },
+  breatheCircle: {
+    position: 'absolute',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: colors.secondary + '20',
+  },
+  celebrationEmoji: {
+    fontSize: 36,
   },
   celebrationTitle: {
     fontSize: 28,
