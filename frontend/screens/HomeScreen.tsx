@@ -265,7 +265,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 onPress={() => setShowStreak(true)}
               >
                 <RhythmPlant weeks={streakProgress.current_streak} size="small" />
-                <Text style={styles.streakCount}>{streakProgress.current_streak}</Text>
+                <Text style={styles.streakCount}>{streakProgress.current_streak}w</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity 
@@ -515,22 +515,18 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   streakBadge: {
-    width: 44,
-    height: 44,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primaryLight + "40",
-    borderRadius: 22,
+    paddingHorizontal: 4,
   },
   streakEmoji: {
     fontSize: 12,
   },
   streakCount: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    marginLeft: 1,
+    fontSize: 10,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+    marginTop: -4,
   },
   profileButton: {
   },

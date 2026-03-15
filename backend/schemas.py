@@ -45,9 +45,9 @@ RUN_DISTANCES = {
 }
 
 LEVEL_DISTANCES = {
-    "breath": ["1k", "2k", "3k", "5k"],
-    "stride": ["2k", "3k", "5k", "8k", "10k"],
-    "flow":   ["3k", "5k", "8k", "10k", "15k", "18k", "21k"],
+    "breath": list(RUN_DISTANCES.keys()),
+    "stride": list(RUN_DISTANCES.keys()),
+    "flow":   list(RUN_DISTANCES.keys()),
     "zen":    list(RUN_DISTANCES.keys()),
 }
 
