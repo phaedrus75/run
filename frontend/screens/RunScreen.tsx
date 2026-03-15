@@ -17,14 +17,18 @@ import {
   Modal,
   Animated,
   Dimensions,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunTypeButton } from '../components/RunTypeButton';
 import { Timer } from '../components/Timer';
-import { runApi, getDistance } from '../services/api';
+import { runApi, photoApi, getDistance } from '../services/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -80,6 +84,14 @@ export function RunScreen({ navigation }: RunScreenProps) {
   const [quote, setQuote] = useState(getRandomQuote());
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [reflection, setReflection] = useState('');
+  const [scenicPhotos, setScenicPhotos] = useState<Array<{ marker: number; uri: string; caption: string }>>([]);
+  const [showPhotoFlow, setShowPhotoFlow] = useState(false);
+  const [photoStep, setPhotoStep] = useState<'pick' | 'marker' | 'caption'>('pick');
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [pendingPhotoBase64, setPendingPhotoBase64] = useState<string | null>(null);
+  const [pendingMarker, setPendingMarker] = useState<number | null>(null);
+  const [pendingCaption, setPendingCaption] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const confettiRef = useRef<any>(null);
 
@@ -115,6 +127,13 @@ export function RunScreen({ navigation }: RunScreenProps) {
       setShowCelebration(false);
       setSelectedMood(null);
       setReflection('');
+      setScenicPhotos([]);
+      setShowPhotoFlow(false);
+      setPhotoStep('pick');
+      setPendingPhotoUri(null);
+      setPendingPhotoBase64(null);
+      setPendingMarker(null);
+      setPendingCaption('');
       if (action === 'done') {
         navigation.navigate('Home', {
           celebrations: runResult?.celebrations || [],
@@ -142,6 +161,71 @@ export function RunScreen({ navigation }: RunScreenProps) {
       pace: paceStr,
       celebrations: run.celebrations || [],
     });
+  };
+
+  const getDistanceMarkers = (distanceKm: number): number[] => {
+    const markers: number[] = [];
+    for (let km = 1; km <= distanceKm; km++) {
+      markers.push(km);
+    }
+    return markers;
+  };
+
+  const pickPhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      base64: false,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 800 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+
+      setPendingPhotoUri(manipulated.uri);
+      setPendingPhotoBase64(manipulated.base64 || null);
+      setPhotoStep('marker');
+    }
+  };
+
+  const handleSelectMarker = (km: number) => {
+    haptic(Haptics.ImpactFeedbackStyle.Light);
+    setPendingMarker(km);
+    setPhotoStep('caption');
+  };
+
+  const handleUploadPhoto = async () => {
+    if (!runResult?.runId || !pendingPhotoBase64 || !pendingMarker) return;
+
+    setUploadingPhoto(true);
+    try {
+      await photoApi.upload(runResult.runId, {
+        photo_data: pendingPhotoBase64,
+        distance_marker_km: pendingMarker,
+        caption: pendingCaption.trim() || undefined,
+      });
+
+      setScenicPhotos(prev => [...prev, {
+        marker: pendingMarker,
+        uri: pendingPhotoUri || '',
+        caption: pendingCaption.trim(),
+      }]);
+
+      setPendingPhotoUri(null);
+      setPendingPhotoBase64(null);
+      setPendingMarker(null);
+      setPendingCaption('');
+      setPhotoStep('pick');
+    } catch (e) {
+      console.error('Photo upload failed:', e);
+      Alert.alert('Upload Failed', 'Could not upload photo. Try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const handleSaveRun = async () => {
@@ -442,25 +526,137 @@ export function RunScreen({ navigation }: RunScreenProps) {
                   returnKeyType="done"
                 />
 
-                <View style={styles.quoteContainer}>
-                  <Text style={styles.quoteText}>"{quote.text}"</Text>
-                  <Text style={styles.quoteAuthor}>— {quote.author}</Text>
-                </View>
+                {/* Scenic Photos - outdoor runs only */}
+                {runResult.category === 'Outdoor' && !showPhotoFlow && (
+                  <TouchableOpacity
+                    style={styles.scenicButton}
+                    onPress={() => {
+                      haptic(Haptics.ImpactFeedbackStyle.Medium);
+                      setShowPhotoFlow(true);
+                      pickPhoto();
+                    }}
+                  >
+                    <Text style={styles.scenicButtonEmoji}>📸</Text>
+                    <Text style={styles.scenicButtonText}>Add scenic photos</Text>
+                  </TouchableOpacity>
+                )}
 
-                <View style={styles.celebrationButtons}>
-                  <TouchableOpacity
-                    style={styles.doneButton}
-                    onPress={() => closeCelebration('done')}
-                  >
-                    <Text style={styles.doneButtonText}>Done</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.anotherButton}
-                    onPress={() => closeCelebration('another')}
-                  >
-                    <Text style={styles.anotherButtonText}>Log Another</Text>
-                  </TouchableOpacity>
-                </View>
+                {showPhotoFlow && (
+                  <View style={styles.photoFlowContainer}>
+                    {/* Uploaded photos thumbnails */}
+                    {scenicPhotos.length > 0 && (
+                      <View style={styles.photoThumbnails}>
+                        {scenicPhotos.map((p, i) => (
+                          <View key={i} style={styles.thumbnailWrap}>
+                            <Image source={{ uri: p.uri }} style={styles.thumbnail} />
+                            <Text style={styles.thumbnailMarker}>{p.marker}K</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {photoStep === 'pick' && !pendingPhotoUri && (
+                      <TouchableOpacity style={styles.addPhotoBtn} onPress={pickPhoto}>
+                        <Text style={styles.addPhotoBtnText}>
+                          {scenicPhotos.length > 0 ? '+ Add another photo' : '📷 Pick a photo'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {photoStep === 'marker' && pendingPhotoUri && (
+                      <View style={styles.markerSection}>
+                        <Image source={{ uri: pendingPhotoUri }} style={styles.previewImage} />
+                        <Text style={styles.markerLabel}>Where was this taken?</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.markerScroll}>
+                          <View style={styles.markerRow}>
+                            {getDistanceMarkers(getDistance(runResult.distance.toLowerCase())).map(km => (
+                              <TouchableOpacity
+                                key={km}
+                                style={[
+                                  styles.markerChip,
+                                  pendingMarker === km && styles.markerChipActive,
+                                ]}
+                                onPress={() => handleSelectMarker(km)}
+                              >
+                                <Text style={[
+                                  styles.markerChipText,
+                                  pendingMarker === km && styles.markerChipTextActive,
+                                ]}>{km}K</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </ScrollView>
+                      </View>
+                    )}
+
+                    {photoStep === 'caption' && (
+                      <View style={styles.captionSection}>
+                        <Image source={{ uri: pendingPhotoUri! }} style={styles.previewImageSmall} />
+                        <Text style={styles.captionMarkerTag}>📍 At the {pendingMarker}K mark</Text>
+                        <TextInput
+                          style={styles.captionInput}
+                          placeholder="Add a caption (optional)"
+                          placeholderTextColor={colors.textLight}
+                          value={pendingCaption}
+                          onChangeText={setPendingCaption}
+                          maxLength={80}
+                          returnKeyType="done"
+                        />
+                        <TouchableOpacity
+                          style={styles.uploadBtn}
+                          onPress={handleUploadPhoto}
+                          disabled={uploadingPhoto}
+                        >
+                          {uploadingPhoto ? (
+                            <ActivityIndicator color={colors.textOnPrimary} />
+                          ) : (
+                            <Text style={styles.uploadBtnText}>Save photo</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    <TouchableOpacity
+                      style={styles.closePhotoFlow}
+                      onPress={() => {
+                        setShowPhotoFlow(false);
+                        setPhotoStep('pick');
+                        setPendingPhotoUri(null);
+                        setPendingPhotoBase64(null);
+                        setPendingMarker(null);
+                        setPendingCaption('');
+                      }}
+                    >
+                      <Text style={styles.closePhotoFlowText}>
+                        {scenicPhotos.length > 0 ? 'Done adding photos' : 'Skip photos'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {!showPhotoFlow && (
+                  <>
+                    <View style={styles.quoteContainer}>
+                      <Text style={styles.quoteText}>"{quote.text}"</Text>
+                      <Text style={styles.quoteAuthor}>— {quote.author}</Text>
+                    </View>
+
+                    <View style={styles.celebrationButtons}>
+                      <TouchableOpacity
+                        style={styles.doneButton}
+                        onPress={() => closeCelebration('done')}
+                      >
+                        <Text style={styles.doneButtonText}>Done</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.anotherButton}
+                        onPress={() => closeCelebration('another')}
+                      >
+                        <Text style={styles.anotherButtonText}>Log Another</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </View>
             )}
           </Animated.View>
@@ -806,5 +1002,165 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.semibold,
+  },
+
+  // Scenic photo styles
+  scenicButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.textLight + '60',
+    borderStyle: 'dashed',
+  },
+  scenicButtonEmoji: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  scenicButtonText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+  },
+  photoFlowContainer: {
+    width: '100%',
+    marginBottom: spacing.md,
+  },
+  photoThumbnails: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  thumbnailWrap: {
+    position: 'relative',
+  },
+  thumbnail: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.sm,
+  },
+  thumbnailMarker: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: colors.primary,
+    color: colors.textOnPrimary,
+    fontSize: 9,
+    fontWeight: typography.weights.bold as any,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  addPhotoBtn: {
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary + '40',
+    marginBottom: spacing.sm,
+  },
+  addPhotoBtnText: {
+    color: colors.primary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+  },
+  markerSection: {
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  previewImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+  },
+  markerLabel: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.semibold,
+    marginBottom: spacing.sm,
+  },
+  markerScroll: {
+    maxHeight: 44,
+  },
+  markerRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  markerChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.textLight,
+  },
+  markerChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  markerChipText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: colors.textSecondary,
+  },
+  markerChipTextActive: {
+    color: colors.textOnPrimary,
+  },
+  captionSection: {
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  previewImageSmall: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+  },
+  captionMarkerTag: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    fontWeight: typography.weights.medium,
+    marginBottom: spacing.sm,
+  },
+  captionInput: {
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  uploadBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    minWidth: 140,
+  },
+  uploadBtnText: {
+    color: colors.textOnPrimary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+  },
+  closePhotoFlow: {
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  closePhotoFlowText: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
   },
 });

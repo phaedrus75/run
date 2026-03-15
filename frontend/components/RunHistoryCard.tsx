@@ -57,6 +57,7 @@ export function RunHistoryCard({ run, onPress }: RunHistoryCardProps) {
           {formatDate(run.completed_at)}
           {run.category === 'treadmill' && ' 🏃'}
           {run.category === 'outdoor' && ' 🌳'}
+          {(run.photo_count ?? 0) > 0 && ` 📸${run.photo_count}`}
         </Text>
       </View>
       

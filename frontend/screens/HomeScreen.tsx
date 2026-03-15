@@ -41,6 +41,7 @@ import {
   WeekSummaryCard,
 } from '../components';
 import { MonthInReview } from '../components/MonthInReview';
+import { ScenicRunsModal } from './ScenicRunsScreen';
 import { 
   runApi, 
   statsApi, 
@@ -83,6 +84,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   
   // 🔥 Streak modal state
   const [showStreak, setShowStreak] = useState(false);
+  
+  // 📸 Scenic runs modal state
+  const [showScenicRuns, setShowScenicRuns] = useState(false);
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
@@ -396,7 +400,26 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
           )}
         </View>
+        
+        {/* 📸 Scenic Runs */}
+        <TouchableOpacity 
+          style={[styles.scenicRunsButton, shadows.small]}
+          onPress={() => setShowScenicRuns(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.scenicRunsEmoji}>🏞️</Text>
+          <View>
+            <Text style={styles.scenicRunsTitle}>Scenic Runs</Text>
+            <Text style={styles.scenicRunsSubtitle}>Photos from your outdoor runs</Text>
+          </View>
+        </TouchableOpacity>
       </ScrollView>
+      
+      {/* 📸 Scenic Runs Modal */}
+      <ScenicRunsModal
+        visible={showScenicRuns}
+        onClose={() => setShowScenicRuns(false)}
+      />
       
       {/* 👤 Profile Modal */}
       <ProfileModal 
@@ -706,5 +729,27 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.text,
     fontWeight: typography.weights.medium,
+  },
+  scenicRunsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  scenicRunsEmoji: {
+    fontSize: 32,
+    marginRight: spacing.md,
+  },
+  scenicRunsTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  scenicRunsSubtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
 });

@@ -106,8 +106,11 @@ class RunResponse(BaseModel):
     # 🎉 Celebrations - all achievements unlocked by this run
     celebrations: List[Celebration] = []
     
+    # 📸 Photo count for scenic runs
+    photo_count: int = 0
+    
     class Config:
-        from_attributes = True  # Allows converting from database model
+        from_attributes = True
 
 
 # ==========================================

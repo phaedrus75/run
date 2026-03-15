@@ -88,6 +88,28 @@ export interface Run {
   is_personal_best?: boolean;
   pr_type?: string | null;
   celebrations?: Celebration[];
+  photo_count?: number;
+}
+
+export interface RunPhoto {
+  id: number;
+  run_id: number;
+  photo_data: string;
+  distance_marker_km: number;
+  caption: string | null;
+  created_at: string | null;
+}
+
+export interface ScenicRun {
+  id: number;
+  run_type: string;
+  distance_km: number;
+  duration_seconds: number;
+  completed_at: string | null;
+  pace: string;
+  mood: string | null;
+  photo_count: number;
+  cover_photo: string | null;
 }
 
 export interface WeeklyPlan {
@@ -545,6 +567,35 @@ export const stepsApi = {
    */
   getSummary: (): Promise<StepsSummary> => {
     return apiFetch('/steps/summary');
+  },
+};
+
+// ==========================================
+// 📸 PHOTO API (Scenic Runs)
+// ==========================================
+
+export const photoApi = {
+  upload: (runId: number, data: {
+    photo_data: string;
+    distance_marker_km: number;
+    caption?: string;
+  }): Promise<{ id: number; run_id: number; distance_marker_km: number; caption: string | null }> => {
+    return apiFetch(`/runs/${runId}/photos`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getForRun: (runId: number): Promise<RunPhoto[]> => {
+    return apiFetch(`/runs/${runId}/photos`);
+  },
+
+  delete: (runId: number, photoId: number): Promise<void> => {
+    return apiFetch(`/runs/${runId}/photos/${photoId}`, { method: 'DELETE' });
+  },
+
+  getScenicRuns: (): Promise<ScenicRun[]> => {
+    return apiFetch('/scenic-runs');
   },
 };
 

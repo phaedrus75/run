@@ -26,7 +26,7 @@ import json
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin
+from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email,
@@ -479,7 +479,7 @@ def create_run(
     is_pr = any(c["type"] == "personal_best" for c in celebrations)
     pr_type = next((c["type"] for c in celebrations if c["type"] == "personal_best"), None)
     
-    return format_run_response(db_run, is_personal_best=is_pr, pr_type=pr_type, celebrations=celebrations)
+    return format_run_response(db_run, is_personal_best=is_pr, pr_type=pr_type, celebrations=celebrations, db=db)
 
 
 @app.get("/runs", response_model=List[RunResponse])
@@ -502,7 +502,7 @@ def get_runs(
     """
     user_id = current_user.id if current_user else None
     runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type, user_id=user_id, category=category)
-    return [format_run_response(run) for run in runs]
+    return [format_run_response(run, db=db) for run in runs]
 
 
 @app.get("/runs/{run_id}", response_model=RunResponse)
@@ -518,7 +518,7 @@ def get_run(run_id: int, db: Session = Depends(get_db)):
     run = crud.get_run(db, run_id=run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return format_run_response(run)
+    return format_run_response(run, db=db)
 
 
 @app.put("/runs/{run_id}", response_model=RunResponse)
@@ -548,7 +548,7 @@ def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)
     if not updated_run:
         raise HTTPException(status_code=404, detail="Run not found")
     
-    return format_run_response(updated_run)
+    return format_run_response(updated_run, db=db)
 
 
 @app.delete("/runs/{run_id}")
@@ -1032,13 +1032,12 @@ def get_steps_summary(
 # 🛠️ HELPER FUNCTIONS
 # ==========================================
 
-def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None, celebrations: list = None) -> dict:
+def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None, celebrations: list = None, db: Session = None) -> dict:
     """
     Format a Run object for the API response.
     
     Adds calculated fields like pace and formatted duration.
     """
-    # Calculate pace (time per km)
     if run.distance_km > 0:
         seconds_per_km = run.duration_seconds / run.distance_km
         pace_mins = int(seconds_per_km // 60)
@@ -1047,10 +1046,13 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
     else:
         pace = "0:00"
     
-    # Format duration
     mins = run.duration_seconds // 60
     secs = run.duration_seconds % 60
     formatted = f"{mins}:{secs:02d}"
+    
+    photo_count = 0
+    if db:
+        photo_count = db.query(RunPhoto).filter(RunPhoto.run_id == run.id).count()
     
     return {
         "id": run.id,
@@ -1066,6 +1068,7 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
         "is_personal_best": is_personal_best,
         "pr_type": pr_type,
         "celebrations": celebrations or [],
+        "photo_count": photo_count,
     }
 
 
@@ -1833,13 +1836,158 @@ def get_circle_checkins(
         })
     
     return result
-"""
-Congratulations! You've read through the main API file.
+# ==========================================
+# 📸 SCENIC RUNS (Photo Endpoints)
+# ==========================================
 
-Try these exercises:
-1. Add a new endpoint: GET /runs/today (runs completed today)
-2. Add a new run type: "25k" 
-3. Add a new stat: fastest 5k time
+@app.post("/runs/{run_id}/photos")
+def upload_run_photo(
+    run_id: int,
+    photo_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Upload a photo tagged to a distance marker for a run."""
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your run")
+    
+    category = getattr(run, 'category', 'outdoor') or 'outdoor'
+    if category != 'outdoor':
+        raise HTTPException(status_code=400, detail="Scenic photos are only for outdoor runs")
+    
+    base64_data = photo_data.get("photo_data")
+    distance_marker = photo_data.get("distance_marker_km")
+    caption = photo_data.get("caption")
+    
+    if not base64_data:
+        raise HTTPException(status_code=400, detail="photo_data is required")
+    if distance_marker is None or distance_marker <= 0:
+        raise HTTPException(status_code=400, detail="distance_marker_km must be positive")
+    if distance_marker > run.distance_km:
+        raise HTTPException(status_code=400, detail=f"Marker {distance_marker}km exceeds run distance {run.distance_km}km")
+    
+    photo = RunPhoto(
+        run_id=run_id,
+        user_id=current_user.id,
+        photo_data=base64_data,
+        distance_marker_km=distance_marker,
+        caption=caption
+    )
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    
+    return {
+        "id": photo.id,
+        "run_id": photo.run_id,
+        "distance_marker_km": photo.distance_marker_km,
+        "caption": photo.caption,
+        "created_at": photo.created_at.isoformat() if photo.created_at else None,
+    }
 
-The FastAPI docs at http://localhost:8000/docs let you test all endpoints!
-"""
+
+@app.get("/runs/{run_id}/photos")
+def get_run_photos(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Get all photos for a run, ordered by distance marker."""
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your run")
+    
+    photos = db.query(RunPhoto).filter(
+        RunPhoto.run_id == run_id
+    ).order_by(RunPhoto.distance_marker_km.asc()).all()
+    
+    return [
+        {
+            "id": p.id,
+            "run_id": p.run_id,
+            "photo_data": p.photo_data,
+            "distance_marker_km": p.distance_marker_km,
+            "caption": p.caption,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in photos
+    ]
+
+
+@app.delete("/runs/{run_id}/photos/{photo_id}")
+def delete_run_photo(
+    run_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Delete a specific photo from a run."""
+    photo = db.query(RunPhoto).filter(
+        RunPhoto.id == photo_id,
+        RunPhoto.run_id == run_id,
+        RunPhoto.user_id == current_user.id
+    ).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    
+    db.delete(photo)
+    db.commit()
+    return {"message": "Photo deleted"}
+
+
+@app.get("/scenic-runs")
+def get_scenic_runs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    """Get all outdoor runs that have photos, for the scenic gallery."""
+    from sqlalchemy import func as sqlfunc
+    
+    photo_counts = db.query(
+        RunPhoto.run_id,
+        sqlfunc.count(RunPhoto.id).label("count")
+    ).filter(
+        RunPhoto.user_id == current_user.id
+    ).group_by(RunPhoto.run_id).all()
+    
+    if not photo_counts:
+        return []
+    
+    run_photo_map = {row.run_id: row.count for row in photo_counts}
+    run_ids = list(run_photo_map.keys())
+    
+    runs = db.query(Run).filter(
+        Run.id.in_(run_ids),
+        Run.user_id == current_user.id
+    ).order_by(Run.completed_at.desc()).all()
+    
+    result = []
+    for run in runs:
+        first_photo = db.query(RunPhoto).filter(
+            RunPhoto.run_id == run.id
+        ).order_by(RunPhoto.distance_marker_km.asc()).first()
+        
+        if run.distance_km > 0:
+            spk = run.duration_seconds / run.distance_km
+            pace = f"{int(spk // 60)}:{int(spk % 60):02d}"
+        else:
+            pace = "0:00"
+        
+        result.append({
+            "id": run.id,
+            "run_type": run.run_type,
+            "distance_km": run.distance_km,
+            "duration_seconds": run.duration_seconds,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "pace": pace,
+            "mood": getattr(run, 'mood', None),
+            "photo_count": run_photo_map.get(run.id, 0),
+            "cover_photo": first_photo.photo_data if first_photo else None,
+        })
+    
+    return result
