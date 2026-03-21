@@ -140,7 +140,7 @@ export default function SupportPage() {
         {/* Response Time */}
         <div className="bg-coral/5 rounded-2xl p-8 text-center">
           <p className="text-gray-600">
-            We typically respond within <strong>24 hours</strong>.
+            We typically respond within <strong>48 hours</strong>.
           </p>
         </div>
       </div>

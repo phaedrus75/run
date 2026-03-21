@@ -8,13 +8,13 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center gap-12 md:gap-16">
             <div className="flex-1 max-w-xl">
               <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
-                Less tracking.<br />
-                <span className="text-coral">More running.</span>
+                Your running journal<br />
+                <span className="text-coral">Finding Joy.</span>
               </h1>
               <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
                 Running apps turned running into a spreadsheet. ZenRun is a
-                running journal — log your run in 2 seconds, find your rhythm,
-                and get back to your life.
+                running journal &mdash; Log your run in 2 seconds, build your rhythm
+                and find joy in running.
               </p>
               <div id="download" className="flex flex-wrap gap-4">
                 <a
@@ -49,13 +49,10 @@ export default function Home() {
               <div className="relative w-[280px] h-[580px] bg-gray-900 rounded-[3rem] p-3 shadow-2xl">
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 w-28 h-6 bg-gray-900 rounded-b-2xl z-10" />
                 <div className="w-full h-full bg-[#FFF9F5] rounded-[2.3rem] overflow-hidden px-5 pt-14 pb-6">
-                  {/* Status bar */}
                   <div className="flex justify-between items-center mb-6">
                     <span className="text-[15px] font-bold text-gray-900">ZenRun</span>
                     <div className="w-8 h-8 bg-gray-200 rounded-full" />
                   </div>
-
-                  {/* Rhythm card */}
                   <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-gray-400">Your Rhythm</span>
@@ -72,8 +69,6 @@ export default function Home() {
                     </div>
                     <p className="text-[11px] text-gray-400 mt-2">1 more run this week</p>
                   </div>
-
-                  {/* Goal card */}
                   <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-gray-900">2026 Goal</span>
@@ -87,8 +82,6 @@ export default function Home() {
                       <span>38%</span>
                     </div>
                   </div>
-
-                  {/* Recent run */}
                   <div className="bg-white rounded-2xl p-4 mb-3 shadow-sm">
                     <div className="flex items-center justify-between">
                       <div>
@@ -98,8 +91,6 @@ export default function Home() {
                       <span className="text-[11px] text-gray-400">Today</span>
                     </div>
                   </div>
-
-                  {/* CTA button */}
                   <div className="bg-[#E8756F] rounded-xl py-3 text-center mt-1">
                     <span className="text-white text-sm font-semibold">Log a run</span>
                   </div>
@@ -118,21 +109,26 @@ export default function Home() {
           </h2>
           <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
             <p>
-              Open any popular running app and you&apos;re hit with pace splits, cadence,
-              heart rate zones, VO2 max estimates, power output, vertical oscillation.
-              Then comes the social layer — leaderboards, segment records, and the
-              unspoken pressure to perform for an audience.
+              One might reasonably expect that a tool designed to support runners would
+              concern itself with the essential question: did you run today? Instead,
+              the modern running application presents the user with pace splits, cadence
+              measurements, heart rate zone analysis, VO2 max estimates, power output in
+              watts, and vertical oscillation in centimetres &mdash; a cascade of data that,
+              however precisely rendered, bears remarkably little relation to whether the
+              run was any good.
             </p>
             <p>
-              Runners admit to sprinting the last metres of a run just to improve their
-              Strava average. Others add miles in the rain so their upload reads
-              &ldquo;20 miles&rdquo; for public validation. Easy runs — the foundation
-              of aerobic fitness — are routinely run too fast because posting a slow
-              pace feels embarrassing.
+              The consequences of this are not trivial. A runner who might otherwise have
+              enjoyed a slow Tuesday morning loop finds herself monitoring zone 2 thresholds.
+              Another adds an unnecessary mile in poor weather so that his weekly total
+              survives public scrutiny. Easy runs &mdash; the quiet, unglamorous foundation
+              upon which all aerobic fitness is built &mdash; are routinely run too fast,
+              not because the body demands it, but because the leaderboard does.
             </p>
             <p className="text-gray-900 font-semibold">
-              What started as tools to help runners have become tools that own them.
-              The joy has been optimised out.
+              What began as instruments of measurement have become instruments of anxiety.
+              The run worth having, it turns out, is the one in which you are present &mdash;
+              not to the data, but to yourself.
             </p>
           </div>
         </div>
@@ -151,45 +147,45 @@ export default function Home() {
 
           <div className="space-y-12">
             <div className="border-l-2 border-coral pl-6">
-              <blockquote className="text-lg text-gray-700 italic leading-relaxed mb-3">
+              <blockquote className="text-base text-gray-500 italic leading-relaxed mb-2">
                 &ldquo;Sometimes, we complicate things with gadgets and gear, when
                 what we really need is to trust our bodies and keep things simple.&rdquo;
               </blockquote>
-              <p className="text-sm text-gray-500 font-medium">
+              <p className="text-xs text-gray-400 font-medium mb-3">
                 Christopher McDougall, <em>Born to Run</em>
               </p>
-              <p className="text-sm text-gray-400 mt-2">
+              <p className="text-lg text-gray-700 leading-relaxed">
                 The Tarahumara run hundreds of miles in thin sandals, smiling.
                 No GPS. No heart rate monitors. They run because running is
-                woven into their culture — a form of community and celebration.
+                woven into their culture &mdash; a form of community and celebration.
               </p>
             </div>
 
             <div className="border-l-2 border-teal pl-6">
-              <blockquote className="text-lg text-gray-700 italic leading-relaxed mb-3">
+              <blockquote className="text-base text-gray-500 italic leading-relaxed mb-2">
                 &ldquo;The only opponent you have to beat is yourself, the way
                 you used to be.&rdquo;
               </blockquote>
-              <p className="text-sm text-gray-500 font-medium">
+              <p className="text-xs text-gray-400 font-medium mb-3">
                 Haruki Murakami, <em>What I Talk About When I Talk About Running</em>
               </p>
-              <p className="text-sm text-gray-400 mt-2">
+              <p className="text-lg text-gray-700 leading-relaxed">
                 Murakami has run marathons for four decades. He doesn&apos;t run
                 to live longer. He runs to live fully. What matters is whether
-                you improved over yesterday — not where you rank on a leaderboard.
+                you improved over yesterday &mdash; not where you rank on a leaderboard.
               </p>
             </div>
 
             <div className="border-l-2 border-gray-300 pl-6">
-              <blockquote className="text-lg text-gray-700 italic leading-relaxed mb-3">
+              <blockquote className="text-base text-gray-500 italic leading-relaxed mb-2">
                 &ldquo;It is only necessary that he runs and runs and sometimes
                 suffers. Then one day he will wake up and discover that somewhere
                 along the way he has begun to see order and law and love and Truth.&rdquo;
               </blockquote>
-              <p className="text-sm text-gray-500 font-medium">
+              <p className="text-xs text-gray-400 font-medium mb-3">
                 George Sheehan, <em>Running &amp; Being</em>
               </p>
-              <p className="text-sm text-gray-400 mt-2">
+              <p className="text-lg text-gray-700 leading-relaxed">
                 Running transforms the runner. Not through data, but through
                 the accumulated experience of showing up, day after day.
               </p>
@@ -206,8 +202,8 @@ export default function Home() {
           </h2>
           <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto mb-12">
             The single most important factor in running progress is not pace,
-            cadence, or VO2 max. Research shows that runners who show up regularly —
-            even with imperfect sessions — build lasting fitness. Perfectionism,
+            cadence, or VO2 max. Research shows that runners who show up regularly &mdash;
+            even with imperfect sessions &mdash; build lasting fitness. Perfectionism,
             the mindset that data-heavy apps reinforce, actually hinders progress.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
@@ -250,12 +246,12 @@ export default function Home() {
               {
                 icon: '⏱️',
                 title: 'Log in 2 seconds',
-                desc: 'Pick your distance, enter your time, done. No GPS needed. Run however you want, log it when you\'re back.',
+                desc: 'Pick your distance, enter your time, done. You can use your Apple Watch or not. Run however you want, log it when you\'re back.',
               },
               {
                 icon: '🌳',
                 title: 'Rhythm rewards showing up',
-                desc: 'Run at least twice a week to keep your rhythm going. Not pace. Not distance. Just presence.',
+                desc: 'Run at least twice a week to keep your rhythm going. Not pace. Not distance. Just presence. And showing up.',
               },
               {
                 icon: '🏆',
@@ -279,12 +275,12 @@ export default function Home() {
               {
                 icon: '📸',
                 title: 'Scenic run photos',
-                desc: 'Tag photos to distance markers on outdoor runs. Build a visual album of your running journey, km by km.',
+                desc: 'Capture the joy of outdoor runs. Tag photos to distance markers. Build a visual album of your running journey, km by km.',
               },
               {
                 icon: '👥',
                 title: 'Circles, not leaderboards',
-                desc: 'Share your running journey with up to 10 close friends. Accountability without the pressure of public competition.',
+                desc: 'Share your running journey with up to 10 close friends. Accountability and maybe some joyful competition.',
               },
               {
                 icon: '🎯',
@@ -343,10 +339,10 @@ export default function Home() {
           <ul className="space-y-5">
             {[
               'Run 2–5 times a week and want to keep doing that for years',
-              'Value the mental clarity of running as much as the physical fitness',
-              'Have felt the anxiety of tracking apps and want something calmer',
-              'Care about building a sustainable habit, not chasing a PR every week',
-              'Want to share your journey with close friends, not perform for followers',
+              'Value the running mindfulness as much as the physical fitness',
+              'Have used tracking apps but have not stayed consistent',
+              'Care more about running than chasing a PR every week',
+              'Want to share your journey with close friends',
               'Believe that the best run is the one you actually did',
             ].map((item) => (
               <li key={item} className="flex items-start gap-4">
@@ -357,7 +353,6 @@ export default function Home() {
           </ul>
           <p className="mt-10 text-gray-500 leading-relaxed">
             We&apos;re not for the runner optimising their 5K time by 3 seconds.
-            Those runners are well-served by existing apps.
             We&apos;re for the runner who just wants to run.
           </p>
         </div>
@@ -372,20 +367,19 @@ export default function Home() {
           <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
             <p>
               I&apos;ve started and stopped running more times than I can count.
-              I hardly ran at all in 2025. Then, at the beginning of 2026, I set
-              a simple goal: run 1,000km this year. Not for a race. Just to see
+              I ran consistently for a summer 3 years ago. Since then it has been
+              on and off. Cold rainy London weather and too much at work, I hardly
+              ran at all in 2025. Then, at the beginning of this year, I set a
+              simple goal: run 1,000km this year. Not for a race. Just to see
               if the habit could finally stick.
             </p>
             <p>
               I built ZenRun during the same period &mdash; alongside the runs,
               through the weeks of motivation and the weeks I nearly quit again.
-              Every feature exists because I needed it. The shift from &ldquo;streaks&rdquo;
-              to &ldquo;rhythm&rdquo; came from my own experience: missing a week
-              felt like failure under a streak. Under a rhythm, it&apos;s just a
-              pause. You come back.
+              Every feature exists because I thought of it while I ran.
             </p>
             <p className="text-gray-900 font-semibold">
-              160km in, both the habit and the app are still going. ZenRun is a
+              170km in, both the habit and the app are still going. ZenRun is a
               running journal built by a runner who&apos;s still journaling.
             </p>
           </div>

@@ -13,7 +13,7 @@ const FEATURES = [
       {
         icon: '⏱️',
         title: '2-Second Logging',
-        desc: 'Pick your distance, enter your time, done. No GPS needed. No phone on your run. Log it when you\'re back.',
+        desc: 'Pick your distance, enter your time, done. You can use your Apple Watch or not. Run however you want, log it when you\'re back.',
       },
       {
         icon: '🏃',
@@ -44,7 +44,7 @@ const FEATURES = [
       {
         icon: '🎉',
         title: 'Quiet Celebrations',
-        desc: 'A small moment of confetti when you maintain your rhythm or hit a goal. No push notifications. No pressure.',
+        desc: 'A small moment of confetti when you maintain your rhythm or hit a goal.',
       },
     ],
   },
@@ -76,7 +76,7 @@ const FEATURES = [
       {
         icon: '👥',
         title: 'Circles',
-        desc: 'Private groups of up to 10 close friends with a live activity feed. See runs, reactions, and scenic photos. Accountability without competition.',
+        desc: 'Private groups of up to 10 close friends with a live activity feed. See runs, reactions, and scenic photos. Accountability with some fun competition.',
       },
       {
         icon: '🌐',
@@ -117,13 +117,13 @@ const FEATURES = [
     items: [
       {
         icon: '👟',
-        title: 'Step Tracking',
+        title: 'Step Tracking (Optional)',
         desc: 'Log high step days. See your 15K+, 20K+, and 25K+ milestones. Simple and optional.',
       },
       {
         icon: '⚖️',
-        title: 'Weight Tracking',
-        desc: 'Optional weight logging with a progress chart. There when you want it, invisible when you don\'t.',
+        title: 'Weight Tracking (Optional)',
+        desc: 'Optional weight logging with a progress chart. One more motivation to keep running.',
       },
       {
         icon: '📊',
