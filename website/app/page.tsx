@@ -8,8 +8,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center gap-12 md:gap-16">
             <div className="flex-1 max-w-xl">
               <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
-                Your running journal<br />
-                <span className="text-coral">Finding Joy.</span>
+                Your <span className="text-coral">joyful</span> running journal
               </h1>
               <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
                 Running apps turned running into a spreadsheet. ZenRun is a
