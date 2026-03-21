@@ -196,9 +196,9 @@ export default function Home() {
           </h2>
           <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto mb-12">
             The single most important factor in running progress is not pace,
-            cadence, or VO2 max. Research shows that runners who show up regularly &mdash;
-            even with imperfect sessions &mdash; build lasting fitness. Perfectionism,
-            the mindset that data-heavy apps reinforce, actually hinders progress.
+            cadence, or VO2 max. Runners who show up regularly &mdash;
+            even with imperfect sessions &mdash; build lasting fitness.
+            Chasing perfect data slows you down.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             <div className="bg-white rounded-2xl p-6">
