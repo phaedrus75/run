@@ -220,6 +220,11 @@ export default function Home() {
               </p>
             </div>
           </div>
+          <p className="text-xs text-gray-400 mt-8 max-w-2xl mx-auto">
+            Sources: Mujika &amp; Padilla, <em>Detraining: Loss of Training-Induced Physiological and Performance Adaptations</em>, Sports Medicine (2000).
+            Lally et al., <em>How are habits formed</em>, European Journal of Social Psychology (2010).
+            ACSM Guidelines for Exercise Testing and Prescription.
+          </p>
         </div>
       </section>
 
