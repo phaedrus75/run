@@ -108,24 +108,19 @@ export default function Home() {
           </h2>
           <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
             <p>
-              One might reasonably expect that a tool designed to support runners would
-              concern itself with the essential question: did you run today? Instead,
-              the modern running application presents the user with pace splits, cadence
-              measurements, heart rate zone analysis, VO2 max estimates, power output in
-              watts, and vertical oscillation in centimetres &mdash; a cascade of data that,
-              however precisely rendered, bears remarkably little relation to whether the
-              run was any good.
+              Open any popular running app and you&apos;re hit with pace splits, cadence,
+              heart rate zones, VO2 max estimates, power output, vertical oscillation.
+              Then comes the social layer &mdash; leaderboards, segment records, and the
+              unspoken pressure to perform for an audience.
             </p>
             <p>
-              The consequences of this are not trivial. A runner who might otherwise have
-              enjoyed a slow Tuesday morning loop finds herself monitoring zone 2 thresholds.
-              Another adds an unnecessary mile in poor weather so that his weekly total
-              survives public scrutiny. Easy runs &mdash; the quiet, unglamorous foundation
-              upon which all aerobic fitness is built &mdash; are routinely run too fast,
-              not because the body demands it, but because the leaderboard does.
+              Trying to track whether we are staying in optimum zone 2, pushing another
+              mile to staying on top of leaderboard and often running the easy runs &mdash;
+              the foundation of aerobic fitness &mdash; too fast because posting a slow
+              pace feels embarrassing are taking the joy away from running.
             </p>
             <p className="text-gray-900 font-semibold">
-              What began as instruments of measurement have become instruments of anxiety.
+              What started as tools to help runners have become tools that own them.
               The run worth having, it turns out, is the one in which you are present &mdash;
               not to the data, but to yourself.
             </p>
