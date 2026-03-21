@@ -202,7 +202,7 @@ export default function Home() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             <div className="bg-white rounded-2xl p-6">
-              <div className="text-3xl font-extrabold text-coral mb-2">7 days</div>
+              <div className="text-3xl font-extrabold text-coral mb-2">2 weeks</div>
               <p className="text-sm text-gray-500">
                 How fast aerobic fitness starts declining without regular runs
               </p>
