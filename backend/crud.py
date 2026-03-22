@@ -481,6 +481,20 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
     # Calculate streaks using new logic
     current_streak, longest_streak = calculate_streaks(db, user_id=user_id)
     
+    outdoor = [r for r in all_runs if (r.category or "outdoor") == "outdoor"]
+    treadmill = [r for r in all_runs if r.category == "treadmill"]
+
+    from collections import defaultdict
+    monthly_agg = defaultdict(lambda: {"runs": 0, "km": 0.0})
+    for r in all_runs:
+        key = r.completed_at.strftime("%Y-%m")
+        monthly_agg[key]["runs"] += 1
+        monthly_agg[key]["km"] += r.distance_km
+    monthly_summary = [
+        {"month": k, "runs": v["runs"], "km": round(v["km"], 1)}
+        for k, v in sorted(monthly_agg.items(), reverse=True)
+    ][:6]
+
     return {
         "total_runs": total_runs,
         "total_km": round(total_km, 2),
@@ -492,6 +506,11 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
         "km_this_week": round(km_this_week, 2),
         "runs_this_month": runs_this_month,
         "km_this_month": round(km_this_month, 2),
+        "outdoor_runs": len(outdoor),
+        "outdoor_km": round(sum(r.distance_km for r in outdoor), 1),
+        "treadmill_runs": len(treadmill),
+        "treadmill_km": round(sum(r.distance_km for r in treadmill), 1),
+        "monthly_summary": monthly_summary,
     }
 
 
