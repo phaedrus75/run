@@ -385,6 +385,29 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Early Access */}
+      <section className="bg-white py-16 md:py-20">
+        <div className="max-w-3xl mx-auto px-6 text-center">
+          <div className="bg-coral/5 border border-coral/15 rounded-2xl p-10 md:p-14">
+            <p className="text-sm font-semibold text-coral uppercase tracking-wide mb-3">Early Access</p>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+              We&apos;re building ZenRun in the open.
+            </h2>
+            <p className="text-gray-600 leading-relaxed max-w-xl mx-auto mb-6">
+              ZenRun is not a finished product &mdash; it&apos;s a running journal being built
+              alongside its first users. Every feature is shaped by runners like you. Join early,
+              share what&apos;s working, tell us what&apos;s not, and help shape what ZenRun becomes.
+            </p>
+            <a
+              href="mailto:support@zenrun.co"
+              className="inline-block text-coral font-semibold hover:underline"
+            >
+              Share your feedback &rarr;
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="bg-gray-900 py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6 text-center">
