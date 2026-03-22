@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -490,13 +491,26 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
           )}
         </TouchableOpacity>
 
+        {/* Feedback */}
+        <TouchableOpacity
+          style={styles.feedbackButton}
+          onPress={() => Linking.openURL('https://zenrun.featurebase.app')}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.feedbackText}>Feedback &amp; Feature Requests</Text>
+            <Text style={styles.feedbackSubtext}>Help shape what ZenRun becomes</Text>
+          </View>
+          <Ionicons name="open-outline" size={16} color={colors.textLight} />
+        </TouchableOpacity>
+
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>ZenRun v1.2.0</Text>
+        <Text style={styles.version}>ZenRun v1.4.0</Text>
       </ScrollView>
     </View>
   );
@@ -700,6 +714,27 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
+  },
+  feedbackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  feedbackText: {
+    color: colors.text,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+  },
+  feedbackSubtext: {
+    color: colors.textLight,
+    fontSize: typography.sizes.xs,
+    marginTop: 2,
   },
   logoutButton: {
     flexDirection: 'row',
