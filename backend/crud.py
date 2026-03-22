@@ -495,6 +495,11 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
         for k, v in sorted(monthly_agg.items(), reverse=True)
     ][:6]
 
+    distance_breakdown = {}
+    for r in all_runs:
+        rt = r.run_type or "other"
+        distance_breakdown[rt] = distance_breakdown.get(rt, 0) + 1
+
     return {
         "total_runs": total_runs,
         "total_km": round(total_km, 2),
@@ -511,6 +516,7 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
         "treadmill_runs": len(treadmill),
         "treadmill_km": round(sum(r.distance_km for r in treadmill), 1),
         "monthly_summary": monthly_summary,
+        "distance_breakdown": distance_breakdown,
     }
 
 

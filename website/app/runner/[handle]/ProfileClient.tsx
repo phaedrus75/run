@@ -46,6 +46,24 @@ function getCookie(name: string): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+interface PersonalRecord {
+  time: string;
+  duration_seconds: number;
+  pace: string;
+  date: string;
+  run_id: number;
+}
+
+interface ScenicRun {
+  run_id: number;
+  run_type: string;
+  distance_km: number;
+  completed_at?: string;
+  photo_count: number;
+  cover_photo?: string;
+  caption?: string;
+}
+
 interface ProfileData {
   privacy: string;
   visible: boolean;
@@ -66,6 +84,9 @@ interface ProfileData {
   monthly_summary?: { month: string; runs: number; km: number }[];
   scenic_photos?: number;
   scenic_runs?: number;
+  distance_breakdown?: Record<string, number>;
+  personal_records?: Record<string, PersonalRecord | null>;
+  scenic_gallery?: ScenicRun[];
   achievements?: { emoji: string; name: string; category: string }[];
   achievements_count?: number;
   achievements_total?: number;
@@ -138,17 +159,31 @@ export default function ProfileClient({ handle }: { handle: string }) {
       me: { handle?: string; name?: string; runner_level?: string; profile_privacy?: string },
       headers: Record<string, string>,
     ): Promise<ProfileData> {
-      const [statsRes, streakRes, achievementsRes] = await Promise.all([
+      const [statsRes, streakRes, achievementsRes, prsRes, scenicRes] = await Promise.all([
         fetch(`${API_BASE_URL}/stats`, { headers }).catch(() => null),
         fetch(`${API_BASE_URL}/streak`, { headers }).catch(() => null),
         fetch(`${API_BASE_URL}/achievements`, { headers }).catch(() => null),
+        fetch(`${API_BASE_URL}/personal-records`, { headers }).catch(() => null),
+        fetch(`${API_BASE_URL}/scenic-runs`, { headers }).catch(() => null),
       ]);
 
       const stats = statsRes?.ok ? await statsRes.json() : {};
       const streak = streakRes?.ok ? await streakRes.json() : {};
       const achievements = achievementsRes?.ok ? await achievementsRes.json() : {};
+      const prs = prsRes?.ok ? await prsRes.json() : {};
+      const scenicRuns = scenicRes?.ok ? await scenicRes.json() : [];
 
       const totalSeconds = stats.total_duration_seconds || 0;
+
+      const scenicGallery: ScenicRun[] = (Array.isArray(scenicRuns) ? scenicRuns : []).slice(0, 6).map((sr: Record<string, unknown>) => ({
+        run_id: sr.id as number,
+        run_type: sr.run_type as string,
+        distance_km: sr.distance_km as number,
+        completed_at: sr.completed_at as string | undefined,
+        photo_count: sr.photo_count as number,
+        cover_photo: sr.cover_photo as string | undefined,
+        caption: undefined,
+      }));
 
       return {
         privacy: me.profile_privacy || 'private',
@@ -169,6 +204,9 @@ export default function ProfileClient({ handle }: { handle: string }) {
         monthly_summary: stats.monthly_summary,
         scenic_photos: stats.scenic_photos,
         scenic_runs: stats.scenic_runs,
+        distance_breakdown: stats.distance_breakdown,
+        personal_records: prs,
+        scenic_gallery: scenicGallery,
         achievements: (achievements.unlocked || []).map((a: { emoji: string; name: string; category: string }) => ({
           emoji: a.emoji, name: a.name, category: a.category,
         })),
@@ -245,6 +283,8 @@ function CirclesView({ handle, isLoggedIn }: { handle: string; isLoggedIn: boole
   );
 }
 
+const DISTANCE_ORDER = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
+
 function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
   const level = LEVEL_META[data.runner_level || 'breath'] || LEVEL_META.breath;
   const rhythm = getRhythmStage(data.current_streak || 0);
@@ -260,6 +300,19 @@ function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
 
   const monthlySummary = data.monthly_summary || [];
   const maxMonthlyKm = Math.max(...monthlySummary.map((m) => m.km), 1);
+
+  const breakdown = data.distance_breakdown || {};
+  const breakdownEntries = DISTANCE_ORDER
+    .filter((d) => breakdown[d] && breakdown[d] > 0)
+    .map((d) => ({ distance: d.toUpperCase(), count: breakdown[d] }));
+  const maxBreakdown = Math.max(...breakdownEntries.map((e) => e.count), 1);
+
+  const prs = data.personal_records || {};
+  const prEntries = DISTANCE_ORDER
+    .filter((d) => prs[d] !== null && prs[d] !== undefined)
+    .map((d) => ({ distance: d.toUpperCase(), ...(prs[d] as PersonalRecord) }));
+
+  const gallery = data.scenic_gallery || [];
 
   return (
     <section className="py-16 md:py-24">
@@ -324,6 +377,43 @@ function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
           </div>
         )}
 
+        {breakdownEntries.length > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Runs by Distance</h2>
+            <div className="space-y-2.5">
+              {breakdownEntries.map((e) => (
+                <div key={e.distance} className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-gray-500 w-10 shrink-0 text-right">{e.distance}</span>
+                  <div className="flex-1 h-7 bg-gray-50 rounded-full overflow-hidden relative">
+                    <div
+                      className="h-full bg-teal/20 rounded-full transition-all"
+                      style={{ width: `${Math.max((e.count / maxBreakdown) * 100, 6)}%` }}
+                    />
+                    <span className="absolute inset-0 flex items-center px-3 text-xs font-medium text-gray-700">
+                      {e.count} {e.count === 1 ? 'run' : 'runs'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {prEntries.length > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Personal Bests</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {prEntries.map((pr) => (
+                <div key={pr.distance} className="bg-warm-bg rounded-xl p-4 text-center">
+                  <div className="text-xs font-semibold text-gray-400 mb-1">{pr.distance}</div>
+                  <div className="text-lg font-extrabold text-gray-900">{pr.time}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{pr.pace} /km</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Rhythm</h2>
@@ -363,17 +453,35 @@ function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
           </div>
         )}
 
-        {(data.scenic_runs || 0) > 0 && (
+        {gallery.length > 0 && (
           <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Scenic Runs</h2>
-            <div className="flex items-center gap-4">
-              <span className="text-4xl">📸</span>
-              <div>
-                <div className="text-lg font-bold text-gray-900">
-                  {data.scenic_photos} photos across {data.scenic_runs} runs
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Scenic Runs</h2>
+              <span className="text-sm text-gray-400">
+                {data.scenic_photos || 0} photos · {data.scenic_runs || 0} runs
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {gallery.map((sr) => (
+                <div key={sr.run_id} className="relative group rounded-xl overflow-hidden bg-gray-100 aspect-square">
+                  {sr.cover_photo ? (
+                    <img
+                      src={sr.cover_photo.startsWith('data:') ? sr.cover_photo : `data:image/jpeg;base64,${sr.cover_photo}`}
+                      alt={`${sr.run_type} scenic run`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-4xl">📸</div>
+                  )}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+                    <div className="text-white text-xs font-semibold">{sr.run_type?.toUpperCase()}</div>
+                    <div className="text-white/70 text-[10px]">
+                      {sr.photo_count} {sr.photo_count === 1 ? 'photo' : 'photos'}
+                      {sr.completed_at && ` · ${new Date(sr.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500">Capturing the views, km by km.</p>
-              </div>
+              ))}
             </div>
           </div>
         )}

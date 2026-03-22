@@ -1748,6 +1748,34 @@ def get_public_profile(
         RunPhoto.user_id == profile_user.id
     ).scalar() or 0
 
+    distance_breakdown = {}
+    for r in all_runs:
+        rt = r.run_type or "other"
+        distance_breakdown[rt] = distance_breakdown.get(rt, 0) + 1
+
+    from achievements import get_personal_records as _get_prs
+    personal_records = _get_prs(db, user_id=profile_user.id)
+
+    scenic_gallery = []
+    if scenic_runs_count > 0:
+        photo_runs = db.query(RunPhoto.run_id, func.count(RunPhoto.id).label("cnt")).filter(
+            RunPhoto.user_id == profile_user.id
+        ).group_by(RunPhoto.run_id).all()
+        run_ids = [pr.run_id for pr in photo_runs]
+        photo_count_map = {pr.run_id: pr.cnt for pr in photo_runs}
+        scenic_run_objs = db.query(Run).filter(Run.id.in_(run_ids)).order_by(Run.completed_at.desc()).limit(6).all()
+        for sr in scenic_run_objs:
+            cover = db.query(RunPhoto).filter(RunPhoto.run_id == sr.id).order_by(RunPhoto.distance_marker_km.asc()).first()
+            scenic_gallery.append({
+                "run_id": sr.id,
+                "run_type": sr.run_type,
+                "distance_km": sr.distance_km,
+                "completed_at": sr.completed_at.isoformat() if sr.completed_at else None,
+                "photo_count": photo_count_map.get(sr.id, 0),
+                "cover_photo": cover.photo_data if cover else None,
+                "caption": cover.caption if cover else None,
+            })
+
     return {
         "privacy": privacy,
         "visible": True,
@@ -1768,6 +1796,9 @@ def get_public_profile(
         "monthly_summary": monthly_list,
         "scenic_photos": scenic_count,
         "scenic_runs": scenic_runs_count,
+        "distance_breakdown": distance_breakdown,
+        "personal_records": personal_records,
+        "scenic_gallery": scenic_gallery,
         "achievements": [
             {"emoji": a["emoji"], "name": a["name"], "category": a["category"]}
             for a in achievements_data.get("unlocked", [])
