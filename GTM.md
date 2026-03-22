@@ -5,7 +5,8 @@
 **Budget**: $0
 **Website**: zenrun.co (live)
 **Backend**: Railway (auto-deploys on git push)
-**App build**: Expo EAS, bundle ID `com.phaedrus75.runzen`, current version 1.3.0
+**Feedback board**: zenrun.featurebase.app (live)
+**App build**: Expo EAS, bundle ID `com.phaedrus75.runzen`, current version 1.4.0
 
 ---
 
@@ -25,19 +26,20 @@ Every piece of copy — App Store description, Reddit posts, Product Hunt, email
 
 ### How to weave this into every channel:
 
-- **App Store subtitle**: "Less tracking. More running." (stays — the philosophy doesn't change)
-- **App Store description**: Add an "EARLY ACCESS" section (see updated description below)
+- **App Store subtitle**: "Your joyful running journal"
+- **App Store description**: Includes an "EARLY ACCESS" section (see updated description below)
 - **Reddit posts**: Lead with "I'm building this and I need runners to tell me what's wrong"
 - **Product Hunt**: Frame as "early access, help me build this"
 - **Circles**: Position as the way early users stay connected and give feedback
 - **Web profiles**: Encourage early users to make profiles public — their journeys become social proof
-- **Support page / in-app**: Make it dead simple to share feedback (email, circle discussions)
+- **Feedback board**: zenrun.featurebase.app — linked from the app (Profile screen) and website (homepage + support page). Users vote on features, suggest ideas, and see what's planned
+- **Support page / in-app**: Feedback board is the primary channel; email (support@zenrun.co) for bugs and account issues
 
 ### What early users get:
 
-- They shape the roadmap — features they ask for get built
+- They shape the roadmap — features they request on the feedback board get built
 - They're the founding members of the first circles
-- Their feedback is acknowledged and acted on visibly (changelog, in-app notes)
+- Their feedback is acknowledged and acted on visibly (Featurebase status updates, changelog)
 - When ZenRun grows, they were there from the start
 
 ---
@@ -48,7 +50,7 @@ Every piece of copy — App Store description, Reddit posts, Product Hunt, email
 
 - [ ] Create the app record in App Store Connect (bundle ID: `com.phaedrus75.runzen`)
 - [ ] Set the app name to **ZenRun**
-- [ ] Set the subtitle to **Less tracking. More running.**
+- [ ] Set the subtitle to **Your joyful running journal**
 - [ ] Set the primary category to **Health & Fitness**
 - [ ] Set the secondary category to **Lifestyle**
 - [ ] Set the price to **Free**
@@ -63,20 +65,18 @@ Every piece of copy — App Store description, Reddit posts, Product Hunt, email
 Use this as the full description:
 
 ```
-Running apps turned running into a spreadsheet. ZenRun is the opposite.
+Running apps turned running into a spreadsheet. ZenRun is a running journal — log your run in 2 seconds, build your rhythm and find joy in running.
 
-Log your run in 2 seconds. Find your rhythm. Get back to your life.
-
-ZenRun is built on one insight backed by research: the single most important factor in running progress is consistency. Not pace. Not cadence. Not VO2 max. Just showing up, week after week.
+Runners who show up regularly — even with imperfect sessions — build lasting fitness. Chasing perfect data slows you down. ZenRun tracks what matters: did you show up?
 
 HOW IT WORKS
 
-- Log a run in seconds. Pick your distance, enter your time, done. No GPS needed.
-- Weekly rhythm rewards showing up. Run twice a week to keep your rhythm going.
-- 100 milestones celebrate your journey. Your first 5K, your 100th run, a year of consistency.
-- Circles let you share your journey with close friends. Accountability without competition.
-- Scenic run photos. Tag photos to distance markers and build a visual album of your runs.
-- Just enough data. Distance, time, rhythm, goals, personal records. That's the full list.
+- Log a run in 2 seconds. Pick your distance, enter your time, done. Use your Apple Watch or not. Run however you want, log it when you're back.
+- Weekly rhythm rewards showing up. Run twice a week to keep your rhythm going. Not pace. Not distance. Just presence.
+- 100 milestones celebrate your journey. Your first 5K, your 100th run, a year of consistency, and beyond.
+- Circles, not leaderboards. Share your journey with up to 10 close friends. Accountability and maybe some joyful competition.
+- Scenic run photos. Capture the joy of outdoor runs. Tag photos to distance markers. Build a visual album of your running journey, km by km.
+- Just enough data. Distance, time, rhythm, goals, personal records. That's the full list. No cadence, no heart rate zones, no VO2 max.
 
 WHAT ZENRUN DOES NOT DO
 
@@ -88,21 +88,25 @@ WHAT ZENRUN DOES NOT DO
 
 WHO IT'S FOR
 
-You run 2-5 times a week and want to keep doing that for years. You value the mental clarity of running as much as the fitness. You've felt the anxiety of tracking apps and want something calmer. You believe the best run is the one you actually did.
+You run 2–5 times a week and want to keep doing that for years. You value the running mindfulness as much as the physical fitness. You've used tracking apps but have not stayed consistent. You care more about running than chasing a PR every week. You believe the best run is the one you actually did.
 
 BUILT BY A RUNNER, NOT A FITNESS COMPANY
 
-ZenRun was built by a runner who has started and stopped more times than they can count. Hardly ran in 2025. Set a goal of 1,000km in 2026. Built the app alongside the journey -- 160km and counting. Through the motivated weeks and the weeks they nearly quit again. No venture capital. No subscriptions. No ads. Just a runner building the tool they wished existed.
+I've started and stopped running more times than I can count. I ran consistently for a summer 3 years ago. Since then it has been on and off. I hardly ran at all in 2025. Then, at the beginning of this year, I set a simple goal: run 1,000km. Not for a race. Just to see if the habit could finally stick.
+
+I built ZenRun during the same period — alongside the runs, through the weeks of motivation and the weeks I nearly quit again. Every feature exists because I thought of it while I ran.
+
+170km in, both the habit and the app are still going. No venture capital. No subscriptions. No ads. Just a runner building the tool they wished existed.
 
 Inspired by Born to Run, Murakami's What I Talk About When I Talk About Running, and the growing movement of runners leaving their GPS watches at home.
 
 EARLY ACCESS — HELP BUILD ZENRUN
 
-ZenRun is being actively built and improved. You're not downloading a finished product -- you're joining a small group of early runners whose feedback directly shapes what ZenRun becomes. Features you ask for get built. Bugs you find get fixed. Your voice matters here.
+ZenRun is being built in the open. You're not downloading a finished product — you're joining a small group of early runners whose feedback directly shapes what ZenRun becomes. Vote on features, suggest ideas, and see what's coming next on our feedback board.
 
-Share your thoughts at support@zenrun.co or in your circle. Every piece of feedback makes ZenRun better for the next runner.
+Share your thoughts at zenrun.featurebase.app or email support@zenrun.co. Every piece of feedback makes ZenRun better for the next runner.
 
-Less tracking. More running.
+Your joyful running journal.
 ```
 
 ### App Store Keywords
@@ -110,10 +114,10 @@ Less tracking. More running.
 The keyword field allows up to 100 characters, comma-separated, no spaces after commas. Use:
 
 ```
-running,journal,streak,habit,simple,tracker,mindful,run,log,fitness,zen,jog,training
+running,journal,rhythm,habit,simple,tracker,mindful,run,log,fitness,zen,jog,training,joy
 ```
 
-Rationale: Targets searches for "running journal", "simple run tracker", "running habit", "mindful running", "run log" while avoiding high-competition generic terms like "running app" where Strava/Nike dominate.
+Rationale: Targets searches for "running journal", "simple run tracker", "running habit", "mindful running", "running rhythm", "running log", "joy running" while avoiding high-competition generic terms like "running app" where Strava/Nike dominate.
 
 ### Privacy Nutrition Labels
 
@@ -136,12 +140,12 @@ Prepare 5-6 screenshots for iPhone 6.7" (required) and 6.5" displays. Each scree
 
 | Screenshot | Screen to Show | Headline |
 |------------|---------------|----------|
-| 1 | Home screen with rhythm and journey card | **Less tracking. More running.** |
+| 1 | Home screen with rhythm and journey card | **Your joyful running journal.** |
 | 2 | Run screen (distance selector + timer) | **Log a run in 2 seconds.** |
 | 3 | Milestones grid (badges) | **100 milestones for your journey.** |
-| 4 | Circle space (feed tab with activity) | **Run alongside friends, not against them.** |
+| 4 | Circle space (feed tab with activity) | **Circles, not leaderboards.** |
 | 5 | Stats screen (monthly view with goal progress) | **Just enough data.** |
-| 6 | Scenic run photo being tagged to a distance marker | **Build a trail album, km by km.** |
+| 6 | Scenic run photo being tagged to a distance marker | **Capture the views, km by km.** |
 
 Design tips:
 - Use the warm background color (`#FFF9F5`) as the screenshot background
@@ -151,7 +155,7 @@ Design tips:
 
 ### TestFlight Beta
 
-- [ ] Bump version in `app.json` from `1.3.0` to `1.4.0`
+- [x] Bump version in `app.json` from `1.3.0` to `1.4.0`
 - [ ] Run `eas build --profile production --platform ios` from the `frontend/` directory
 - [ ] Upload to TestFlight via `eas submit --platform ios`
 - [ ] Invite 5-10 beta testers (friends, running partners, anyone from your circles)
@@ -165,8 +169,18 @@ The following changes need to happen once the App Store link is live:
 
 - [ ] Replace all `href="#"` on App Store buttons in `website/app/page.tsx` with the real App Store URL
 - [ ] Hide or remove the Google Play button (3 instances in `page.tsx`) until Android launches
-- [ ] Update the "How ZenRun works" section: change "50 badges" to "100 milestones"
-- [ ] Verify "Rhythm rewards showing up" with plant emoji matches the app
+- [x] Update the "How ZenRun works" section: change "50 badges" to "100 milestones"
+- [x] Verify "Rhythm rewards showing up" with plant emoji matches the app
+- [x] Update hero headline to "Your joyful running journal"
+- [x] Rewrite problem section with updated copy
+- [x] Update philosophy section: quotes smaller, explanatory text larger
+- [x] Update founder story with expanded backstory (170km in)
+- [x] Add early access section with Featurebase feedback link
+- [x] Add Featurebase board to support page
+- [x] Update footer tagline to "Show up. That's the whole plan."
+- [x] Update meta descriptions to "running journal" language
+- [x] Add runs by distance, personal bests, and scenic photo gallery to web profile
+- [x] Add Featurebase feedback link to app Profile screen
 - [ ] Deploy: `vercel --prod --yes` from the project root
 
 ---
@@ -208,7 +222,7 @@ I hardly ran at all last year. Before that, the same pattern: a few good months,
 then nothing. Start, stop, start, stop. This January I set a goal -- 1,000km in
 2026. Not for a race. Just to see if the habit could finally stick.
 
-2.5 months in, I've done 160km. Some weeks were great. Some weeks I barely
+2.5 months in, I've done 170km. Some weeks were great. Some weeks I barely
 dragged myself out the door. I also built a running app during the same period --
 partly to keep myself accountable, partly because every existing app made running
 feel like homework.
@@ -230,10 +244,11 @@ thing: did you show up?
 
 It's free, no ads, on iOS. Still early -- I'm building it in the open and want
 runners to help shape what it becomes. If something's missing or broken, I want
-to hear about it. Every feature so far came from my own running, and I'd love
-it to come from yours too.
+to hear about it. There's a feedback board (zenrun.featurebase.app) where you
+can vote on features and suggest ideas. Every feature so far came from my own
+running, and I'd love it to come from yours too.
 
-If you give it a try, I'm genuinely reading every email at support@zenrun.co.
+If you give it a try, I'm genuinely reading everything at support@zenrun.co.
 
 [App Store link]
 ```
@@ -260,7 +275,7 @@ If you give it a try, I'm genuinely reading every email at support@zenrun.co.
 ```
 Hey Product Hunt! I've started and stopped running more times than I can count.
 Hardly ran at all last year. This January I set a goal: 1,000km in 2026. I
-built ZenRun alongside my own journey. 160km and 2.5 months later, both the
+built ZenRun alongside my own journey. 170km and 2.5 months later, both the
 habit and the app are still going.
 
 The insight I kept coming back to: consistency is the only metric that matters.
@@ -275,9 +290,9 @@ what matters:
 Everything else is noise. The app is free, no ads, no subscriptions.
 
 This is early access -- I'm building ZenRun in the open and I want runners
-to help shape it. Features you ask for get built. Bugs you find get fixed.
-If you've ever felt overwhelmed by a running app, I'd love your feedback.
-Every email to support@zenrun.co gets read by me personally.
+to help shape it. There's a feedback board at zenrun.featurebase.app where
+you can vote on features and suggest ideas. If you've ever felt overwhelmed
+by a running app, I'd love your feedback. Every message gets read by me personally.
 ```
 
 ### Day 3-5: Social Media
@@ -290,11 +305,11 @@ Post a 5-tweet thread:
 2. I hardly ran last year. Every time I tried to come back, running apps made it worse. Strava showed me how slow I was. Garmin showed me how unfit I'd become. I just wanted to show up without judgment.
 3. The research is clear: consistency > intensity. Runners who show up 2x/week for years beat runners who crush it for 3 months and burn out. Every time.
 4. So I built @ZenRunApp. Log a run in 2 seconds. Find your rhythm. Earn milestones. Share with friends. No GPS, no leaderboards, no noise. Built while learning to run, not in a product lab.
-5. 160km in, both the habit and the app are still going. It's in early access on iOS -- free, no ads. I'm building it in the open and want runners to help shape it. Try it and tell me what's missing. Link in bio.
+5. 170km in, both the habit and the app are still going. It's in early access on iOS -- free, no ads. I'm building it in the open and want runners to help shape it. Vote on features at zenrun.featurebase.app. Link in bio.
 
 **Instagram:**
 
-- Post 1: Screenshot of the app with the tagline "Less tracking. More running."
+- Post 1: Screenshot of the app with the tagline "Your joyful running journal"
 - Post 2: Murakami quote card: "The only opponent you have to beat is yourself, the way you used to be."
 - Post 3: Screenshot of the milestone badges grid
 - Reels idea: 15-second video of someone running, phone in pocket, then logging the run after in 2 seconds
@@ -320,7 +335,7 @@ Subject: I started running in January and built an app along the way
 Hi [name],
 
 I've started and stopped running more times than I can count. Hardly ran at
-all last year. This January I set a goal -- 1,000km in 2026. 160km and 2.5
+all last year. This January I set a goal -- 1,000km in 2026. 170km and 2.5
 months later, I've also built a running app called ZenRun.
 
 It takes the opposite approach to Strava/Nike Run Club. No GPS tracking, no
@@ -334,7 +349,8 @@ running journey, through the good weeks and the weeks I nearly quit again.
 
 It's free, no ads, no subscription. It's in early access right now -- I'm
 building it in the open and early users' feedback directly shapes what gets
-built next. Would love for you to try it and tell me what's missing.
+built next. There's a public feedback board at zenrun.featurebase.app where
+users vote on what to build. Would love for you to try it and tell me what's missing.
 
 [Your name]
 [App Store link]
@@ -360,20 +376,21 @@ built next. Would love for you to try it and tell me what's missing.
 Apple allows a 100-character keyword field. The app name and subtitle are also indexed.
 
 **Already indexed** (from name + subtitle):
-- ZenRun, Less, tracking, More, running
+- ZenRun, Your, joyful, running, journal
 
 **Keyword field** (100 chars):
 ```
-running,journal,streak,habit,simple,tracker,mindful,run,log,fitness,zen,jog,training
+running,journal,rhythm,habit,simple,tracker,mindful,run,log,fitness,zen,jog,training,joy
 ```
-(84 characters -- room for 1-2 more short terms if needed)
+(91 characters)
 
 **Search phrases this covers:**
 - "running journal" / "run journal"
+- "joyful running" / "joy running"
 - "running habit tracker"
 - "simple running app" / "simple run tracker"
 - "mindful running"
-- "running streak"
+- "running rhythm"
 - "running log"
 - "fitness tracker simple"
 - "zen running"
@@ -498,9 +515,9 @@ railway up
 
 The ZenRun launch strategy relies on four things:
 
-1. **A clear, contrarian position.** "Less tracking. More running." is a message that resonates emotionally with runners who feel overwhelmed by Strava/Garmin. Lead with the philosophy, not the features.
+1. **A clear, contrarian position.** "Your joyful running journal" is a message that resonates emotionally with runners who feel overwhelmed by Strava/Garmin. Lead with the philosophy, not the features.
 
-2. **Built in the open.** ZenRun is in early access. Every touchpoint should make it clear: this is a product being built alongside its first users, not a polished release from a faceless company. Early users shape the roadmap. Their feedback is heard and acted on. This turns users into advocates.
+2. **Built in the open.** ZenRun is in early access. Every touchpoint should make it clear: this is a product being built alongside its first users, not a polished release from a faceless company. The Featurebase feedback board (zenrun.featurebase.app) makes this tangible — users see their ideas get planned, built, and shipped. This turns users into advocates.
 
 3. **Authentic distribution.** Reddit maker posts, Product Hunt, and personal emails to bloggers. No paid ads. The $0 constraint is actually an advantage -- it forces genuine, human outreach that converts better than ads for niche apps.
 
