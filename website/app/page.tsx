@@ -399,8 +399,10 @@ export default function Home() {
               share what&apos;s working, tell us what&apos;s not, and help shape what ZenRun becomes.
             </p>
             <a
-              href="mailto:support@zenrun.co"
-              className="inline-block text-coral font-semibold hover:underline"
+              href="https://zenrun.featurebase.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-coral hover:bg-coral-dark text-white font-semibold px-6 py-3 rounded-xl transition-colors"
             >
               Share your feedback &rarr;
             </a>

@@ -107,12 +107,29 @@ export default function SupportPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Feedback Board */}
+        <div className="bg-white rounded-2xl p-8 border border-gray-100">
+          <div className="text-3xl mb-4">💡</div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Feature Requests &amp; Feedback</h2>
+          <p className="text-gray-500 mb-4">
+            ZenRun is being built alongside its first users. Vote on features, suggest ideas, and help shape what comes next.
+          </p>
+          <a
+            href="https://zenrun.featurebase.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block bg-coral hover:bg-coral-dark text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm"
+          >
+            Open feedback board &rarr;
+          </a>
+        </div>
+
         {/* Contact */}
         <div className="bg-white rounded-2xl p-8 border border-gray-100">
           <div className="text-3xl mb-4">📧</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Email Us</h2>
           <p className="text-gray-500 mb-4">
-            Bug reports, feature requests, account issues, or just want to say hi.
+            Bug reports, account issues, or just want to say hi.
           </p>
           <a
             href="mailto:support@zenrun.co"
