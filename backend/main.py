@@ -457,6 +457,9 @@ def complete_onboarding(current_user: User = Depends(require_auth), db: Session 
 def get_user_level(current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
     """Get the user's runner level, available distances, and upgrade eligibility."""
     level = getattr(current_user, 'runner_level', None) or 'breath'
+    if not current_user.runner_level:
+        current_user.runner_level = level
+        db.commit()
     distances = LEVEL_DISTANCES.get(level, LEVEL_DISTANCES['breath'])
     level_idx = LEVEL_ORDER.index(level) if level in LEVEL_ORDER else 0
     next_level = LEVEL_ORDER[level_idx + 1] if level_idx < len(LEVEL_ORDER) - 1 else None
@@ -1618,6 +1621,7 @@ def get_current_user_info(
         "name": current_user.name,
         "handle": current_user.handle,
         "onboarding_complete": current_user.onboarding_complete,
+        "runner_level": getattr(current_user, 'runner_level', 'breath') or 'breath',
         "profile_privacy": getattr(current_user, 'profile_privacy', 'private') or 'private',
     }
 
