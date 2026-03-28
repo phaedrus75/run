@@ -1165,7 +1165,7 @@ def get_steps_summary(
     
     return {
         "current_month": current_data,
-        "monthly_history": sorted(monthly_data.values(), key=lambda x: x["month"], reverse=True),
+        "monthly_history": [monthly_data[k] for k in sorted(monthly_data.keys())],
         "all_time": {
             "days_15k": all_15k,
             "days_20k": all_20k,
