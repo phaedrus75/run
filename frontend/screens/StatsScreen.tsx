@@ -591,14 +591,11 @@ export function StatsScreen() {
                         </View>
                       )}
                     </View>
-                    <Text style={styles.stepsChartBest}>
-                      {month.highest > 0 ? `${(month.highest / 1000).toFixed(0)}k` : '—'}
-                    </Text>
                   </View>
                 );
               })}
               <View style={styles.stepsChartLegend}>
-                <Text style={styles.stepsChartLegendText}>15K+ step days per month · Best day (right)</Text>
+                <Text style={styles.stepsChartLegendText}>15K+ step days per month</Text>
               </View>
             </View>
           )}
