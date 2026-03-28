@@ -524,6 +524,12 @@ export function StatsScreen() {
                 <Text style={styles.stepDayValue}>{stepsSummary.current_month.days_25k}</Text>
                 <Text style={styles.stepDayLabel}>25K+ days</Text>
               </View>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🏔️</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.current_month.days_30k}</Text>
+                <Text style={styles.stepDayLabel}>30K+ days</Text>
+              </View>
             </View>
             {stepsSummary.current_month.highest > 0 && (
               <View style={styles.monthlyStepsHighest}>
@@ -540,6 +546,13 @@ export function StatsScreen() {
       )}
     </View>
   );
+
+  const STEP_COLORS = {
+    '15k': colors.runTypes['15k'],
+    '20k': colors.runTypes['20k'],
+    '25k': colors.success,
+    '30k': '#3D3D3D',
+  };
 
   const renderStepsAllTime = () => {
     const history = stepsSummary?.monthly_history || [];
@@ -568,6 +581,12 @@ export function StatsScreen() {
                 <Text style={styles.stepDayValue}>{stepsSummary.all_time.days_25k}</Text>
                 <Text style={styles.stepDayLabel}>25K+ days</Text>
               </View>
+              <View style={styles.stepDayDivider} />
+              <View style={styles.stepDayItem}>
+                <Text style={styles.stepDayEmoji}>🏔️</Text>
+                <Text style={styles.stepDayValue}>{stepsSummary.all_time.days_30k}</Text>
+                <Text style={styles.stepDayLabel}>30K+ days</Text>
+              </View>
             </View>
             <View style={styles.stepDaysFooter}>
               <Text style={styles.stepDaysTotal}>
@@ -580,22 +599,51 @@ export function StatsScreen() {
             <View style={[styles.stepDaysCard, shadows.small, { marginTop: spacing.md }]}>
               <Text style={styles.stepsChartTitle}>Monthly Breakdown</Text>
               {history.map((month) => {
-                const barWidth = maxDays > 0 ? (month.days_15k / maxDays) * 100 : 0;
+                const only15k = month.days_15k - month.days_20k;
+                const only20k = month.days_20k - month.days_25k;
+                const only25k = month.days_25k - (month.days_30k || 0);
+                const only30k = month.days_30k || 0;
+                const total = month.days_15k;
+                const barWidth = maxDays > 0 ? (total / maxDays) * 100 : 0;
                 return (
                   <View key={month.month} style={styles.stepsChartRow}>
                     <Text style={styles.stepsChartLabel}>{month.month.slice(0, 3)}</Text>
                     <View style={styles.stepsChartBarBg}>
-                      {month.days_15k > 0 && (
-                        <View style={[styles.stepsChartBar, { width: `${Math.max(barWidth, 5)}%` }]}>
-                          <Text style={styles.stepsChartBarText}>{month.days_15k}</Text>
+                      {total > 0 && (
+                        <View style={[styles.stepsStackedBar, { width: `${Math.max(barWidth, 8)}%` }]}>
+                          {only30k > 0 && (
+                            <View style={[styles.stepsSegment, { flex: only30k, backgroundColor: STEP_COLORS['30k'] }]} />
+                          )}
+                          {only25k > 0 && (
+                            <View style={[styles.stepsSegment, { flex: only25k, backgroundColor: STEP_COLORS['25k'] }]} />
+                          )}
+                          {only20k > 0 && (
+                            <View style={[styles.stepsSegment, { flex: only20k, backgroundColor: STEP_COLORS['20k'] }]} />
+                          )}
+                          {only15k > 0 && (
+                            <View style={[styles.stepsSegment, { flex: only15k, backgroundColor: STEP_COLORS['15k'] }]} />
+                          )}
                         </View>
                       )}
                     </View>
+                    <Text style={styles.stepsChartCount}>{total}</Text>
                   </View>
                 );
               })}
               <View style={styles.stepsChartLegend}>
-                <Text style={styles.stepsChartLegendText}>15K+ step days per month</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                  {[
+                    { label: '15K', color: STEP_COLORS['15k'] },
+                    { label: '20K', color: STEP_COLORS['20k'] },
+                    { label: '25K', color: STEP_COLORS['25k'] },
+                    { label: '30K', color: STEP_COLORS['30k'] },
+                  ].map(item => (
+                    <View key={item.label} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: item.color, marginRight: 4 }} />
+                      <Text style={styles.stepsChartLegendText}>{item.label}+</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             </View>
           )}
@@ -1043,6 +1091,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: typography.weights.bold,
     color: '#fff',
+  },
+  stepsStackedBar: {
+    height: '100%',
+    borderRadius: 6,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  stepsSegment: {
+    height: '100%',
+  },
+  stepsChartCount: {
+    width: 24,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    textAlign: 'right',
   },
   stepsChartBest: {
     width: 30,

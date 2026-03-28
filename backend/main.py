@@ -1080,7 +1080,13 @@ def create_step_entry(
     
     # 🎉 Check for high step day celebration
     celebrations = []
-    if step_count >= 25000:
+    if step_count >= 30000:
+        celebrations.append({
+            "type": "high_steps",
+            "title": "🏔️ 30K+ Steps!",
+            "message": "Legendary day! Absolutely incredible!"
+        })
+    elif step_count >= 25000:
         celebrations.append({
             "type": "high_steps",
             "title": "🚀 25K+ Steps!",
@@ -1166,6 +1172,7 @@ def get_steps_summary(
                 "days_15k": 0,
                 "days_20k": 0,
                 "days_25k": 0,
+                "days_30k": 0,
                 "highest": 0,
             }
         
@@ -1178,6 +1185,8 @@ def get_steps_summary(
             data["days_20k"] += 1
         if entry.step_count >= 25000:
             data["days_25k"] += 1
+        if entry.step_count >= 30000:
+            data["days_30k"] += 1
         if entry.step_count > data["highest"]:
             data["highest"] = entry.step_count
     
@@ -1190,6 +1199,7 @@ def get_steps_summary(
         "days_15k": 0,
         "days_20k": 0,
         "days_25k": 0,
+        "days_30k": 0,
         "highest": 0,
     })
     
@@ -1197,6 +1207,7 @@ def get_steps_summary(
     all_15k = sum(m["days_15k"] for m in monthly_data.values())
     all_20k = sum(m["days_20k"] for m in monthly_data.values())
     all_25k = sum(m["days_25k"] for m in monthly_data.values())
+    all_30k = sum(m["days_30k"] for m in monthly_data.values())
     
     return {
         "current_month": current_data,
@@ -1205,6 +1216,7 @@ def get_steps_summary(
             "days_15k": all_15k,
             "days_20k": all_20k,
             "days_25k": all_25k,
+            "days_30k": all_30k,
             "total_entries": len(entries),
         }
     }

@@ -484,6 +484,7 @@ export interface StepsSummary {
     days_15k: number;
     days_20k: number;
     days_25k: number;
+    days_30k: number;
     highest: number;
     total_entries: number;
   };
@@ -492,6 +493,7 @@ export interface StepsSummary {
     days_15k: number;
     days_20k: number;
     days_25k: number;
+    days_30k: number;
     highest: number;
     total_entries: number;
   }>;
@@ -499,6 +501,7 @@ export interface StepsSummary {
     days_15k: number;
     days_20k: number;
     days_25k: number;
+    days_30k: number;
     total_entries: number;
   };
 }

@@ -29,6 +29,7 @@ interface StepsSummary {
     days_15k: number;
     days_20k: number;
     days_25k: number;
+    days_30k: number;
     highest: number;
     total_entries: number;
   };
@@ -36,6 +37,7 @@ interface StepsSummary {
     days_15k: number;
     days_20k: number;
     days_25k: number;
+    days_30k: number;
     total_entries: number;
   };
 }
@@ -127,6 +129,7 @@ export function StepsTracker({ summary, onUpdate, onCelebrate }: StepsTrackerPro
     { value: 15000, label: '15k', color: colors.runTypes['15k'] },
     { value: 20000, label: '20k', color: colors.runTypes['20k'] },
     { value: 25000, label: '25k', color: colors.success },
+    { value: 30000, label: '30k', color: '#3D3D3D' },
   ];
 
   const currentMonth = summary?.current_month || {
@@ -134,6 +137,7 @@ export function StepsTracker({ summary, onUpdate, onCelebrate }: StepsTrackerPro
     days_15k: 0,
     days_20k: 0,
     days_25k: 0,
+    days_30k: 0,
     highest: 0,
     total_entries: 0,
   };
@@ -142,6 +146,7 @@ export function StepsTracker({ summary, onUpdate, onCelebrate }: StepsTrackerPro
     days_15k: 0,
     days_20k: 0,
     days_25k: 0,
+    days_30k: 0,
     total_entries: 0,
   };
 
@@ -178,6 +183,12 @@ export function StepsTracker({ summary, onUpdate, onCelebrate }: StepsTrackerPro
             <Text style={styles.badgeText}>{currentMonth.days_25k}</Text>
           </View>
           <Text style={styles.statLabel}>25k+ days</Text>
+        </View>
+        <View style={styles.statItem}>
+          <View style={[styles.badge, styles.badge30k]}>
+            <Text style={[styles.badgeText, { color: '#fff' }]}>{currentMonth.days_30k}</Text>
+          </View>
+          <Text style={styles.statLabel}>30k+ days</Text>
         </View>
       </View>
 
@@ -341,6 +352,9 @@ const styles = StyleSheet.create({
   },
   badge25k: {
     backgroundColor: colors.success + '30',
+  },
+  badge30k: {
+    backgroundColor: '#3D3D3D',
   },
   badgeText: {
     fontSize: typography.sizes.lg,
