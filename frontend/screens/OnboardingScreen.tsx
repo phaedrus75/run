@@ -1,11 +1,3 @@
-/**
- * 🎓 ONBOARDING SCREEN
- * ====================
- * 
- * Onboarding that reflects ZenRun's philosophy:
- * 3 focused slides about WHY (not how), then goal setup.
- */
-
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -20,15 +12,16 @@ import {
   Platform,
   ScrollView,
   Image,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
 import { levelApi } from '../services/api';
 
 const { width } = Dimensions.get('window');
-
 const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
 
 const LEVEL_GOAL_DEFAULTS: Record<string, { yearly: string; monthly: string }> = {
@@ -67,15 +60,22 @@ const LEVELS = [
   },
 ];
 
+// --- Slide data ---
+
+type SlideIcon = { name: string; color: string };
+
 interface OnboardingSlide {
   id: string;
   title: string;
   subtitle: string;
   body: string;
   accent: string;
+  icon?: SlideIcon;
+  visual?: 'logging' | 'rhythm' | 'circles';
 }
 
 const ONBOARDING_SLIDES: OnboardingSlide[] = [
+  // Philosophy
   {
     id: '1',
     title: 'Run first.\nTrack second.',
@@ -86,18 +86,43 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
     id: '2',
     title: 'Find your\nrhythm.',
-    subtitle: 'Your running rhythm',
-    body: "Run at least twice a week. That's your rhythm. Keep it going and watch it grow — research shows 66 days of consistency turns running into a habit that stays. No pressure. Just show up.",
+    subtitle: 'Consistency over perfection',
+    body: "Run at least twice a week. That's your rhythm. Keep it going and watch it grow — 66 days of consistency turns running into a habit that stays.",
     accent: colors.secondary,
   },
+  // Feature showcase
   {
     id: '3',
-    title: 'Just enough\ndata.',
-    subtitle: 'Progress without noise',
-    body: "Distance. Time. Rhythm. Goals. That's it. No heart rate graphs, no cadence charts, no GPS maps. Just a clean record of your running journey.",
+    title: 'Log in\n2 seconds.',
+    subtitle: 'Quick logging',
+    body: "Pick your distance, hit start, run. When you're done, tap stop. That's it — no GPS, no phone in your pocket, no fuss.",
     accent: colors.primary,
+    icon: { name: 'timer-outline', color: colors.primary },
+    visual: 'logging',
+  },
+  {
+    id: '4',
+    title: 'Rhythm &\nmilestones.',
+    subtitle: 'Quiet celebrations',
+    body: "Your rhythm grows each week you show up. Hit milestones along the way — 100 of them — without the pressure of daily streaks.",
+    accent: colors.secondary,
+    icon: { name: 'flame-outline', color: colors.secondary },
+    visual: 'rhythm',
+  },
+  {
+    id: '5',
+    title: 'Run with\nyour circle.',
+    subtitle: 'Friendly accountability',
+    body: "Create a circle with up to 10 friends. See who's running, cheer each other on, and keep each other accountable — no leaderboards, just showing up together.",
+    accent: colors.primary,
+    icon: { name: 'people-outline', color: colors.primary },
+    visual: 'circles',
   },
 ];
+
+// --- Phases ---
+
+type Phase = 'slides' | 'level' | 'goals' | 'beta' | 'handle';
 
 interface OnboardingScreenProps {
   navigation: any;
@@ -105,37 +130,47 @@ interface OnboardingScreenProps {
 
 export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   const { refreshUser } = useAuth();
+
+  const [phase, setPhase] = useState<Phase>('slides');
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showLevelPicker, setShowLevelPicker] = useState(false);
+
+  // Level
   const [selectedLevel, setSelectedLevel] = useState<string>('breath');
-  const [showGoalSetup, setShowGoalSetup] = useState(false);
-  const [handle, setHandle] = useState('');
-  const [handleError, setHandleError] = useState('');
+
+  // Goals
   const [yearlyGoal, setYearlyGoal] = useState('250');
   const [monthlyGoal, setMonthlyGoal] = useState('20');
-  const [startWeight, setStartWeight] = useState('');
-  const [goalWeight, setGoalWeight] = useState('');
+
+  // Beta
+  const [betaSteps, setBetaSteps] = useState(false);
+  const [betaWeight, setBetaWeight] = useState(false);
+
+  // Handle
+  const [handle, setHandle] = useState('');
+  const [handleError, setHandleError] = useState('');
   const [saving, setSaving] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
-  const handleNext = () => {
+  // --- Navigation helpers ---
+
+  const handleSlideNext = () => {
     if (currentIndex < ONBOARDING_SLIDES.length - 1) {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
       setCurrentIndex(currentIndex + 1);
     } else {
-      setShowLevelPicker(true);
+      setPhase('level');
     }
   };
 
-  const handleSkip = () => {
-    setShowLevelPicker(true);
-  };
+  const handleSkipSlides = () => setPhase('level');
 
-  const handleLevelContinue = () => {
-    setShowLevelPicker(false);
-    setShowGoalSetup(true);
-  };
+  const handleLevelContinue = () => setPhase('goals');
+
+  const handleGoalsContinue = () => setPhase('beta');
+
+  const handleBetaContinue = () => setPhase('handle');
 
   const handleComplete = async () => {
     const cleanHandle = handle.trim().toLowerCase();
@@ -147,54 +182,53 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
       setHandleError('Only letters, numbers, and underscores');
       return;
     }
-    
+
     setSaving(true);
     setHandleError('');
-    
+
     try {
       const token = await getToken();
-      
-      const handleResponse = await fetch(`${API_BASE_URL}/user/handle`, {
+
+      // 1. Set handle
+      const handleRes = await fetch(`${API_BASE_URL}/user/handle`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ handle: cleanHandle }),
       });
-      
-      if (!handleResponse.ok) {
-        const error = await handleResponse.json();
-        setHandleError(error.detail || 'Handle not available');
+      if (!handleRes.ok) {
+        const err = await handleRes.json();
+        setHandleError(err.detail || 'Handle not available');
         setSaving(false);
         return;
       }
-      
+
+      // 2. Set goals
       await fetch(`${API_BASE_URL}/user/goals`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           yearly_km_goal: parseFloat(yearlyGoal) || parseFloat(LEVEL_GOAL_DEFAULTS[selectedLevel]?.yearly || '250'),
           monthly_km_goal: parseFloat(monthlyGoal) || parseFloat(LEVEL_GOAL_DEFAULTS[selectedLevel]?.monthly || '20'),
-          start_weight_lbs: startWeight ? parseFloat(startWeight) : null,
-          goal_weight_lbs: goalWeight ? parseFloat(goalWeight) : null,
         }),
       });
-      
+
+      // 3. Set level
       await levelApi.set(selectedLevel);
-      
+
+      // 4. Set beta preferences
+      await fetch(`${API_BASE_URL}/user/beta-preferences`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ steps_enabled: betaSteps, weight_enabled: betaWeight }),
+      });
+
+      // 5. Complete onboarding
       await fetch(`${API_BASE_URL}/user/complete-onboarding`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       await refreshUser();
-      
     } catch (error) {
       console.error('Failed to complete onboarding:', error);
     } finally {
@@ -202,59 +236,146 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
     }
   };
 
-  const renderSlide = ({ item }: { item: OnboardingSlide }) => (
-    <View style={styles.slide}>
-      <View style={styles.slideContent}>
-        <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
-        <Text style={styles.slideTitle}>{item.title}</Text>
-        <View style={[styles.slideDivider, { backgroundColor: item.accent }]} />
-        <Text style={styles.slideBody}>{item.body}</Text>
+  // --- Feature visual mini-illustrations ---
+
+  const renderFeatureVisual = (visual?: string) => {
+    if (visual === 'logging') {
+      return (
+        <View style={s.featureVisual}>
+          <View style={s.fvRow}>
+            {['3K', '5K', '10K'].map(d => (
+              <View key={d} style={[s.fvChip, d === '5K' && s.fvChipActive]}>
+                <Text style={[s.fvChipText, d === '5K' && s.fvChipTextActive]}>{d}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={s.fvTimerBox}>
+            <Text style={s.fvTimer}>12:34</Text>
+            <Text style={s.fvTimerLabel}>tap to start</Text>
+          </View>
+        </View>
+      );
+    }
+    if (visual === 'rhythm') {
+      return (
+        <View style={s.featureVisual}>
+          <View style={s.fvRow}>
+            {[4, 5, 6, 7, 8].map(w => (
+              <View key={w} style={s.fvWeekCol}>
+                <View style={[s.fvBar, { height: w * 6 }]} />
+                <Text style={s.fvWeekLabel}>W{w}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={s.fvBadgeRow}>
+            <View style={s.fvBadge}><Text style={s.fvBadgeText}>10 runs</Text></View>
+            <View style={s.fvBadge}><Text style={s.fvBadgeText}>50 km</Text></View>
+          </View>
+        </View>
+      );
+    }
+    if (visual === 'circles') {
+      return (
+        <View style={s.featureVisual}>
+          <View style={s.fvAvatarRow}>
+            {['A', 'M', 'S', 'R'].map((letter, i) => (
+              <View key={i} style={[s.fvAvatar, { marginLeft: i > 0 ? -8 : 0 }]}>
+                <Text style={s.fvAvatarText}>{letter}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={s.fvCircleLabel}>Weekend Warriors</Text>
+        </View>
+      );
+    }
+    return null;
+  };
+
+  // ====================================
+  //  PHASE: SLIDES
+  // ====================================
+
+  if (phase === 'slides') {
+    const renderSlide = ({ item }: { item: OnboardingSlide }) => (
+      <View style={s.slide}>
+        <View style={s.slideContent}>
+          {item.icon && (
+            <View style={[s.slideIconWrap, { backgroundColor: item.icon.color + '15' }]}>
+              <Ionicons name={item.icon.name as any} size={28} color={item.icon.color} />
+            </View>
+          )}
+          <Text style={s.slideSubtitle}>{item.subtitle}</Text>
+          <Text style={s.slideTitle}>{item.title}</Text>
+          <View style={[s.slideDivider, { backgroundColor: item.accent }]} />
+          <Text style={s.slideBody}>{item.body}</Text>
+          {renderFeatureVisual(item.visual)}
+        </View>
       </View>
-    </View>
-  );
+    );
 
-  const renderDots = () => (
-    <View style={styles.dotsContainer}>
-      {ONBOARDING_SLIDES.map((_, index) => {
-        const inputRange = [
-          (index - 1) * width,
-          index * width,
-          (index + 1) * width,
-        ];
-        
-        const dotWidth = scrollX.interpolate({
-          inputRange,
-          outputRange: [8, 28, 8],
-          extrapolate: 'clamp',
-        });
-        
-        const opacity = scrollX.interpolate({
-          inputRange,
-          outputRange: [0.25, 1, 0.25],
-          extrapolate: 'clamp',
-        });
-        
-        return (
-          <Animated.View
-            key={index}
-            style={[
-              styles.dot,
-              { width: dotWidth, opacity },
-            ]}
-          />
-        );
-      })}
-    </View>
-  );
-
-  if (showLevelPicker) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.levelScrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.setupSubtitle}>Your running journey</Text>
-          <Text style={styles.setupTitle}>Where are you today?</Text>
-          <Text style={styles.setupDescription}>
-            Pick what feels right. This controls which distances you see. You can always change it later.
+      <SafeAreaView style={s.container}>
+        <View style={s.header}>
+          <View style={s.headerBrandRow}>
+            <Image source={require('../assets/logo.png')} style={s.headerLogo} />
+            <Text style={s.headerBrand}>ZenRun</Text>
+          </View>
+          <TouchableOpacity onPress={handleSkipSlides} style={s.skipButton}>
+            <Text style={s.skipText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          ref={flatListRef}
+          data={ONBOARDING_SLIDES}
+          renderItem={renderSlide}
+          keyExtractor={item => item.id}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: false },
+          )}
+          onMomentumScrollEnd={e => {
+            setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+          }}
+          scrollEventThrottle={16}
+        />
+
+        {/* Dots */}
+        <View style={s.dotsContainer}>
+          {ONBOARDING_SLIDES.map((_, index) => {
+            const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+            const dotWidth = scrollX.interpolate({ inputRange, outputRange: [8, 28, 8], extrapolate: 'clamp' });
+            const opacity = scrollX.interpolate({ inputRange, outputRange: [0.25, 1, 0.25], extrapolate: 'clamp' });
+            return <Animated.View key={index} style={[s.dot, { width: dotWidth, opacity }]} />;
+          })}
+        </View>
+
+        <View style={s.footer}>
+          <TouchableOpacity style={s.primaryBtn} onPress={handleSlideNext}>
+            <Text style={s.primaryBtnText}>
+              {currentIndex === ONBOARDING_SLIDES.length - 1 ? 'Get started' : 'Next'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ====================================
+  //  PHASE: LEVEL PICKER
+  // ====================================
+
+  if (phase === 'level') {
+    return (
+      <SafeAreaView style={s.container}>
+        <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+          <Text style={s.phaseSubtitle}>Your running journey</Text>
+          <Text style={s.phaseTitle}>Where are you today?</Text>
+          <Text style={s.phaseDesc}>
+            Pick what feels right. This sets your default distances and goals. You can always change it later.
           </Text>
 
           {LEVELS.map(level => {
@@ -263,234 +384,235 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
               <TouchableOpacity
                 key={level.key}
                 style={[
-                  styles.levelCard,
+                  s.levelCard,
                   isSelected && { borderColor: level.color, borderWidth: 2 },
                   !isSelected && { borderColor: colors.border, borderWidth: 1 },
                 ]}
                 onPress={() => {
                   setSelectedLevel(level.key);
                   const defaults = LEVEL_GOAL_DEFAULTS[level.key];
-                  if (defaults) {
-                    setYearlyGoal(defaults.yearly);
-                    setMonthlyGoal(defaults.monthly);
-                  }
+                  if (defaults) { setYearlyGoal(defaults.yearly); setMonthlyGoal(defaults.monthly); }
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.levelCardHeader}>
-                  <Text style={styles.levelEmoji}>{level.emoji}</Text>
+                <View style={s.levelCardHeader}>
+                  <Text style={s.levelEmoji}>{level.emoji}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.levelName}>{level.name}</Text>
-                    <Text style={styles.levelTagline}>{level.tagline}</Text>
+                    <Text style={s.levelName}>{level.name}</Text>
+                    <Text style={s.levelTagline}>{level.tagline}</Text>
                   </View>
-                  <View style={[
-                    styles.levelRadio,
-                    isSelected && { backgroundColor: level.color, borderColor: level.color },
-                  ]}>
-                    {isSelected && <View style={styles.levelRadioInner} />}
+                  <View style={[s.levelRadio, isSelected && { backgroundColor: level.color, borderColor: level.color }]}>
+                    {isSelected && <View style={s.levelRadioInner} />}
                   </View>
                 </View>
-                <Text style={styles.levelDistances}>{level.distances}</Text>
-                <Text style={styles.levelDescription}>{level.description}</Text>
+                <Text style={s.levelDistances}>{level.distances}</Text>
+                <Text style={s.levelDescription}>{level.description}</Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
 
-        <TouchableOpacity style={styles.completeButton} onPress={handleLevelContinue}>
-          <Text style={styles.completeButtonText}>Continue</Text>
+        <TouchableOpacity style={s.primaryBtn} onPress={handleLevelContinue}>
+          <Text style={s.primaryBtnText}>Continue</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  if (showGoalSetup) {
+  // ====================================
+  //  PHASE: GOAL SETUP
+  // ====================================
+
+  if (phase === 'goals') {
+    const levelName = LEVELS.find(l => l.key === selectedLevel)?.name || selectedLevel;
     return (
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.goalSetupContainer}
-        >
-          <ScrollView 
-            contentContainerStyle={styles.goalScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <Text style={styles.setupSubtitle}>Almost there</Text>
-            <Text style={styles.setupTitle}>Set your baseline</Text>
-            <Text style={styles.setupDescription}>
-              These keep you accountable. You can always adjust later.
+      <SafeAreaView style={s.container}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+            <Text style={s.phaseSubtitle}>Running goals</Text>
+            <Text style={s.phaseTitle}>Set your targets</Text>
+            <Text style={s.phaseDesc}>
+              These keep you accountable. You can adjust anytime in Profile.
             </Text>
-            
-            <View style={styles.goalInputContainer}>
-              {/* Handle */}
-              <Text style={styles.sectionLabel}>Your handle</Text>
-              
-              <View style={styles.goalInputRow}>
-                <View style={styles.goalInputWrapper}>
-                  <Text style={styles.handlePrefix}>@</Text>
+
+            <View style={s.recommendedBanner}>
+              <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+              <Text style={s.recommendedText}>
+                Recommended for {levelName}: {LEVEL_GOAL_DEFAULTS[selectedLevel]?.yearly} km/year, {LEVEL_GOAL_DEFAULTS[selectedLevel]?.monthly} km/month
+              </Text>
+            </View>
+
+            <Text style={s.sectionLabel}>Running goals</Text>
+            <View style={s.goalRow}>
+              <View style={[s.goalCard, shadows.small]}>
+                <Text style={s.goalCardLabel}>Yearly</Text>
+                <View style={s.goalCardInputRow}>
                   <TextInput
-                    style={[styles.goalInput, styles.handleInput]}
-                    value={handle}
-                    onChangeText={(text) => {
-                      setHandle(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
-                      setHandleError('');
-                    }}
-                    placeholder="yourname"
+                    style={s.goalCardInput}
+                    value={yearlyGoal}
+                    onChangeText={setYearlyGoal}
+                    keyboardType="number-pad"
+                    placeholder={LEVEL_GOAL_DEFAULTS[selectedLevel]?.yearly || '250'}
                     placeholderTextColor={colors.textLight}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    maxLength={20}
                   />
-                </View>
-                {handleError ? (
-                  <Text style={styles.handleError}>{handleError}</Text>
-                ) : (
-                  <Text style={styles.handleHint}>This can't be changed later</Text>
-                )}
-              </View>
-              
-              {/* Running Goals */}
-              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Running goals</Text>
-              
-              <View style={styles.goalRow}>
-                <View style={[styles.goalCard, shadows.small]}>
-                  <Text style={styles.goalCardLabel}>Yearly</Text>
-                  <View style={styles.goalCardInputRow}>
-                    <TextInput
-                      style={styles.goalCardInput}
-                      value={yearlyGoal}
-                      onChangeText={setYearlyGoal}
-                      keyboardType="number-pad"
-                      placeholder={LEVEL_GOAL_DEFAULTS[selectedLevel]?.yearly || '250'}
-                      placeholderTextColor={colors.textLight}
-                    />
-                    <Text style={styles.goalCardUnit}>km</Text>
-                  </View>
-                </View>
-                
-                <View style={[styles.goalCard, shadows.small]}>
-                  <Text style={styles.goalCardLabel}>Monthly</Text>
-                  <View style={styles.goalCardInputRow}>
-                    <TextInput
-                      style={styles.goalCardInput}
-                      value={monthlyGoal}
-                      onChangeText={setMonthlyGoal}
-                      keyboardType="number-pad"
-                      placeholder={LEVEL_GOAL_DEFAULTS[selectedLevel]?.monthly || '20'}
-                      placeholderTextColor={colors.textLight}
-                    />
-                    <Text style={styles.goalCardUnit}>km</Text>
-                  </View>
+                  <Text style={s.goalCardUnit}>km</Text>
                 </View>
               </View>
-              
-              {/* Weight Goals */}
-              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Weight tracking <Text style={styles.optionalTag}>optional</Text></Text>
-              
-              <View style={styles.goalRow}>
-                <View style={[styles.goalCard, shadows.small]}>
-                  <Text style={styles.goalCardLabel}>Current</Text>
-                  <View style={styles.goalCardInputRow}>
-                    <TextInput
-                      style={styles.goalCardInput}
-                      value={startWeight}
-                      onChangeText={setStartWeight}
-                      keyboardType="decimal-pad"
-                      placeholder="—"
-                      placeholderTextColor={colors.textLight}
-                    />
-                    <Text style={styles.goalCardUnit}>lbs</Text>
-                  </View>
-                </View>
-                
-                <View style={[styles.goalCard, shadows.small]}>
-                  <Text style={styles.goalCardLabel}>Goal</Text>
-                  <View style={styles.goalCardInputRow}>
-                    <TextInput
-                      style={styles.goalCardInput}
-                      value={goalWeight}
-                      onChangeText={setGoalWeight}
-                      keyboardType="decimal-pad"
-                      placeholder="—"
-                      placeholderTextColor={colors.textLight}
-                    />
-                    <Text style={styles.goalCardUnit}>lbs</Text>
-                  </View>
+              <View style={[s.goalCard, shadows.small]}>
+                <Text style={s.goalCardLabel}>Monthly</Text>
+                <View style={s.goalCardInputRow}>
+                  <TextInput
+                    style={s.goalCardInput}
+                    value={monthlyGoal}
+                    onChangeText={setMonthlyGoal}
+                    keyboardType="number-pad"
+                    placeholder={LEVEL_GOAL_DEFAULTS[selectedLevel]?.monthly || '20'}
+                    placeholderTextColor={colors.textLight}
+                  />
+                  <Text style={s.goalCardUnit}>km</Text>
                 </View>
               </View>
             </View>
-            
-            <View style={styles.tipBox}>
-              <Text style={styles.tipText}>
+
+            <View style={s.tipBox}>
+              <Text style={s.tipText}>
                 1000 km/year = about 20 km/week.{'\n'}
                 Start where you are. Adjust as you go.
               </Text>
             </View>
           </ScrollView>
-          
-          <TouchableOpacity
-            style={[styles.completeButton, saving && styles.buttonDisabled]}
-            onPress={handleComplete}
-            disabled={saving}
-          >
-            <Text style={styles.completeButtonText}>
-              {saving ? 'Setting up...' : "Let's run"}
-            </Text>
+
+          <TouchableOpacity style={s.primaryBtn} onPress={handleGoalsContinue}>
+            <Text style={s.primaryBtnText}>Continue</Text>
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerBrandRow}>
-          <Image source={require('../assets/logo.png')} style={styles.headerLogo} />
-          <Text style={styles.headerBrand}>ZenRun</Text>
-        </View>
-        <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
-      </View>
-      
-      <FlatList
-        ref={flatListRef}
-        data={ONBOARDING_SLIDES}
-        renderItem={renderSlide}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false }
-        )}
-        onMomentumScrollEnd={(e) => {
-          const index = Math.round(e.nativeEvent.contentOffset.x / width);
-          setCurrentIndex(index);
-        }}
-        scrollEventThrottle={16}
-      />
-      
-      {renderDots()}
-      
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextButtonText}>
-            {currentIndex === ONBOARDING_SLIDES.length - 1 ? 'Set up goals' : 'Next'}
+  // ====================================
+  //  PHASE: BETA OPT-IN
+  // ====================================
+
+  if (phase === 'beta') {
+    return (
+      <SafeAreaView style={s.container}>
+        <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={[s.slideIconWrap, { backgroundColor: colors.primary + '15', alignSelf: 'flex-start' }]}>
+            <Ionicons name="flask-outline" size={28} color={colors.primary} />
+          </View>
+          <Text style={s.phaseSubtitle}>Experimental</Text>
+          <Text style={s.phaseTitle}>Try beta features</Text>
+          <Text style={s.phaseDesc}>
+            These are optional extras we're still refining. You can turn them on or off anytime in Profile.
           </Text>
+
+          <View style={s.betaCard}>
+            <View style={s.betaCardLeft}>
+              <View style={[s.betaIcon, { backgroundColor: colors.secondary + '15' }]}>
+                <Ionicons name="footsteps-outline" size={22} color={colors.secondary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.betaTitle}>High Step Days</Text>
+                <Text style={s.betaDesc}>Track your daily step count and celebrate big step days</Text>
+              </View>
+            </View>
+            <Switch
+              value={betaSteps}
+              onValueChange={setBetaSteps}
+              trackColor={{ false: colors.border, true: colors.secondary }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          <View style={s.betaCard}>
+            <View style={s.betaCardLeft}>
+              <View style={[s.betaIcon, { backgroundColor: colors.primary + '15' }]}>
+                <Ionicons name="scale-outline" size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.betaTitle}>Weight Tracking</Text>
+                <Text style={s.betaDesc}>Log your weight and track trends over time</Text>
+              </View>
+            </View>
+            <Switch
+              value={betaWeight}
+              onValueChange={setBetaWeight}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+        </ScrollView>
+
+        <TouchableOpacity style={s.primaryBtn} onPress={handleBetaContinue}>
+          <Text style={s.primaryBtnText}>Continue</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ====================================
+  //  PHASE: HANDLE + COMPLETE
+  // ====================================
+
+  return (
+    <SafeAreaView style={s.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+          <Text style={s.phaseSubtitle}>Almost there</Text>
+          <Text style={s.phaseTitle}>Pick your handle</Text>
+          <Text style={s.phaseDesc}>
+            This is your unique identity on ZenRun. Friends will find you by this name.
+          </Text>
+
+          <View style={s.handleBox}>
+            <View style={s.handleInputWrapper}>
+              <Text style={s.handlePrefix}>@</Text>
+              <TextInput
+                style={s.handleInput}
+                value={handle}
+                onChangeText={text => {
+                  setHandle(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                  setHandleError('');
+                }}
+                placeholder="yourname"
+                placeholderTextColor={colors.textLight}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={20}
+              />
+            </View>
+            {handleError ? (
+              <Text style={s.handleError}>{handleError}</Text>
+            ) : (
+              <Text style={s.handleHint}>This can't be changed later</Text>
+            )}
+          </View>
+        </ScrollView>
+
+        <TouchableOpacity
+          style={[s.primaryBtn, saving && s.btnDisabled]}
+          onPress={handleComplete}
+          disabled={saving}
+        >
+          <Text style={s.primaryBtnText}>{saving ? 'Setting up...' : "Let's run"}</Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+// ====================================
+//  STYLES
+// ====================================
+
+const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
+
+  // Header (slides phase)
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -503,24 +625,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  headerLogo: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-  },
+  headerLogo: { width: 28, height: 28, borderRadius: 6 },
   headerBrand: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
     letterSpacing: -0.5,
   },
-  skipButton: {
-    padding: spacing.sm,
-  },
-  skipText: {
-    color: colors.textSecondary,
-    fontSize: typography.sizes.md,
-  },
+  skipButton: { padding: spacing.sm },
+  skipText: { color: colors.textSecondary, fontSize: typography.sizes.md },
 
   // Slides
   slide: {
@@ -529,8 +642,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
   },
-  slideContent: {
-    paddingBottom: 60,
+  slideContent: { paddingBottom: 60 },
+  slideIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   slideSubtitle: {
     fontSize: typography.sizes.sm,
@@ -547,16 +666,58 @@ const styles = StyleSheet.create({
     lineHeight: 44,
     marginBottom: spacing.lg,
   },
-  slideDivider: {
-    width: 32,
-    height: 3,
-    borderRadius: 2,
-    marginBottom: spacing.lg,
-  },
+  slideDivider: { width: 32, height: 3, borderRadius: 2, marginBottom: spacing.lg },
   slideBody: {
     fontSize: typography.sizes.md,
     color: colors.textSecondary,
     lineHeight: 26,
+  },
+
+  // Feature visuals
+  featureVisual: {
+    marginTop: spacing.xl,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...shadows.small,
+  },
+  fvRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: spacing.sm },
+  fvChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  fvChipActive: { backgroundColor: colors.primary },
+  fvChipText: { fontSize: typography.sizes.md, fontWeight: typography.weights.semibold, color: colors.textSecondary },
+  fvChipTextActive: { color: '#fff' },
+  fvTimerBox: { alignItems: 'center', marginTop: spacing.md },
+  fvTimer: { fontSize: 32, fontWeight: typography.weights.bold, color: colors.text, letterSpacing: 2 },
+  fvTimerLabel: { fontSize: typography.sizes.sm, color: colors.textLight, marginTop: 2 },
+  fvWeekCol: { alignItems: 'center', gap: 4 },
+  fvBar: { width: 20, borderRadius: 4, backgroundColor: colors.primary },
+  fvWeekLabel: { fontSize: 10, color: colors.textLight },
+  fvBadgeRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.md },
+  fvBadge: { backgroundColor: colors.secondary + '20', paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full },
+  fvBadgeText: { fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, color: colors.secondary },
+  fvAvatarRow: { flexDirection: 'row', justifyContent: 'center' },
+  fvAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  fvAvatarText: { color: '#fff', fontWeight: typography.weights.bold, fontSize: typography.sizes.sm },
+  fvCircleLabel: {
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
   },
 
   // Dots
@@ -566,155 +727,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: spacing.lg,
   },
-  dot: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.text,
-    marginHorizontal: 3,
-  },
+  dot: { height: 6, borderRadius: 3, backgroundColor: colors.text, marginHorizontal: 3 },
 
-  // Footer
-  footer: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
-  nextButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 18,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    ...shadows.medium,
-  },
-  nextButtonText: {
-    color: colors.textOnPrimary,
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-  },
-
-  // Goal Setup
-  goalSetupContainer: {
-    flex: 1,
-  },
-  goalScrollContent: {
-    padding: spacing.xl,
-  },
-  setupSubtitle: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: spacing.xs,
-  },
-  setupTitle: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  setupDescription: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    lineHeight: 24,
-    marginBottom: spacing.xl,
-  },
-  goalInputContainer: {
-    width: '100%',
-  },
-  sectionLabel: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  optionalTag: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.regular,
-    color: colors.textLight,
-  },
-  goalInputRow: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    ...shadows.small,
-  },
-  goalInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  goalInput: {
-    flex: 1,
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    padding: 0,
-  },
-  handlePrefix: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.primary,
-    marginRight: spacing.xs,
-  },
-  handleInput: {
-    fontSize: typography.sizes.xl,
-  },
-  handleError: {
-    fontSize: typography.sizes.sm,
-    color: colors.error,
-    marginTop: spacing.xs,
-  },
-  handleHint: {
-    fontSize: typography.sizes.xs,
-    color: colors.textLight,
-    marginTop: spacing.xs,
-  },
-  goalRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-  },
-  goalCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginRight: spacing.sm,
-  },
-  goalCardLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  goalCardInputRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  goalCardInput: {
-    flex: 1,
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    padding: 0,
-  },
-  goalCardUnit: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    marginLeft: spacing.xs,
-  },
-  tipBox: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginTop: spacing.sm,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.primary,
-  },
-  tipText: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  completeButton: {
+  // Footer / buttons
+  footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  primaryBtn: {
     backgroundColor: colors.primary,
     paddingVertical: 18,
     borderRadius: radius.lg,
@@ -723,20 +740,37 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     ...shadows.medium,
   },
-  completeButtonText: {
+  primaryBtnText: {
     color: colors.textOnPrimary,
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  btnDisabled: { opacity: 0.6 },
+
+  // Shared phase layout
+  scrollContent: { padding: spacing.xl, paddingBottom: spacing.xxl },
+  phaseSubtitle: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: spacing.xs,
+  },
+  phaseTitle: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  phaseDesc: {
+    fontSize: typography.sizes.md,
+    color: colors.textSecondary,
+    lineHeight: 24,
+    marginBottom: spacing.xl,
   },
 
-  // Level Picker
-  levelScrollContent: {
-    padding: spacing.xl,
-    paddingBottom: spacing.xxl,
-  },
+  // Level picker
   levelCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -750,19 +784,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     gap: spacing.md,
   },
-  levelEmoji: {
-    fontSize: 32,
-  },
-  levelName: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-  },
-  levelTagline: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
+  levelEmoji: { fontSize: 32 },
+  levelName: { fontSize: typography.sizes.lg, fontWeight: typography.weights.bold, color: colors.text },
+  levelTagline: { fontSize: typography.sizes.sm, color: colors.textSecondary, fontStyle: 'italic' },
   levelRadio: {
     width: 24,
     height: 24,
@@ -772,12 +796,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  levelRadioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#fff',
-  },
+  levelRadioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' },
   levelDistances: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
@@ -785,9 +804,101 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     letterSpacing: 0.5,
   },
-  levelDescription: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    lineHeight: 20,
+  levelDescription: { fontSize: typography.sizes.sm, color: colors.textSecondary, lineHeight: 20 },
+
+  // Goals
+  sectionLabel: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
+  recommendedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary + '10',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    marginBottom: spacing.lg,
+  },
+  recommendedText: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    fontWeight: typography.weights.medium,
+    flex: 1,
+  },
+  goalRow: { flexDirection: 'row', marginBottom: spacing.md, gap: spacing.sm },
+  goalCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  goalCardLabel: { fontSize: typography.sizes.sm, color: colors.textSecondary, marginBottom: spacing.sm },
+  goalCardInputRow: { flexDirection: 'row', alignItems: 'baseline' },
+  goalCardInput: {
+    flex: 1,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    padding: 0,
+  },
+  goalCardUnit: { fontSize: typography.sizes.md, color: colors.textSecondary, marginLeft: spacing.xs },
+  tipBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginTop: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  tipText: { fontSize: typography.sizes.sm, color: colors.textSecondary, lineHeight: 22 },
+
+  // Beta opt-in
+  betaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.small,
+  },
+  betaCardLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, marginRight: spacing.md },
+  betaIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  betaTitle: { fontSize: typography.sizes.md, fontWeight: typography.weights.semibold, color: colors.text },
+  betaDesc: { fontSize: typography.sizes.sm, color: colors.textSecondary, lineHeight: 18, marginTop: 2 },
+
+  // Handle
+  handleBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...shadows.small,
+  },
+  handleInputWrapper: { flexDirection: 'row', alignItems: 'center' },
+  handlePrefix: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+    marginRight: spacing.xs,
+  },
+  handleInput: {
+    flex: 1,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    padding: 0,
+  },
+  handleError: { fontSize: typography.sizes.sm, color: colors.error, marginTop: spacing.xs },
+  handleHint: { fontSize: typography.sizes.xs, color: colors.textLight, marginTop: spacing.xs },
 });

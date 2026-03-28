@@ -195,6 +195,10 @@ class User(Base):
     # 🔒 Profile privacy: private, circles, public
     profile_privacy = Column(String, default="private")
     
+    # 🧪 Beta feature opt-ins
+    beta_steps_enabled = Column(Boolean, default=False, server_default='false')
+    beta_weight_enabled = Column(Boolean, default=False, server_default='false')
+    
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
 

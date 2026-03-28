@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Linking,
+  Switch,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -363,6 +364,58 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
           )}
         </View>
 
+        {/* Beta Features */}
+        <View style={[styles.section, shadows.small]}>
+          <Text style={styles.sectionTitle}>Beta Features</Text>
+          <Text style={styles.betaHint}>Experimental features you can try out</Text>
+          <View style={styles.betaRow}>
+            <Ionicons name="footsteps-outline" size={20} color={colors.secondary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.betaLabel}>High Step Days</Text>
+              <Text style={styles.betaDesc}>Track daily step count</Text>
+            </View>
+            <Switch
+              value={!!user?.beta_steps_enabled}
+              onValueChange={async (val) => {
+                try {
+                  const token = await getToken();
+                  await fetch(`${API_BASE_URL}/user/beta-preferences`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ steps_enabled: val }),
+                  });
+                  await refreshUser();
+                } catch { Alert.alert('Error', 'Failed to update preference'); }
+              }}
+              trackColor={{ false: colors.border, true: colors.secondary }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.betaRow}>
+            <Ionicons name="scale-outline" size={20} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.betaLabel}>Weight Tracking</Text>
+              <Text style={styles.betaDesc}>Log weight and track trends</Text>
+            </View>
+            <Switch
+              value={!!user?.beta_weight_enabled}
+              onValueChange={async (val) => {
+                try {
+                  const token = await getToken();
+                  await fetch(`${API_BASE_URL}/user/beta-preferences`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ weight_enabled: val }),
+                  });
+                  await refreshUser();
+                } catch { Alert.alert('Error', 'Failed to update preference'); }
+              }}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+        </View>
+
         {/* Handle */}
         {!existingHandle && (
           <View style={[styles.section, shadows.small]}>
@@ -396,58 +449,66 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
           </View>
         )}
 
-        {/* Log Section Header */}
-        <Text style={styles.groupTitle}>Log & Track</Text>
+        {/* Log Section Header — only show if any beta feature is enabled */}
+        {(user?.beta_steps_enabled || user?.beta_weight_enabled) && (
+          <Text style={styles.groupTitle}>Log & Track</Text>
+        )}
 
         {/* High Step Days */}
-        <StepsTracker summary={stepsSummary} onUpdate={fetchAll} />
+        {user?.beta_steps_enabled && (
+          <StepsTracker summary={stepsSummary} onUpdate={fetchAll} />
+        )}
 
         {/* Weight */}
-        {weightProgress ? (
-          <WeightTracker
-            progress={weightProgress}
-            chartData={weightChart}
-            onUpdate={fetchAll}
-            showChart={true}
-          />
-        ) : (
-          <View style={[styles.section, shadows.small]}>
-            <Text style={styles.sectionTitle}>⚖️ Weight</Text>
-            <Text style={styles.emptyText}>Set your start and goal weight below to begin tracking.</Text>
-          </View>
+        {user?.beta_weight_enabled && (
+          weightProgress ? (
+            <WeightTracker
+              progress={weightProgress}
+              chartData={weightChart}
+              onUpdate={fetchAll}
+              showChart={true}
+            />
+          ) : (
+            <View style={[styles.section, shadows.small]}>
+              <Text style={styles.sectionTitle}>⚖️ Weight</Text>
+              <Text style={styles.emptyText}>Set your start and goal weight below to begin tracking.</Text>
+            </View>
+          )
         )}
 
         {/* Goals Section Header */}
         <Text style={styles.groupTitle}>Goals</Text>
 
         {/* Weight Goals */}
-        <View style={[styles.section, shadows.small]}>
-          <Text style={styles.sectionTitle}>Weight Goals</Text>
-          <View style={styles.inputRow}>
-            <View style={styles.inputHalf}>
-              <Text style={styles.label}>Start (lbs)</Text>
-              <TextInput
-                style={styles.input}
-                value={startWeight}
-                onChangeText={setStartWeight}
-                keyboardType="numeric"
-                placeholder="e.g. 200"
-                placeholderTextColor={colors.textLight}
-              />
-            </View>
-            <View style={styles.inputHalf}>
-              <Text style={styles.label}>Goal (lbs)</Text>
-              <TextInput
-                style={styles.input}
-                value={goalWeight}
-                onChangeText={setGoalWeight}
-                keyboardType="numeric"
-                placeholder="e.g. 180"
-                placeholderTextColor={colors.textLight}
-              />
+        {user?.beta_weight_enabled && (
+          <View style={[styles.section, shadows.small]}>
+            <Text style={styles.sectionTitle}>Weight Goals</Text>
+            <View style={styles.inputRow}>
+              <View style={styles.inputHalf}>
+                <Text style={styles.label}>Start (lbs)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={startWeight}
+                  onChangeText={setStartWeight}
+                  keyboardType="numeric"
+                  placeholder="e.g. 200"
+                  placeholderTextColor={colors.textLight}
+                />
+              </View>
+              <View style={styles.inputHalf}>
+                <Text style={styles.label}>Goal (lbs)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={goalWeight}
+                  onChangeText={setGoalWeight}
+                  keyboardType="numeric"
+                  placeholder="e.g. 180"
+                  placeholderTextColor={colors.textLight}
+                />
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* Running Goals */}
         <View style={[styles.section, shadows.small]}>
@@ -701,6 +762,28 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     fontStyle: 'italic',
+  },
+  betaHint: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+    marginBottom: spacing.md,
+  },
+  betaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  betaLabel: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.medium,
+    color: colors.text,
+  },
+  betaDesc: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
   },
   primaryButton: {
     backgroundColor: colors.primary,

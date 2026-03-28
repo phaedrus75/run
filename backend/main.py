@@ -94,6 +94,13 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS user_id INTEGER
                 """))
+                # Beta feature opt-in columns
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_steps_enabled BOOLEAN DEFAULT false
+                """))
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_weight_enabled BOOLEAN DEFAULT false
+                """))
                 conn.commit()
                 
                 # Assign orphaned data to the first user (aseem.munshi@gmail.com)
@@ -450,6 +457,30 @@ def complete_onboarding(current_user: User = Depends(require_auth), db: Session 
 
 
 # ==========================================
+# 🧪 BETA PREFERENCES ENDPOINTS
+# ==========================================
+
+@app.get("/user/beta-preferences")
+def get_beta_preferences(current_user: User = Depends(require_auth)):
+    return {
+        "steps_enabled": getattr(current_user, 'beta_steps_enabled', False) or False,
+        "weight_enabled": getattr(current_user, 'beta_weight_enabled', False) or False,
+    }
+
+@app.post("/user/beta-preferences")
+def set_beta_preferences(data: dict, current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    if "steps_enabled" in data:
+        current_user.beta_steps_enabled = bool(data["steps_enabled"])
+    if "weight_enabled" in data:
+        current_user.beta_weight_enabled = bool(data["weight_enabled"])
+    db.commit()
+    return {
+        "steps_enabled": current_user.beta_steps_enabled or False,
+        "weight_enabled": current_user.beta_weight_enabled or False,
+    }
+
+
+# ==========================================
 # 🏃 RUNNER LEVEL ENDPOINTS
 # ==========================================
 
@@ -748,7 +779,8 @@ def get_streak_progress(
     - 2 short runs (any distance)
     """
     user_id = current_user.id if current_user else None
-    return crud.get_weekly_streak_progress(db, user_id=user_id)
+    joined_at = current_user.created_at if current_user else None
+    return crud.get_weekly_streak_progress(db, user_id=user_id, joined_at=joined_at)
 
 
 # ==========================================
@@ -801,7 +833,8 @@ def get_goals(
         yearly_goal = LEVEL_GOALS['breath']["yearly_km"]
         monthly_goal = LEVEL_GOALS['breath']["monthly_km"]
     
-    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id)
+    joined_at = current_user.created_at if current_user else None
+    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id, joined_at=joined_at)
 
 
 @app.get("/achievements")
@@ -1623,6 +1656,8 @@ def get_current_user_info(
         "onboarding_complete": current_user.onboarding_complete,
         "runner_level": getattr(current_user, 'runner_level', 'breath') or 'breath',
         "profile_privacy": getattr(current_user, 'profile_privacy', 'private') or 'private',
+        "beta_steps_enabled": getattr(current_user, 'beta_steps_enabled', False) or False,
+        "beta_weight_enabled": getattr(current_user, 'beta_weight_enabled', False) or False,
     }
 
 

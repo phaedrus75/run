@@ -48,8 +48,8 @@ Every piece of copy — App Store description, Reddit posts, Product Hunt, email
 
 ### App Store Connect Setup
 
-- [ ] Create the app record in App Store Connect (bundle ID: `com.phaedrus75.runzen`)
-- [ ] Set the app name to **ZenRun**
+- [x] Create the app record in App Store Connect (bundle ID: `com.phaedrus75.runzen`)
+- [x] Set the app name to **ZenRuns** (brand remains "ZenRun" on website and in-app)
 - [ ] Set the subtitle to **Your joyful running journal**
 - [ ] Set the primary category to **Health & Fitness**
 - [ ] Set the secondary category to **Lifestyle**
@@ -302,7 +302,7 @@ by a running app, I'd love your feedback. Every message gets read by me personal
 Post a 5-tweet thread:
 
 1. "I've started and stopped running more times than I can count. This January I set a goal: 1,000km. I also built an app. Here's the story:"
-2. I hardly ran last year. Every time I tried to come back, running apps made it worse. Strava showed me how slow I was. Garmin showed me how unfit I'd become. I just wanted to show up without judgment.
+2. I hardly ran last year. Every time I tried to come back, I'd open a running app and see pace charts, heart rate zones, VO2 max scores. All reminders of how far I'd fallen. I didn't need more data. I just needed to run.
 3. The research is clear: consistency > intensity. Runners who show up 2x/week for years beat runners who crush it for 3 months and burn out. Every time.
 4. So I built @ZenRunApp. Log a run in 2 seconds. Find your rhythm. Earn milestones. Share with friends. No GPS, no leaderboards, no noise. Built while learning to run, not in a product lab.
 5. 170km in, both the habit and the app are still going. It's in early access on iOS -- free, no ads. I'm building it in the open and want runners to help shape it. Vote on features at zenrun.featurebase.app. Link in bio.

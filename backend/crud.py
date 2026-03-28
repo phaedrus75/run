@@ -520,17 +520,18 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
     }
 
 
-def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> dict:
+def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None, joined_at=None) -> dict:
     """
     🔥 Get progress toward this week's streak goal for a specific user
-    
-    Goal: 2 runs of any distance
+
+    Goal: 2 runs of any distance.
+    joined_at caps backward-looking so weeks before the user existed aren't "missed".
     """
     now = datetime.now()
     min_date = datetime(2026, 1, 1)
-    
+
     week_start, week_end = get_week_boundaries_for_date(now)
-    
+
     query = db.query(Run).filter(
         Run.completed_at >= week_start,
         Run.completed_at <= week_end,
@@ -539,38 +540,45 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
     if user_id is not None:
         query = query.filter(Run.user_id == user_id)
     week_runs = query.all()
-    
+
     runs_completed = len(week_runs)
     runs_needed = 2
     is_complete = runs_completed >= runs_needed
-    
+
     current_streak, longest_streak = calculate_streaks(db, user_id=user_id)
-    
-    # Comeback and rest week detection
+
     is_comeback = False
     weeks_away = 0
     missed_last_week = False
-    
+
     prev_week_start = week_start - timedelta(days=7)
     prev_week_end = week_start - timedelta(seconds=1)
-    
-    prev_query = db.query(Run).filter(
-        Run.completed_at >= prev_week_start,
-        Run.completed_at <= prev_week_end,
-        Run.completed_at >= min_date
-    )
-    if user_id is not None:
-        prev_query = prev_query.filter(Run.user_id == user_id)
-    prev_week_runs = prev_query.count()
-    
-    if prev_week_runs < 2:
-        missed_last_week = True
-    
+
+    # Don't count pre-join weeks as missed
+    user_existed_prev_week = True
+    if joined_at and prev_week_end < joined_at:
+        user_existed_prev_week = False
+
+    if user_existed_prev_week:
+        prev_query = db.query(Run).filter(
+            Run.completed_at >= prev_week_start,
+            Run.completed_at <= prev_week_end,
+            Run.completed_at >= min_date
+        )
+        if user_id is not None:
+            prev_query = prev_query.filter(Run.user_id == user_id)
+        prev_week_runs = prev_query.count()
+
+        if prev_week_runs < 2:
+            missed_last_week = True
+
     if runs_completed > 0 and current_streak <= 1:
-        # Check how many consecutive weeks were missed before this one
         check_start = prev_week_start
         consecutive_missed = 0
         for _ in range(52):
+            # Stop looking before the user joined
+            if joined_at and check_start < joined_at:
+                break
             check_end = check_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
             q = db.query(Run).filter(
                 Run.completed_at >= check_start,
@@ -584,17 +592,17 @@ def get_weekly_streak_progress(db: Session, user_id: Optional[int] = None) -> di
                 check_start -= timedelta(days=7)
             else:
                 break
-        
+
         if consecutive_missed >= 2:
             is_comeback = True
             weeks_away = consecutive_missed
-    
+
     if is_complete:
         message = "You showed up this week."
     else:
         remaining = runs_needed - runs_completed
         message = f"{remaining} more run{'s' if remaining > 1 else ''} this week"
-    
+
     return {
         "runs_completed": runs_completed,
         "runs_needed": runs_needed,

@@ -7,35 +7,17 @@ interface GoalsProgressProps {
   goals: GoalsProgressType;
 }
 
-function getYearlyExpectedPercent(): number {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const end = new Date(now.getFullYear() + 1, 0, 1);
-  const elapsed = now.getTime() - start.getTime();
-  const total = end.getTime() - start.getTime();
-  return Math.min(100, (elapsed / total) * 100);
-}
-
-function getMonthlyExpectedPercent(): number {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const elapsed = now.getTime() - start.getTime();
-  const total = end.getTime() - start.getTime();
-  return Math.min(100, (elapsed / total) * 100);
-}
-
 export function GoalsProgress({ goals }: GoalsProgressProps) {
   const { yearly, monthly } = goals;
-  const yearlyExpected = getYearlyExpectedPercent();
-  const monthlyExpected = getMonthlyExpectedPercent();
+  const yearlyExpected = yearly.expected_percent ?? 0;
+  const monthlyExpected = monthly.expected_percent ?? 0;
 
   return (
     <View style={styles.container}>
       {/* Yearly Goal */}
       <View style={[styles.goalCard, shadows.small]}>
         <View style={styles.goalHeader}>
-          <Text style={styles.goalTitle}>🎯 2026 Goal</Text>
+          <Text style={styles.goalTitle}>🎯 {yearly.goal_km} km goal</Text>
           <Text style={[styles.statusBadge, yearly.on_track ? styles.onTrack : styles.behindTrack]}>
             {yearly.on_track ? '✓ On Track' : 'Keep showing up'}
           </Text>

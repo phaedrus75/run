@@ -189,6 +189,7 @@ export interface GoalsProgress {
     percent: number;
     days_remaining: number;
     on_track: boolean;
+    expected_percent: number;
   };
   monthly: {
     goal_km: number;
@@ -198,6 +199,7 @@ export interface GoalsProgress {
     days_remaining: number;
     month_name: string;
     is_complete: boolean;
+    expected_percent: number;
   };
   monthly_goals_hit: number;
 }

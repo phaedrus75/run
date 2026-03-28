@@ -701,28 +701,46 @@ def get_personal_records(db: Session, user_id: int = None, category: str = None)
     return records
 
 
-def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: float = None, user_id: int = None) -> dict:
-    """Get progress toward yearly and monthly goals."""
-    yearly_target = yearly_goal if yearly_goal is not None else YEARLY_GOAL_KM
-    monthly_target = monthly_goal if monthly_goal is not None else MONTHLY_GOAL_KM
-    
-    min_date = datetime(2026, 1, 1)
+def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: float = None, user_id: int = None, joined_at: datetime = None) -> dict:
+    """Get progress toward yearly and monthly goals, pro-rated for join date."""
+    from calendar import monthrange
+
+    full_yearly = yearly_goal if yearly_goal is not None else YEARLY_GOAL_KM
+    full_monthly = monthly_goal if monthly_goal is not None else MONTHLY_GOAL_KM
+
     now = datetime.now()
-    
+    min_date = datetime(2026, 1, 1)
+
+    # Pro-rate yearly goal: only count from the day the user joined
+    if joined_at and joined_at.year == now.year and joined_at > min_date:
+        days_in_year = 366 if now.year % 4 == 0 else 365
+        days_remaining_from_join = (datetime(now.year + 1, 1, 1) - joined_at).days
+        yearly_target = round(full_yearly * (days_remaining_from_join / days_in_year), 1)
+    else:
+        yearly_target = full_yearly
+
+    # Pro-rate monthly goal for the user's first month
+    if joined_at and joined_at.year == now.year and joined_at.month == now.month:
+        days_in_month = monthrange(now.year, now.month)[1]
+        days_remaining_from_join = days_in_month - joined_at.day + 1
+        monthly_target = round(full_monthly * (days_remaining_from_join / days_in_month), 1)
+    else:
+        monthly_target = full_monthly
+
     def base_query():
         q = db.query(Run)
         if user_id is not None:
             q = q.filter(Run.user_id == user_id)
         return q
-    
-    year_start = datetime(2026, 1, 1)
+
+    year_start = datetime(now.year, 1, 1)
     year_runs = base_query().filter(
         Run.completed_at >= year_start,
         Run.completed_at >= min_date
     ).all()
     yearly_km = sum(r.distance_km for r in year_runs)
     yearly_percent = min(100, (yearly_km / yearly_target) * 100) if yearly_target > 0 else 0
-    
+
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_runs = base_query().filter(
         Run.completed_at >= month_start,
@@ -730,26 +748,54 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     ).all()
     monthly_km = sum(r.distance_km for r in month_runs)
     monthly_percent = min(100, (monthly_km / monthly_target) * 100) if monthly_target > 0 else 0
-    
+
+    # Count months where full monthly goal was hit (only months after joining)
+    first_month = joined_at.month if (joined_at and joined_at.year == now.year) else 1
     monthly_goals_hit = 0
-    for month in range(1, now.month + 1):
-        m_start = datetime(2026, month, 1)
-        if month == 12:
-            m_end = datetime(2027, 1, 1)
-        else:
-            m_end = datetime(2026, month + 1, 1)
-        
+    for month in range(first_month, now.month + 1):
+        m_start = datetime(now.year, month, 1)
+        m_end = datetime(now.year, month + 1, 1) if month < 12 else datetime(now.year + 1, 1, 1)
+
         m_runs = base_query().filter(
             Run.completed_at >= m_start,
             Run.completed_at < m_end
         ).all()
         m_km = sum(r.distance_km for r in m_runs)
-        if m_km >= monthly_target:
+
+        # For the joining month, compare against the pro-rated target
+        if joined_at and joined_at.year == now.year and month == joined_at.month:
+            days_in_m = monthrange(now.year, month)[1]
+            days_active = days_in_m - joined_at.day + 1
+            m_target = round(full_monthly * (days_active / days_in_m), 1)
+        else:
+            m_target = full_monthly
+
+        if m_km >= m_target:
             monthly_goals_hit += 1
-    
+
     days_left_in_month = (datetime(now.year, now.month + 1 if now.month < 12 else 1, 1) - now).days
-    days_left_in_year = (datetime(2027, 1, 1) - now).days
-    
+    days_left_in_year = (datetime(now.year + 1, 1, 1) - now).days
+
+    # "on_track" uses time elapsed since join (not since Jan 1)
+    if joined_at and joined_at.year == now.year and joined_at > min_date:
+        elapsed_since_join = (now - joined_at).total_seconds()
+        total_from_join = (datetime(now.year + 1, 1, 1) - joined_at).total_seconds()
+        expected_fraction = elapsed_since_join / total_from_join if total_from_join > 0 else 0
+    else:
+        expected_fraction = now.timetuple().tm_yday / 365
+
+    # Monthly expected fraction (from join date if joining month, else from 1st)
+    if joined_at and joined_at.year == now.year and joined_at.month == now.month:
+        days_in_month = monthrange(now.year, now.month)[1]
+        days_active_in_month = days_in_month - joined_at.day + 1
+        elapsed_in_month = (now - joined_at).total_seconds()
+        total_in_month = days_active_in_month * 86400
+        monthly_expected_pct = round(min(100, (elapsed_in_month / total_in_month) * 100)) if total_in_month > 0 else 0
+    else:
+        m_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        m_end_dt = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+        monthly_expected_pct = round(min(100, ((now - m_start).total_seconds() / (m_end_dt - m_start).total_seconds()) * 100))
+
     return {
         "yearly": {
             "goal_km": yearly_target,
@@ -757,7 +803,8 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
             "remaining_km": round(max(0, yearly_target - yearly_km), 1),
             "percent": round(yearly_percent),
             "days_remaining": days_left_in_year,
-            "on_track": yearly_km >= (yearly_target * (now.timetuple().tm_yday / 365)),
+            "on_track": yearly_km >= (yearly_target * expected_fraction),
+            "expected_percent": round(expected_fraction * 100),
         },
         "monthly": {
             "goal_km": monthly_target,
@@ -767,6 +814,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
             "days_remaining": days_left_in_month,
             "month_name": now.strftime("%B"),
             "is_complete": monthly_km >= monthly_target,
+            "expected_percent": monthly_expected_pct,
         },
         "monthly_goals_hit": monthly_goals_hit,
     }

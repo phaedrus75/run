@@ -21,6 +21,8 @@ export interface User {
   name: string | null;
   is_active: boolean;
   onboarding_complete: boolean;
+  beta_steps_enabled: boolean;
+  beta_weight_enabled: boolean;
   created_at: string;
 }
 

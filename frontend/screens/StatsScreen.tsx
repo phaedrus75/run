@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../contexts/AuthContext';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { StatCard, StatsChart, PaceTrendChart, WeightTracker, StreakProgress } from '../components';
 import { 
@@ -40,6 +41,7 @@ type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
 const MIN_YEAR = 2026;
 
 export function StatsScreen() {
+  const { user } = useAuth();
   const [section, setSection] = useState<Section>('runs');
   const [viewMode, setViewMode] = useState<RunViewMode>('week');
   const [stepsViewMode, setStepsViewMode] = useState<StepsViewMode>('month');
@@ -233,13 +235,18 @@ export function StatsScreen() {
     { key: 'treadmill', label: 'Treadmill' },
   ];
 
-  const renderSectionTabs = () => (
+  const renderSectionTabs = () => {
+    const tabs: { key: Section; label: string }[] = [
+      { key: 'runs', label: 'Runs' },
+    ];
+    if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'High Step Days' });
+    if (user?.beta_weight_enabled) tabs.push({ key: 'weight', label: 'Weight' });
+
+    if (tabs.length <= 1) return null;
+
+    return (
     <View style={styles.sectionTabContainer}>
-      {([
-        { key: 'runs' as Section, label: 'Runs' },
-        { key: 'steps' as Section, label: 'High Step Days' },
-        { key: 'weight' as Section, label: 'Weight' },
-      ]).map(({ key, label }) => (
+      {tabs.map(({ key, label }) => (
         <TouchableOpacity
           key={key}
           style={[styles.sectionTab, section === key && styles.sectionTabActive]}
@@ -252,6 +259,7 @@ export function StatsScreen() {
       ))}
     </View>
   );
+  };
 
   const renderRunTabs = () => (
     <View style={styles.tabContainer}>
