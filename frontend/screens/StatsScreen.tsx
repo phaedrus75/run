@@ -541,7 +541,11 @@ export function StatsScreen() {
     </View>
   );
 
-  const renderStepsAllTime = () => (
+  const renderStepsAllTime = () => {
+    const history = stepsSummary?.monthly_history || [];
+    const maxDays = Math.max(1, ...history.map(m => m.days_15k + m.days_20k + m.days_25k));
+
+    return (
     <View>
       {stepsSummary?.all_time ? (
         <View>
@@ -571,12 +575,41 @@ export function StatsScreen() {
               </Text>
             </View>
           </View>
+
+          {history.length > 0 && (
+            <View style={[styles.stepDaysCard, shadows.small, { marginTop: spacing.md }]}>
+              <Text style={styles.stepsChartTitle}>Monthly Breakdown</Text>
+              {history.map((month) => {
+                const total = month.days_15k + month.days_20k + month.days_25k;
+                const barWidth = maxDays > 0 ? (total / maxDays) * 100 : 0;
+                return (
+                  <View key={month.month} style={styles.stepsChartRow}>
+                    <Text style={styles.stepsChartLabel}>{month.month.slice(0, 3)}</Text>
+                    <View style={styles.stepsChartBarBg}>
+                      {total > 0 && (
+                        <View style={[styles.stepsChartBar, { width: `${Math.max(barWidth, 5)}%` }]}>
+                          <Text style={styles.stepsChartBarText}>{total}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.stepsChartBest}>
+                      {month.highest > 0 ? `${(month.highest / 1000).toFixed(0)}k` : '—'}
+                    </Text>
+                  </View>
+                );
+              })}
+              <View style={styles.stepsChartLegend}>
+                <Text style={styles.stepsChartLegendText}>Total high step days per month · Best day (right)</Text>
+              </View>
+            </View>
+          )}
         </View>
       ) : (
         <Text style={styles.emptyText}>No step data yet</Text>
       )}
     </View>
-  );
+    );
+  };
 
   const renderWeightSection = () => (
     <View>
@@ -977,6 +1010,60 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  stepsChartTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  stepsChartRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  stepsChartLabel: {
+    width: 32,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+  },
+  stepsChartBarBg: {
+    flex: 1,
+    height: 24,
+    backgroundColor: colors.background,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginHorizontal: spacing.sm,
+  },
+  stepsChartBar: {
+    height: '100%',
+    backgroundColor: colors.secondary,
+    borderRadius: 6,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  stepsChartBarText: {
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    color: '#fff',
+  },
+  stepsChartBest: {
+    width: 30,
+    fontSize: typography.sizes.xs,
+    color: colors.textLight,
+    textAlign: 'right',
+    fontWeight: typography.weights.medium,
+  },
+  stepsChartLegend: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  stepsChartLegendText: {
+    fontSize: 10,
+    color: colors.textLight,
   },
   monthlyStepsHighest: {
     marginTop: spacing.md,
