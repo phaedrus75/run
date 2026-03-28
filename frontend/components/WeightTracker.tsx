@@ -139,116 +139,52 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
         </View>
       </View>
 
-      {/* Mini Line Chart - Last 7 entries */}
-      {showChart && chartData.length > 1 && (
+      {/* Monthly Column Chart */}
+      {showChart && chartData.length > 0 && (
         <View style={styles.miniChart}>
-          <Text style={styles.chartTitle}>Weight Trend</Text>
+          <Text style={styles.chartTitle}>Monthly Average</Text>
           {(() => {
-            const recentData = chartData.slice(-7);
-            // Fixed scale from 180 to 210 lbs
-            const minWeight = 180;
-            const maxWeight = 210;
-            const range = maxWeight - minWeight;
-            const chartHeight = 60;
-            
+            const monthMap: Record<string, { total: number; count: number }> = {};
+            chartData.forEach(entry => {
+              const d = new Date(entry.date);
+              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+              if (!monthMap[key]) monthMap[key] = { total: 0, count: 0 };
+              monthMap[key].total += entry.weight;
+              monthMap[key].count += 1;
+            });
+
+            const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const months = Object.keys(monthMap).sort().map(key => {
+              const avg = monthMap[key].total / monthMap[key].count;
+              const m = parseInt(key.split('-')[1], 10);
+              return { key, label: MONTH_LABELS[m - 1], avg: Math.round(avg) };
+            });
+
+            if (months.length === 0) return null;
+
+            const allAvgs = months.map(m => m.avg);
+            const minW = Math.min(...allAvgs) - 5;
+            const maxW = Math.max(...allAvgs) + 5;
+            const range = maxW - minW || 1;
+            const chartHeight = 100;
+
             return (
-              <View style={styles.lineChartContainer}>
-                {/* Y-axis labels */}
-                <View style={styles.yAxisLabels}>
-                  <Text style={styles.yAxisLabel}>{maxWeight}</Text>
-                  <Text style={styles.yAxisLabel}>{(minWeight + maxWeight) / 2}</Text>
-                  <Text style={styles.yAxisLabel}>{minWeight}</Text>
-                </View>
-                
-                {/* Chart area */}
-                <View style={styles.lineChartArea}>
-                  {/* Grid lines */}
-                  <View style={[styles.gridLine, { top: 0 }]} />
-                  <View style={[styles.gridLine, { top: 30 }]} />
-                  <View style={[styles.gridLine, { top: 60 }]} />
-                  
-                  {/* Line connecting dots */}
-                  <View style={styles.lineContainer}>
-                    {recentData.map((entry, index) => {
-                      const y = chartHeight - ((entry.weight - minWeight) / range) * chartHeight;
-                      const x = recentData.length > 1 
-                        ? 5 + (index / (recentData.length - 1)) * 90
-                        : 50;
-                      
-                      // Draw line segment to next point
-                      if (index < recentData.length - 1) {
-                        const nextEntry = recentData[index + 1];
-                        const nextY = chartHeight - ((nextEntry.weight - minWeight) / range) * chartHeight;
-                        const nextX = 5 + ((index + 1) / (recentData.length - 1)) * 90;
-                        const lineLength = Math.sqrt(Math.pow((nextX - x) * 2.5, 2) + Math.pow(nextY - y, 2));
-                        const angle = Math.atan2(nextY - y, (nextX - x) * 2.5) * (180 / Math.PI);
-                        
-                        return (
-                          <View
-                            key={`line-${index}`}
-                            style={[
-                              styles.lineSegment,
-                              {
-                                left: `${x}%`,
-                                top: y,
-                                width: lineLength,
-                                transform: [{ rotate: `${angle}deg` }],
-                              }
-                            ]}
-                          />
-                        );
-                      }
-                      return null;
-                    })}
-                  </View>
-                  
-                  {/* Dots with labels */}
-                  {recentData.map((entry, index) => {
-                    const y = chartHeight - ((entry.weight - minWeight) / range) * chartHeight;
-                    // Add padding to prevent first point from bleeding into Y-axis
-                    const xPercent = recentData.length > 1 
-                      ? 5 + (index / (recentData.length - 1)) * 90  // 5% to 95% range
-                      : 50;
-                    
+              <View>
+                <View style={styles.colChartContainer}>
+                  {months.map((month) => {
+                    const barH = Math.max(8, ((month.avg - minW) / range) * chartHeight);
                     return (
-                      <View
-                        key={`dot-${index}`}
-                        style={[
-                          styles.chartDotContainer,
-                          {
-                            left: `${xPercent}%`,
-                            top: y - 5,
-                          }
-                        ]}
-                      >
-                        {/* Weight label above dot */}
-                        <Text style={styles.dotLabel}>
-                          {entry.weight.toFixed(0)}
-                        </Text>
-                        {/* Dot */}
-                        <View
-                          style={[
-                            styles.chartDot,
-                            {
-                              backgroundColor: colors.primary,
-                              width: 6,
-                              height: 6,
-                            }
-                          ]}
-                        />
+                      <View key={month.key} style={styles.colChartCol}>
+                        <Text style={styles.colChartValue}>{month.avg}</Text>
+                        <View style={styles.colChartBarWrap}>
+                          <View style={[styles.colChartBar, { height: barH }]} />
+                        </View>
+                        <Text style={styles.colChartLabel}>{month.label}</Text>
                       </View>
                     );
                   })}
                 </View>
-                
-                {/* X-axis labels */}
-                <View style={styles.xAxisLabels}>
-                  {recentData.map((entry, index) => (
-                    <Text key={index} style={styles.xAxisLabel}>
-                      {entry.label.split(' ')[1]}
-                    </Text>
-                  ))}
-                </View>
+                <Text style={styles.colChartUnit}>avg lbs per month</Text>
               </View>
             );
           })()}
@@ -415,81 +351,51 @@ const styles = StyleSheet.create({
   miniChart: {
     marginTop: spacing.md,
     paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.background,
   },
   chartTitle: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
-  lineChartContainer: {
+  colChartContainer: {
     flexDirection: 'row',
-  },
-  yAxisLabels: {
-    width: 30,
-    justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingRight: spacing.xs,
-    height: 60,
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
-  yAxisLabel: {
-    fontSize: 9,
-    color: colors.textLight,
-  },
-  lineChartArea: {
-    flex: 1,
-    height: 60,
-    position: 'relative',
-  },
-  gridLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: colors.background,
-  },
-  lineContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  lineSegment: {
-    position: 'absolute',
-    height: 2,
-    backgroundColor: colors.primary,
-    transformOrigin: 'left center',
-  },
-  chartDotContainer: {
-    position: 'absolute',
+  colChartCol: {
     alignItems: 'center',
-    marginLeft: -15,
-    width: 30,
+    flex: 1,
   },
-  dotLabel: {
-    fontSize: 9,
-    color: colors.textSecondary,
+  colChartValue: {
+    fontSize: 10,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  colChartBarWrap: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  colChartBar: {
+    width: '70%',
+    backgroundColor: colors.secondary,
+    borderRadius: 4,
+    minHeight: 8,
+  },
+  colChartLabel: {
+    fontSize: 10,
+    color: colors.textLight,
+    marginTop: 4,
     fontWeight: typography.weights.medium,
-    marginBottom: 2,
   },
-  chartDot: {
-    borderRadius: 6,
-  },
-  xAxisLabels: {
-    position: 'absolute',
-    bottom: -16,
-    left: '5%',
-    right: '5%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  xAxisLabel: {
-    fontSize: 9,
+  colChartUnit: {
+    fontSize: 10,
     color: colors.textLight,
     textAlign: 'center',
+    marginTop: spacing.sm,
   },
   modalOverlay: {
     flex: 1,
