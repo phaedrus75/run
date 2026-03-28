@@ -543,7 +543,7 @@ export function StatsScreen() {
 
   const renderStepsAllTime = () => {
     const history = stepsSummary?.monthly_history || [];
-    const maxDays = Math.max(1, ...history.map(m => m.days_15k + m.days_20k + m.days_25k));
+    const maxDays = Math.max(1, ...history.map(m => m.days_15k));
 
     return (
     <View>
@@ -580,15 +580,14 @@ export function StatsScreen() {
             <View style={[styles.stepDaysCard, shadows.small, { marginTop: spacing.md }]}>
               <Text style={styles.stepsChartTitle}>Monthly Breakdown</Text>
               {history.map((month) => {
-                const total = month.days_15k + month.days_20k + month.days_25k;
-                const barWidth = maxDays > 0 ? (total / maxDays) * 100 : 0;
+                const barWidth = maxDays > 0 ? (month.days_15k / maxDays) * 100 : 0;
                 return (
                   <View key={month.month} style={styles.stepsChartRow}>
                     <Text style={styles.stepsChartLabel}>{month.month.slice(0, 3)}</Text>
                     <View style={styles.stepsChartBarBg}>
-                      {total > 0 && (
+                      {month.days_15k > 0 && (
                         <View style={[styles.stepsChartBar, { width: `${Math.max(barWidth, 5)}%` }]}>
-                          <Text style={styles.stepsChartBarText}>{total}</Text>
+                          <Text style={styles.stepsChartBarText}>{month.days_15k}</Text>
                         </View>
                       )}
                     </View>
@@ -599,7 +598,7 @@ export function StatsScreen() {
                 );
               })}
               <View style={styles.stepsChartLegend}>
-                <Text style={styles.stepsChartLegendText}>Total high step days per month · Best day (right)</Text>
+                <Text style={styles.stepsChartLegendText}>15K+ step days per month · Best day (right)</Text>
               </View>
             </View>
           )}
