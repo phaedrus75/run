@@ -715,7 +715,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     if joined_at and joined_at.year == now.year and joined_at > min_date:
         days_in_year = 366 if now.year % 4 == 0 else 365
         days_remaining_from_join = (datetime(now.year + 1, 1, 1) - joined_at).days
-        yearly_target = round(full_yearly * (days_remaining_from_join / days_in_year), 1)
+        yearly_target = round(full_yearly * (days_remaining_from_join / days_in_year))
     else:
         yearly_target = full_yearly
 
@@ -723,7 +723,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     if joined_at and joined_at.year == now.year and joined_at.month == now.month:
         days_in_month = monthrange(now.year, now.month)[1]
         days_remaining_from_join = days_in_month - joined_at.day + 1
-        monthly_target = round(full_monthly * (days_remaining_from_join / days_in_month), 1)
+        monthly_target = round(full_monthly * (days_remaining_from_join / days_in_month))
     else:
         monthly_target = full_monthly
 
@@ -766,7 +766,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
         if joined_at and joined_at.year == now.year and month == joined_at.month:
             days_in_m = monthrange(now.year, month)[1]
             days_active = days_in_m - joined_at.day + 1
-            m_target = round(full_monthly * (days_active / days_in_m), 1)
+            m_target = round(full_monthly * (days_active / days_in_m))
         else:
             m_target = full_monthly
 
