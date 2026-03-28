@@ -129,6 +129,11 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
 
+def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+    """Get a user by ID"""
+    return db.query(User).filter(User.id == user_id).first()
+
+
 def create_user(db: Session, user_data: UserCreate) -> User:
     """Create a new user"""
     hashed_password = get_password_hash(user_data.password)
@@ -172,11 +177,14 @@ async def get_current_user(
     if not payload:
         return None
     
-    email: str = payload.get("sub")
-    if not email:
+    sub: str = payload.get("sub")
+    if not sub:
         return None
     
-    user = get_user_by_email(db, email)
+    if sub.isdigit():
+        user = get_user_by_id(db, int(sub))
+    else:
+        user = get_user_by_email(db, sub)
     return user
 
 

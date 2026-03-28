@@ -31,12 +31,19 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.responses import JSONResponse
 
+def _get_real_client_ip(request: Request) -> str:
+    """Extract real client IP behind Railway's reverse proxy."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return get_remote_address(request)
+
 # 📦 Import our modules
 from database import engine, get_db, Base
 from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
-    create_user, authenticate_user, get_user_by_email,
+    create_user, authenticate_user, get_user_by_email, get_user_by_id,
     create_access_token, get_current_user, require_auth
 )
 from schemas import (
@@ -47,16 +54,21 @@ from schemas import (
 )
 import crud
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=_get_real_client_ip)
 
 # ==========================================
 # 🚀 CREATE THE APP
 # ==========================================
 
+_is_production = os.getenv("RAILWAY_ENVIRONMENT") == "production"
+
 app = FastAPI(
     title="🏃 ZenRun API",
     description="Track your runs, crush your goals!",
     version="1.0.0",
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 app.state.limiter = limiter
@@ -67,6 +79,16 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
         status_code=429,
         content={"detail": "Too many requests. Please try again later."},
     )
+
+if _is_production:
+    from fastapi.exceptions import RequestValidationError
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Invalid request data"},
+        )
 
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
@@ -80,6 +102,35 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+import re
+
+def _validate_password(password: str):
+    """Enforce password complexity: min 8 chars, at least one uppercase, one lowercase, one digit."""
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not re.search(r'[A-Z]', password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter")
+    if not re.search(r'[a-z]', password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter")
+    if not re.search(r'[0-9]', password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number")
+
+def _sanitize_text(value: str, max_length: int = 500) -> str:
+    """Strip HTML tags and enforce length limit on free-text input."""
+    cleaned = re.sub(r'<[^>]+>', '', value)
+    return cleaned[:max_length]
+
+
+MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
+
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    return await call_next(request)
+
 
 # 🏗️ Create database tables
 # This runs when the app starts - creates tables if they don't exist
@@ -130,6 +181,9 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires TIMESTAMP
                 """))
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_attempts INTEGER DEFAULT 0
+                """))
                 conn.commit()
                 
                 migration_email = os.getenv("MIGRATION_USER_EMAIL")
@@ -142,6 +196,10 @@ def run_migrations():
                         conn.execute(text("UPDATE weights SET user_id = :uid WHERE user_id IS NULL"), {"uid": main_user_id})
                         conn.execute(text("UPDATE step_entries SET user_id = :uid WHERE user_id IS NULL"), {"uid": main_user_id})
                         conn.commit()
+                
+                # Clean up pentest test accounts
+                conn.execute(text("DELETE FROM users WHERE email LIKE '%@test.com'"))
+                conn.commit()
                 
                 print("Migration completed: columns added")
             else:
@@ -184,19 +242,9 @@ run_migrations()
 
 @app.get("/")
 def read_root():
-    """
-    👋 Welcome endpoint
-    
-    Just a friendly greeting to confirm the API is running!
-    
-    🎓 LEARNING:
-    - @app.get("/") is a "decorator" - it registers this function as a route
-    - The "/" means this handles requests to the root URL
-    - Whatever you return gets sent back as JSON automatically!
-    """
+    """Health check endpoint."""
     return {
         "message": "🏃 Welcome to ZenRun API!",
-        "docs": "Visit /docs for interactive documentation",
         "health": "OK"
     }
 
@@ -220,12 +268,10 @@ def signup(request: Request, user_data: UserCreate, db: Session = Depends(get_db
             detail="Unable to create account with this email"
         )
     
-    # Validate password
-    if len(user_data.password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 6 characters"
-        )
+    _validate_password(user_data.password)
+    
+    if user_data.name:
+        user_data.name = _sanitize_text(user_data.name, max_length=100)
     
     user = create_user(db, user_data)
     
@@ -238,13 +284,13 @@ def signup(request: Request, user_data: UserCreate, db: Session = Depends(get_db
         
         code = str(random.randint(100000, 999999))
         user.verification_code_hash = get_password_hash(code)
-        user.verification_code_expires = datetime.utcnow() + timedelta(minutes=30)
+        user.verification_code_expires = datetime.utcnow() + timedelta(minutes=10)
         db.commit()
         send_verification_email(user.email, code)
     except Exception:
         pass
 
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(data={"sub": str(user.id)})
     
     return {
         "access_token": access_token,
@@ -270,7 +316,7 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        access_token = create_access_token(data={"sub": user.email})
+        access_token = create_access_token(data={"sub": str(user.id)})
         
         return {
             "access_token": access_token,
@@ -368,8 +414,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, db: Session = D
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    if len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    _validate_password(new_password)
     
     from auth import get_password_hash
     user.hashed_password = get_password_hash(new_password)
@@ -404,7 +449,8 @@ def send_verification(request: Request, current_user: User = Depends(require_aut
 
     code = str(random.randint(100000, 999999))
     current_user.verification_code_hash = get_password_hash(code)
-    current_user.verification_code_expires = datetime.utcnow() + timedelta(minutes=30)
+    current_user.verification_code_expires = datetime.utcnow() + timedelta(minutes=10)
+    current_user.verification_attempts = 0
     db.commit()
 
     send_verification_email(current_user.email, code)
@@ -433,12 +479,23 @@ def verify_email(request: Request, body: VerifyEmailRequest, current_user: User 
     if datetime.utcnow() > code_expires:
         raise HTTPException(status_code=400, detail="Verification code has expired. Request a new one.")
 
+    attempts = getattr(current_user, 'verification_attempts', 0) or 0
+    if attempts >= 5:
+        current_user.verification_code_hash = None
+        current_user.verification_code_expires = None
+        current_user.verification_attempts = 0
+        db.commit()
+        raise HTTPException(status_code=400, detail="Too many attempts. Request a new verification code.")
+
     if not verify_password(body.code, code_hash):
+        current_user.verification_attempts = attempts + 1
+        db.commit()
         raise HTTPException(status_code=400, detail="Invalid verification code")
 
     current_user.email_verified = True
     current_user.verification_code_hash = None
     current_user.verification_code_expires = None
+    current_user.verification_attempts = 0
     db.commit()
 
     return {"message": "Email verified successfully", "verified": True}
@@ -666,6 +723,9 @@ def create_run(
             detail=f"Invalid run type. Must be one of: {list(RUN_DISTANCES.keys())}"
         )
     
+    if run.notes:
+        run.notes = _sanitize_text(run.notes, max_length=500)
+    
     db_run = crud.create_run(db=db, run=run, user_id=current_user.id)
     
     # 🎉 Check for all celebrations!
@@ -713,6 +773,9 @@ def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)
             status_code=400,
             detail=f"Invalid run type. Must be one of: {list(RUN_DISTANCES.keys())}"
         )
+    
+    if run_update.notes:
+        run_update.notes = _sanitize_text(run_update.notes, max_length=500)
     
     updated_run = crud.update_run(
         db,
@@ -904,11 +967,15 @@ def create_weight(
         except:
             recorded_at = None
     
+    notes = weight_data.get("notes")
+    if notes:
+        notes = _sanitize_text(notes, max_length=200)
+    
     entry = create_weight_entry(
         db,
         weight_lbs=weight_lbs,
         recorded_at=recorded_at,
-        notes=weight_data.get("notes"),
+        notes=notes,
         user_id=current_user.id
     )
     
@@ -997,10 +1064,14 @@ def create_step_entry(
     else:
         recorded_date = datetime.now()
     
+    step_notes = step_data.get("notes")
+    if step_notes:
+        step_notes = _sanitize_text(step_notes, max_length=200)
+    
     entry = StepEntry(
         step_count=step_count,
         recorded_date=recorded_date,
-        notes=step_data.get("notes"),
+        notes=step_notes,
         user_id=current_user.id
     )
     db.add(entry)
@@ -1343,6 +1414,7 @@ def create_circle(
     name = circle_data.get("name")
     if not name or len(name) < 2:
         raise HTTPException(status_code=400, detail="Circle name must be at least 2 characters")
+    name = _sanitize_text(name, max_length=50)
     
     # Generate unique invite code
     invite_code = secrets.token_urlsafe(6).upper()[:8]
@@ -1849,7 +1921,7 @@ DAILY_QUOTES = [
 ]
 
 @app.get("/daily-wisdom")
-def get_daily_wisdom():
+def get_daily_wisdom(current_user: User = Depends(require_auth)):
     """Return a deterministic daily quote based on day of year."""
     from datetime import datetime
     day_of_year = datetime.now().timetuple().tm_yday
@@ -2119,7 +2191,7 @@ def save_reflection(
         WeeklyReflection.week_start == week_start,
     ).first()
 
-    reflection_text = (body.get("reflection") or "")[:200]
+    reflection_text = _sanitize_text(body.get("reflection") or "", max_length=200)
     mood = body.get("mood") or ""
 
     if existing:
@@ -2428,6 +2500,8 @@ def upload_run_photo(
     base64_data = photo_data.get("photo_data")
     distance_marker = photo_data.get("distance_marker_km")
     caption = photo_data.get("caption")
+    if caption:
+        caption = _sanitize_text(caption, max_length=200)
     
     if not base64_data:
         raise HTTPException(status_code=400, detail="photo_data is required")

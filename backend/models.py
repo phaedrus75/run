@@ -200,6 +200,7 @@ class User(Base):
     email_verified = Column(Boolean, default=False, server_default='false')
     verification_code_hash = Column(String, nullable=True)
     verification_code_expires = Column(DateTime, nullable=True)
+    verification_attempts = Column(Integer, default=0, server_default='0')
     
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
