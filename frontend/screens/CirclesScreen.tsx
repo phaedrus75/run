@@ -26,7 +26,7 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { getToken } from '../services/auth';
 import { useAuth } from '../contexts/AuthContext';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../services/config';
 
 interface Circle {
   id: number;

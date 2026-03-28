@@ -12,12 +12,7 @@
 
 import { getToken } from './auth';
 
-// 🔧 API Configuration
-// Production URL (Railway deployment)
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
-
-// For local development, uncomment this:
-// const API_BASE_URL = 'http://192.168.86.132:8000';
+import { API_BASE_URL } from './config';
 
 /**
  * 🔧 Generic fetch wrapper with error handling

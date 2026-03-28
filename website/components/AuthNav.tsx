@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../lib/config';
 
 interface UserInfo {
   handle: string | null;

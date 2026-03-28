@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../../lib/config';
 
 type Mode = 'login' | 'forgot' | 'reset';
 
@@ -50,8 +50,9 @@ function LoginForm() {
       }
 
       const data = await res.json();
-      document.cookie = `zenrun_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-      router.push(redirect);
+      document.cookie = `zenrun_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure`;
+      const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/me';
+      router.push(safeRedirect);
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -66,10 +67,11 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/auth/forgot-password?email=${encodeURIComponent(email.trim().toLowerCase())}`,
-        { method: 'POST' }
-      );
+      const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.detail || 'Something went wrong');
@@ -95,10 +97,15 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/auth/reset-password?email=${encodeURIComponent(email.trim().toLowerCase())}&code=${resetCode}&new_password=${encodeURIComponent(newPassword)}`,
-        { method: 'POST' }
-      );
+      const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code: resetCode,
+          new_password: newPassword,
+        }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.detail || 'Invalid or expired reset code');

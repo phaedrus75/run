@@ -145,7 +145,7 @@ class Weight(Base):
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     
-    # 👤 User who logged this run
+    # 👤 User who logged this weight
     user_id = Column(Integer, nullable=True, index=True)
     
     # ⚖️ Weight in pounds
@@ -156,9 +156,6 @@ class Weight(Base):
     
     # 📝 Optional notes (e.g., "morning weight", "after workout")
     notes = Column(String, nullable=True)
-    
-    # 👤 User who logged this weight (optional for backward compatibility)
-    user_id = Column(Integer, nullable=True)
 
 
 class User(Base):
@@ -199,6 +196,11 @@ class User(Base):
     beta_steps_enabled = Column(Boolean, default=False, server_default='false')
     beta_weight_enabled = Column(Boolean, default=False, server_default='false')
     
+    # 📧 Email verification
+    email_verified = Column(Boolean, default=False, server_default='false')
+    verification_code_hash = Column(String, nullable=True)
+    verification_code_expires = Column(DateTime, nullable=True)
+    
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
 
@@ -212,9 +214,6 @@ class StepEntry(Base):
     __tablename__ = "step_entries"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    
-    # 👤 User who logged this run
-    user_id = Column(Integer, nullable=True, index=True)
     
     # 👤 User who logged this
     user_id = Column(Integer, nullable=True, index=True)

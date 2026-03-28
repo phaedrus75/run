@@ -23,7 +23,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
 import { levelApi } from '../services/api';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../services/config';
 
 const LEVEL_META: Record<string, { name: string; emoji: string; color: string; tagline: string }> = {
   breath: { name: 'Breath', emoji: '🌱', color: '#4ECDC4', tagline: 'Every journey begins with a single breath' },
@@ -118,7 +118,6 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
         setMonthlyGoal(goals.monthly_km_goal?.toString() || '20');
       }
     } catch (error) {
-      console.log('Failed to fetch goals:', error);
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +144,6 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
         ]);
       }
     } catch (error) {
-      console.log('Failed to fetch handle:', error);
     }
   }
 
@@ -201,7 +199,6 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
         monthly_km_goal: parseFloat(monthlyGoal) || 20,
       };
       
-      console.log('Saving goals:', payload);
       
       const response = await fetch(`${API_BASE_URL}/user/goals`, {
         method: 'POST',

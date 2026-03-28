@@ -21,7 +21,7 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { getToken } from '../services/auth';
 import { CircleFeedItem, type FeedItem } from '../components/CircleFeedItem';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../services/config';
 const CHECKIN_EMOJIS = ['👋', '🏃', '🌱', '😊', '🍃', '✌️', '🌿', '☀️'];
 const SCREEN_WIDTH = Dimensions.get('window').width;
 

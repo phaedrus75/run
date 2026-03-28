@@ -28,7 +28,7 @@ import {
 import { WeightTracker } from '../components/WeightTracker';
 import { StepsTracker } from '../components/StepsTracker';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../services/config';
 
 const LEVEL_META: Record<string, { name: string; emoji: string; color: string; tagline: string }> = {
   breath: { name: 'Breath', emoji: '🌱', color: '#4ECDC4', tagline: 'Every journey begins with a single breath' },

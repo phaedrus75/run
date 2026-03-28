@@ -6,6 +6,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { API_BASE_URL } from '../services/config';
 import {
   User,
   login as apiLogin,
@@ -43,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const token = await getToken();
       if (token) {
-        const response = await fetch('https://run-production-83ca.up.railway.app/auth/me', {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (response.ok) {
@@ -96,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = await getToken();
       if (token) {
         // Fetch fresh user data from API
-        const response = await fetch('https://run-production-83ca.up.railway.app/auth/me', {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (response.ok) {

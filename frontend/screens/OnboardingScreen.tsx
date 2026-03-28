@@ -22,7 +22,7 @@ import { getToken } from '../services/auth';
 import { levelApi } from '../services/api';
 
 const { width } = Dimensions.get('window');
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../services/config';
 
 const LEVEL_GOAL_DEFAULTS: Record<string, { yearly: string; monthly: string }> = {
   breath: { yearly: '250', monthly: '20' },
@@ -122,7 +122,7 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
 
 // --- Phases ---
 
-type Phase = 'slides' | 'level' | 'goals' | 'beta' | 'handle';
+type Phase = 'slides' | 'level' | 'goals' | 'beta' | 'handle' | 'verify';
 
 interface OnboardingScreenProps {
   navigation: any;
@@ -150,6 +150,13 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   const [handleError, setHandleError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Verify
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyError, setVerifyError] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
@@ -172,7 +179,7 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
 
   const handleBetaContinue = () => setPhase('handle');
 
-  const handleComplete = async () => {
+  const handleHandleContinue = async () => {
     const cleanHandle = handle.trim().toLowerCase();
     if (!cleanHandle || cleanHandle.length < 3) {
       setHandleError('Handle must be at least 3 characters');
@@ -222,17 +229,70 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
         body: JSON.stringify({ steps_enabled: betaSteps, weight_enabled: betaWeight }),
       });
 
-      // 5. Complete onboarding
+      setPhase('verify');
+    } catch (error) {
+      setHandleError('Something went wrong. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setResending(true);
+    setResendSuccess(false);
+    setVerifyError('');
+    try {
+      const token = await getToken();
+      await fetch(`${API_BASE_URL}/auth/send-verification`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setResendSuccess(true);
+      setTimeout(() => setResendSuccess(false), 3000);
+    } catch {
+      setVerifyError('Failed to resend code');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleVerifyComplete = async () => {
+    const code = verifyCode.trim();
+    if (code.length !== 6) {
+      setVerifyError('Enter the 6-digit code from your email');
+      return;
+    }
+
+    setVerifying(true);
+    setVerifyError('');
+
+    try {
+      const token = await getToken();
+
+      const res = await fetch(`${API_BASE_URL}/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ code }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setVerifyError(err.detail || 'Invalid code. Please try again.');
+        setVerifying(false);
+        return;
+      }
+
+      // Complete onboarding
       await fetch(`${API_BASE_URL}/user/complete-onboarding`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
 
       await refreshUser();
-    } catch (error) {
-      console.error('Failed to complete onboarding:', error);
+    } catch {
+      setVerifyError('Something went wrong. Please try again.');
     } finally {
-      setSaving(false);
+      setVerifying(false);
     }
   };
 
@@ -552,7 +612,70 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   }
 
   // ====================================
-  //  PHASE: HANDLE + COMPLETE
+  //  PHASE: VERIFY EMAIL
+  // ====================================
+
+  if (phase === 'verify') {
+    return (
+      <SafeAreaView style={s.container}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={[s.slideIconWrap, { backgroundColor: colors.secondary + '15', alignSelf: 'flex-start' }]}>
+              <Ionicons name="mail-outline" size={28} color={colors.secondary} />
+            </View>
+            <Text style={s.phaseSubtitle}>One last step</Text>
+            <Text style={s.phaseTitle}>Verify your email</Text>
+            <Text style={s.phaseDesc}>
+              We sent a 6-digit code to your email. Enter it below to finish setting up your account.
+            </Text>
+
+            <View style={s.handleBox}>
+              <TextInput
+                style={s.verifyInput}
+                value={verifyCode}
+                onChangeText={text => {
+                  setVerifyCode(text.replace(/\D/g, '').slice(0, 6));
+                  setVerifyError('');
+                }}
+                placeholder="000000"
+                placeholderTextColor={colors.textLight}
+                keyboardType="number-pad"
+                maxLength={6}
+                textAlign="center"
+              />
+              {verifyError ? (
+                <Text style={s.handleError}>{verifyError}</Text>
+              ) : null}
+              {resendSuccess ? (
+                <Text style={s.verifyResent}>Code sent!</Text>
+              ) : null}
+            </View>
+
+            <TouchableOpacity
+              style={s.resendBtn}
+              onPress={handleResendCode}
+              disabled={resending}
+            >
+              <Text style={s.resendBtnText}>
+                {resending ? 'Sending...' : "Didn't get the code? Resend"}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          <TouchableOpacity
+            style={[s.primaryBtn, verifying && s.btnDisabled]}
+            onPress={handleVerifyComplete}
+            disabled={verifying}
+          >
+            <Text style={s.primaryBtnText}>{verifying ? 'Verifying...' : "Let's run"}</Text>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // ====================================
+  //  PHASE: HANDLE
   // ====================================
 
   return (
@@ -592,10 +715,10 @@ export function OnboardingScreen({ navigation }: OnboardingScreenProps) {
 
         <TouchableOpacity
           style={[s.primaryBtn, saving && s.btnDisabled]}
-          onPress={handleComplete}
+          onPress={handleHandleContinue}
           disabled={saving}
         >
-          <Text style={s.primaryBtnText}>{saving ? 'Setting up...' : "Let's run"}</Text>
+          <Text style={s.primaryBtnText}>{saving ? 'Setting up...' : 'Continue'}</Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -901,4 +1024,28 @@ const s = StyleSheet.create({
   },
   handleError: { fontSize: typography.sizes.sm, color: colors.error, marginTop: spacing.xs },
   handleHint: { fontSize: typography.sizes.xs, color: colors.textLight, marginTop: spacing.xs },
+
+  // Verify
+  verifyInput: {
+    fontSize: 32,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    letterSpacing: 8,
+    padding: spacing.md,
+  },
+  verifyResent: {
+    fontSize: typography.sizes.sm,
+    color: colors.secondary,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  resendBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  resendBtnText: {
+    fontSize: typography.sizes.md,
+    color: colors.primary,
+    fontWeight: typography.weights.medium,
+  },
 });

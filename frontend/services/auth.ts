@@ -6,9 +6,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// API URL - same as main api.ts
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from './config';
 
 // Storage keys
 const TOKEN_KEY = '@zenrun_token';
@@ -23,6 +21,7 @@ export interface User {
   onboarding_complete: boolean;
   beta_steps_enabled: boolean;
   beta_weight_enabled: boolean;
+  email_verified: boolean;
   created_at: string;
 }
 
@@ -125,11 +124,12 @@ export async function logout(): Promise<void> {
 }
 
 export async function forgotPassword(email: string): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE_URL}/auth/forgot-password?email=${encodeURIComponent(email)}`, {
+  const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ email }),
   });
 
   if (!response.ok) {
@@ -141,15 +141,13 @@ export async function forgotPassword(email: string): Promise<{ message: string }
 }
 
 export async function resetPassword(email: string, code: string, newPassword: string): Promise<{ message: string }> {
-  const response = await fetch(
-    `${API_BASE_URL}/auth/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}&new_password=${encodeURIComponent(newPassword)}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+  const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, code, new_password: newPassword }),
+  });
 
   if (!response.ok) {
     const error = await response.json();

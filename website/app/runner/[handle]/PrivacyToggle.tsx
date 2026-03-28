@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../../../lib/config';
 
 const PRIVACY_OPTIONS = [
   { value: 'private', label: 'Private', emoji: '🔒', desc: 'Only you can see your profile' },

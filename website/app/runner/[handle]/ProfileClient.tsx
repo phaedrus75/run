@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import PrivacyToggle from './PrivacyToggle';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../../../lib/config';
 
 const LEVEL_META: Record<string, { name: string; emoji: string; color: string }> = {
   breath: { name: 'Breath', emoji: '🌱', color: '#4ECDC4' },

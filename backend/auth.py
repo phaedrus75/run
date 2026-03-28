@@ -18,7 +18,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from database import get_db
 from models import User
@@ -27,8 +27,9 @@ from models import User
 # 🔧 CONFIGURATION
 # ==========================================
 
-# Secret key for JWT encoding (use environment variable in production!)
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production-abc123")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is required. Set it before starting the server.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -45,14 +46,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 class UserCreate(BaseModel):
     """Schema for user registration"""
-    email: str
+    email: EmailStr
     password: str
     name: Optional[str] = None
 
 
 class UserLogin(BaseModel):
     """Schema for user login"""
-    email: str
+    email: EmailStr
     password: str
 
 
@@ -66,6 +67,7 @@ class UserResponse(BaseModel):
     runner_level: Optional[str] = "breath"
     beta_steps_enabled: bool = False
     beta_weight_enabled: bool = False
+    email_verified: bool = False
     created_at: datetime
 
     class Config:

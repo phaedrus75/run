@@ -17,12 +17,19 @@ Then visit: http://localhost:8000/docs
 You'll see interactive API documentation!
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status
+import os
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from typing import List, Optional
+from pydantic import BaseModel
 import json
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.responses import JSONResponse
 
 # 📦 Import our modules
 from database import engine, get_db, Base
@@ -40,6 +47,8 @@ from schemas import (
 )
 import crud
 
+limiter = Limiter(key_func=get_remote_address)
+
 # ==========================================
 # 🚀 CREATE THE APP
 # ==========================================
@@ -50,15 +59,26 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# 🌐 CORS Middleware
-# This allows your React Native app to talk to this API
-# Without this, the browser/app blocks the connection for security
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please try again later."},
+    )
+
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "https://zenrun.co,https://www.zenrun.co,http://localhost:3000,http://localhost:8081"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your app's domain
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # 🏗️ Create database tables
@@ -101,22 +121,27 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_weight_enabled BOOLEAN DEFAULT false
                 """))
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false
+                """))
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_hash VARCHAR
+                """))
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires TIMESTAMP
+                """))
                 conn.commit()
                 
-                # Assign orphaned data to the first user (aseem.munshi@gmail.com)
-                # This is a one-time migration for existing data
-                result = conn.execute(text("SELECT id FROM users WHERE email = 'aseem.munshi@gmail.com' LIMIT 1"))
-                row = result.fetchone()
-                if row:
-                    main_user_id = row[0]
-                    # Update runs with NULL user_id
-                    conn.execute(text(f"UPDATE runs SET user_id = {main_user_id} WHERE user_id IS NULL"))
-                    # Update weights with NULL user_id
-                    conn.execute(text(f"UPDATE weights SET user_id = {main_user_id} WHERE user_id IS NULL"))
-                    # Update step_entries with NULL user_id
-                    conn.execute(text(f"UPDATE step_entries SET user_id = {main_user_id} WHERE user_id IS NULL"))
-                    conn.commit()
-                    print(f"Migration: Assigned orphaned data to user {main_user_id}")
+                migration_email = os.getenv("MIGRATION_USER_EMAIL")
+                if migration_email:
+                    result = conn.execute(text("SELECT id FROM users WHERE email = :email LIMIT 1"), {"email": migration_email})
+                    row = result.fetchone()
+                    if row:
+                        main_user_id = row[0]
+                        conn.execute(text("UPDATE runs SET user_id = :uid WHERE user_id IS NULL"), {"uid": main_user_id})
+                        conn.execute(text("UPDATE weights SET user_id = :uid WHERE user_id IS NULL"), {"uid": main_user_id})
+                        conn.execute(text("UPDATE step_entries SET user_id = :uid WHERE user_id IS NULL"), {"uid": main_user_id})
+                        conn.commit()
                 
                 print("Migration completed: columns added")
             else:
@@ -176,56 +201,23 @@ def read_root():
     }
 
 
-@app.get("/debug/tables")
-def debug_tables(db: Session = Depends(get_db)):
-    """
-    🔍 Debug endpoint to check database tables
-    """
-    try:
-        # Check what tables exist
-        if 'postgresql' in str(engine.url):
-            result = db.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
-            tables = [row[0] for row in result]
-        else:
-            result = db.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            tables = [row[0] for row in result]
-        
-        # Check user_goals table structure if it exists
-        user_goals_columns = []
-        if 'user_goals' in tables:
-            if 'postgresql' in str(engine.url):
-                result = db.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'user_goals'"))
-                user_goals_columns = [row[0] for row in result]
-            else:
-                result = db.execute(text("PRAGMA table_info(user_goals)"))
-                user_goals_columns = [row[1] for row in result]
-        
-        return {
-            "tables": tables,
-            "user_goals_exists": "user_goals" in tables,
-            "user_goals_columns": user_goals_columns,
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-
 # ==========================================
 # 🔐 AUTHENTICATION ENDPOINTS
 # ==========================================
 
 @app.post("/auth/signup", response_model=Token)
-def signup(user_data: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def signup(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """
     📝 Create a new user account
     
     Returns a JWT token on successful registration.
     """
-    # Check if user already exists
     existing_user = get_user_by_email(db, user_data.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Unable to create account with this email"
         )
     
     # Validate password
@@ -235,17 +227,23 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
             detail="Password must be at least 6 characters"
         )
     
-    # Create user
     user = create_user(db, user_data)
     
-    # Send welcome email (fire-and-forget, don't block signup)
+    # Send verification code (fire-and-forget, don't block signup)
     try:
-        from email_service import send_welcome_email
-        send_welcome_email(user.email, user.name)
-    except Exception as e:
-        print(f"⚠️ Welcome email failed (non-blocking): {e}")
+        import random
+        from datetime import datetime, timedelta
+        from auth import get_password_hash
+        from email_service import send_verification_email
+        
+        code = str(random.randint(100000, 999999))
+        user.verification_code_hash = get_password_hash(code)
+        user.verification_code_expires = datetime.utcnow() + timedelta(minutes=30)
+        db.commit()
+        send_verification_email(user.email, code)
+    except Exception:
+        pass
 
-    # Create access token
     access_token = create_access_token(data={"sub": user.email})
     
     return {
@@ -256,7 +254,8 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/login", response_model=Token)
-def login(credentials: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db)):
     """
     🔑 Login with email and password
     
@@ -280,19 +279,23 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         }
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"Login error: {e}")
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Login failed. Please try again.")
 
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
 
 @app.post("/auth/forgot-password")
-def forgot_password(email: str, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def forgot_password(request: Request, body: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     🔐 Request a password reset code
 
     Generates a 6-digit code that expires in 15 minutes.
     Sends the code via email using Resend.
     """
+    email = body.email
     import random
     from datetime import datetime, timedelta
     from email_service import send_password_reset
@@ -309,10 +312,11 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
         PasswordResetToken.used == False
     ).update({"used": True})
 
+    from auth import get_password_hash
     reset_token = PasswordResetToken(
         user_id=user.id,
         email=email,
-        reset_code=reset_code,
+        reset_code=get_password_hash(reset_code),
         expires_at=expires_at
     )
     db.add(reset_token)
@@ -323,22 +327,36 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
     return {"message": "If an account exists with this email, a reset code has been sent"}
 
 
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
 @app.post("/auth/reset-password")
-def reset_password(email: str, code: str, new_password: str, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def reset_password(request: Request, body: ResetPasswordRequest, db: Session = Depends(get_db)):
     """
     🔐 Reset password using the code from forgot-password
     
     Requires the 6-digit code and new password.
     """
-    import bcrypt
+    email = body.email
+    code = body.code
+    new_password = body.new_password
     from datetime import datetime
+    from auth import verify_password
     
-    token = db.query(PasswordResetToken).filter(
+    candidates = db.query(PasswordResetToken).filter(
         PasswordResetToken.email == email,
-        PasswordResetToken.reset_code == code,
         PasswordResetToken.used == False,
         PasswordResetToken.expires_at > datetime.utcnow()
-    ).first()
+    ).all()
+    
+    token = None
+    for candidate in candidates:
+        if verify_password(code, candidate.reset_code):
+            token = candidate
+            break
     
     if not token:
         raise HTTPException(
@@ -350,13 +368,14 @@ def reset_password(email: str, code: str, new_password: str, db: Session = Depen
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-    user.hashed_password = hashed
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    from auth import get_password_hash
+    user.hashed_password = get_password_hash(new_password)
     
     token.used = True
     db.commit()
-    
-    print(f"✅ Password successfully reset for {email}")
     
     return {"message": "Password reset successfully"}
 
@@ -369,6 +388,60 @@ def get_me(current_user: User = Depends(require_auth)):
     Requires authentication.
     """
     return UserResponse.model_validate(current_user)
+
+
+@app.post("/auth/send-verification")
+@limiter.limit("3/minute")
+def send_verification(request: Request, current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """Send (or resend) an email verification code to the current user."""
+    import random
+    from datetime import datetime, timedelta
+    from auth import get_password_hash
+    from email_service import send_verification_email
+
+    if getattr(current_user, 'email_verified', False):
+        return {"message": "Email already verified"}
+
+    code = str(random.randint(100000, 999999))
+    current_user.verification_code_hash = get_password_hash(code)
+    current_user.verification_code_expires = datetime.utcnow() + timedelta(minutes=30)
+    db.commit()
+
+    send_verification_email(current_user.email, code)
+    return {"message": "Verification code sent"}
+
+
+class VerifyEmailRequest(BaseModel):
+    code: str
+
+@app.post("/auth/verify-email")
+@limiter.limit("5/minute")
+def verify_email(request: Request, body: VerifyEmailRequest, current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """Verify the current user's email with a 6-digit code."""
+    from datetime import datetime
+    from auth import verify_password
+
+    if getattr(current_user, 'email_verified', False):
+        return {"message": "Email already verified", "verified": True}
+
+    code_hash = getattr(current_user, 'verification_code_hash', None)
+    code_expires = getattr(current_user, 'verification_code_expires', None)
+
+    if not code_hash or not code_expires:
+        raise HTTPException(status_code=400, detail="No verification code found. Request a new one.")
+
+    if datetime.utcnow() > code_expires:
+        raise HTTPException(status_code=400, detail="Verification code has expired. Request a new one.")
+
+    if not verify_password(body.code, code_hash):
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    current_user.email_verified = True
+    current_user.verification_code_hash = None
+    current_user.verification_code_expires = None
+    db.commit()
+
+    return {"message": "Email verified successfully", "verified": True}
 
 
 # ==========================================
@@ -582,30 +655,18 @@ def _check_upgrade_eligibility(db: Session, user_id: int, max_distance: str) -> 
 def create_run(
     run: RunCreate, 
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
     """
-    ✨ Create a new run
-    
-    Call this when you complete a run!
-    
-    🎓 LEARNING:
-    - @app.post means this handles POST requests (creating data)
-    - response_model tells FastAPI what shape the response should be
-    - Depends(get_db) is "dependency injection" - it gives us a database connection
-    - FastAPI automatically validates the request body against RunCreate
+    ✨ Create a new run (requires authentication)
     """
-    # Validate run type
     if run.run_type not in RUN_DISTANCES:
         raise HTTPException(
             status_code=400, 
             detail=f"Invalid run type. Must be one of: {list(RUN_DISTANCES.keys())}"
         )
     
-    # Get user_id if logged in
-    user_id = current_user.id if current_user else None
-    
-    db_run = crud.create_run(db=db, run=run, user_id=user_id)
+    db_run = crud.create_run(db=db, run=run, user_id=current_user.id)
     
     # 🎉 Check for all celebrations!
     celebrations = check_all_celebrations(db, db_run, current_user)
@@ -624,46 +685,29 @@ def get_runs(
     run_type: str = None,
     category: str = None,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📖 Get all runs for the current user
-    
-    Optional filters:
-    - skip: For pagination (skip first N records)
-    - limit: Maximum records to return
-    - run_type: Filter by type (3k, 5k, etc.)
-    - category: Filter by category (outdoor, treadmill)
-    """
-    user_id = current_user.id if current_user else None
-    runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type, user_id=user_id, category=category)
+    """📖 Get all runs for the current authenticated user."""
+    runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type, user_id=current_user.id, category=category)
     return [format_run_response(run, db=db) for run in runs]
 
 
 @app.get("/runs/{run_id}", response_model=RunResponse)
-def get_run(run_id: int, db: Session = Depends(get_db)):
-    """
-    🔍 Get a specific run by ID
-    
-    🎓 LEARNING:
-    - {run_id} in the path is a "path parameter"
-    - FastAPI automatically converts it to an int
-    - If the run doesn't exist, we return a 404 error
-    """
+def get_run(run_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """🔍 Get a specific run by ID (must belong to current user)."""
     run = crud.get_run(db, run_id=run_id)
-    if run is None:
+    if run is None or run.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Run not found")
     return format_run_response(run, db=db)
 
 
 @app.put("/runs/{run_id}", response_model=RunResponse)
-def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)):
-    """
-    ✏️ Update an existing run
+def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """✏️ Update an existing run (must belong to current user)."""
+    existing = crud.get_run(db, run_id=run_id)
+    if not existing or existing.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
     
-    Allows editing run type, duration, and notes.
-    """
-    # Validate run type if provided
     if run_update.run_type and run_update.run_type not in RUN_DISTANCES:
         raise HTTPException(
             status_code=400,
@@ -687,8 +731,11 @@ def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)
 
 
 @app.delete("/runs/{run_id}")
-def delete_run(run_id: int, db: Session = Depends(get_db)):
-    """🗑️ Delete a run"""
+def delete_run(run_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """🗑️ Delete a run (must belong to current user)."""
+    existing = crud.get_run(db, run_id=run_id)
+    if not existing or existing.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
     success = crud.delete_run(db, run_id=run_id)
     if not success:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -700,9 +747,8 @@ def delete_run(run_id: int, db: Session = Depends(get_db)):
 # ==========================================
 
 @app.post("/plans", response_model=WeeklyPlanResponse)
-def create_weekly_plan(plan: WeeklyPlanCreate, db: Session = Depends(get_db)):
-    """📅 Create or update a weekly plan"""
-    # Validate all run types
+def create_weekly_plan(plan: WeeklyPlanCreate, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """📅 Create or update a weekly plan (requires auth)."""
     for run_type in plan.planned_runs:
         if run_type not in RUN_DISTANCES:
             raise HTTPException(
@@ -715,8 +761,8 @@ def create_weekly_plan(plan: WeeklyPlanCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/plans/current", response_model=WeeklyPlanResponse)
-def get_current_week_plan(db: Session = Depends(get_db)):
-    """📅 Get this week's plan"""
+def get_current_week_plan(db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """📅 Get this week's plan (requires auth)."""
     week_id = crud.get_current_week_id()
     plan = crud.get_weekly_plan(db, week_id=week_id)
     if plan is None:
@@ -725,8 +771,8 @@ def get_current_week_plan(db: Session = Depends(get_db)):
 
 
 @app.get("/plans/{week_id}", response_model=WeeklyPlanResponse)
-def get_weekly_plan(week_id: str, db: Session = Depends(get_db)):
-    """📅 Get a specific week's plan"""
+def get_weekly_plan(week_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """📅 Get a specific week's plan (requires auth)."""
     plan = crud.get_weekly_plan(db, week_id=week_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -740,47 +786,28 @@ def get_weekly_plan(week_id: str, db: Session = Depends(get_db)):
 @app.get("/stats", response_model=StatsResponse)
 def get_stats(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📊 Get your running statistics
-    
-    Returns totals, weekly stats, monthly stats, and more!
-    """
-    user_id = current_user.id if current_user else None
-    return crud.get_stats_summary(db, user_id=user_id)
+    """📊 Get your running statistics (requires auth)."""
+    return crud.get_stats_summary(db, user_id=current_user.id)
 
 
 @app.get("/motivation", response_model=MotivationalMessage)
 def get_motivation(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    🎉 Get a motivational message
-    
-    Returns encouragement based on your progress!
-    Milestone achievements when you hit certain numbers.
-    """
-    user_id = current_user.id if current_user else None
-    return crud.get_motivational_message(db, user_id=user_id)
+    """🎉 Get a motivational message (requires auth)."""
+    return crud.get_motivational_message(db, user_id=current_user.id)
 
 
 @app.get("/streak", response_model=WeeklyStreakProgress)
 def get_streak_progress(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    🔥 Get weekly streak progress for current user
-    
-    Shows progress toward this week's streak goal:
-    - 1 long run (10k+)
-    - 2 short runs (any distance)
-    """
-    user_id = current_user.id if current_user else None
-    joined_at = current_user.created_at if current_user else None
-    return crud.get_weekly_streak_progress(db, user_id=user_id, joined_at=joined_at)
+    """🔥 Get weekly streak progress (requires auth)."""
+    return crud.get_weekly_streak_progress(db, user_id=current_user.id, joined_at=current_user.created_at)
 
 
 # ==========================================
@@ -791,78 +818,54 @@ def get_streak_progress(
 def get_personal_records(
     category: str = None,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    🏆 Get personal records for each distance for current user
-    
-    Returns fastest time for 3k, 5k, 10k, 15k, 18k, 21k
-    Optional category filter: outdoor, treadmill
-    """
+    """🏆 Get personal records (requires auth)."""
     from achievements import get_personal_records
-    user_id = current_user.id if current_user else None
-    return get_personal_records(db, user_id=user_id, category=category)
+    return get_personal_records(db, user_id=current_user.id, category=category)
 
 
 @app.get("/goals")
 def get_goals(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    🎯 Get progress toward yearly and monthly goals
-    
-    Uses user's personal goals if logged in, otherwise defaults.
-    """
+    """🎯 Get progress toward yearly and monthly goals (requires auth)."""
     from achievements import get_goals_progress
     
-    user_id = None
+    user_id = current_user.id
+    level = getattr(current_user, 'runner_level', 'breath') or 'breath'
+    level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
+    yearly_goal = level_defaults["yearly_km"]
+    monthly_goal = level_defaults["monthly_km"]
     
-    if current_user:
-        user_id = current_user.id
-        level = getattr(current_user, 'runner_level', 'breath') or 'breath'
-        level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
-        yearly_goal = level_defaults["yearly_km"]
-        monthly_goal = level_defaults["monthly_km"]
-        
-        user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
-        if user_goals:
-            yearly_goal = user_goals.yearly_km_goal or yearly_goal
-            monthly_goal = user_goals.monthly_km_goal or monthly_goal
-    else:
-        yearly_goal = LEVEL_GOALS['breath']["yearly_km"]
-        monthly_goal = LEVEL_GOALS['breath']["monthly_km"]
+    user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+    if user_goals:
+        yearly_goal = user_goals.yearly_km_goal or yearly_goal
+        monthly_goal = user_goals.monthly_km_goal or monthly_goal
     
-    joined_at = current_user.created_at if current_user else None
-    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id, joined_at=joined_at)
+    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id, joined_at=current_user.created_at)
 
 
 @app.get("/achievements")
 def get_achievements(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    🎖️ Get all achievements and their unlock status for current user
-    """
+    """🎖️ Get all achievements (requires auth)."""
     from achievements import get_achievements
-    user_id = current_user.id if current_user else None
-    stats = crud.get_stats_summary(db, user_id=user_id)
+    stats = crud.get_stats_summary(db, user_id=current_user.id)
 
-    if current_user:
-        level = getattr(current_user, 'runner_level', 'breath') or 'breath'
-        level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
-        yearly_goal = level_defaults["yearly_km"]
-        monthly_goal = level_defaults["monthly_km"]
-        user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
-        if user_goals:
-            yearly_goal = user_goals.yearly_km_goal or yearly_goal
-            monthly_goal = user_goals.monthly_km_goal or monthly_goal
-    else:
-        yearly_goal = LEVEL_GOALS['breath']["yearly_km"]
-        monthly_goal = LEVEL_GOALS['breath']["monthly_km"]
+    level = getattr(current_user, 'runner_level', 'breath') or 'breath'
+    level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])
+    yearly_goal = level_defaults["yearly_km"]
+    monthly_goal = level_defaults["monthly_km"]
+    user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+    if user_goals:
+        yearly_goal = user_goals.yearly_km_goal or yearly_goal
+        monthly_goal = user_goals.monthly_km_goal or monthly_goal
 
-    return get_achievements(db, stats, user_id=user_id, yearly_goal=yearly_goal, monthly_goal=monthly_goal)
+    return get_achievements(db, stats, user_id=current_user.id, yearly_goal=yearly_goal, monthly_goal=monthly_goal)
 
 
 @app.get("/month-review")
@@ -870,18 +873,10 @@ def get_month_review(
     month: Optional[int] = None,
     year: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📅 Get month in review data
-    
-    Shows comprehensive monthly stats. Visible from last day of month
-    through first 7 days of the next month.
-    
-    Optional params to view specific month (for testing/history).
-    """
-    user_id = current_user.id if current_user else None
-    return crud.get_month_in_review(db, user_id=user_id, target_month=month, target_year=year)
+    """📅 Get month in review data (requires auth)."""
+    return crud.get_month_in_review(db, user_id=current_user.id, target_month=month, target_year=year)
 
 
 # ==========================================
@@ -892,11 +887,9 @@ def get_month_review(
 def create_weight(
     weight_data: dict, 
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    ⚖️ Log a new weight entry
-    """
+    """⚖️ Log a new weight entry (requires auth)."""
     from weight import create_weight_entry
     from datetime import datetime
     
@@ -911,13 +904,12 @@ def create_weight(
         except:
             recorded_at = None
     
-    user_id = current_user.id if current_user else None
     entry = create_weight_entry(
         db,
         weight_lbs=weight_lbs,
         recorded_at=recorded_at,
         notes=weight_data.get("notes"),
-        user_id=user_id
+        user_id=current_user.id
     )
     
     return {
@@ -932,14 +924,11 @@ def create_weight(
 def get_weights(
     limit: int = 100, 
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📋 Get weight entries for current user
-    """
+    """📋 Get weight entries for current user (requires auth)."""
     from weight import get_all_weights
-    user_id = current_user.id if current_user else None
-    weights = get_all_weights(db, limit=limit, user_id=user_id)
+    weights = get_all_weights(db, limit=limit, user_id=current_user.id)
     return [
         {
             "id": w.id,
@@ -952,43 +941,34 @@ def get_weights(
 
 
 @app.delete("/weights/{weight_id}")
-def delete_weight(weight_id: int, db: Session = Depends(get_db)):
-    """
-    🗑️ Delete a weight entry
-    """
-    from weight import delete_weight_entry
-    success = delete_weight_entry(db, weight_id)
-    if not success:
+def delete_weight(weight_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """🗑️ Delete a weight entry (must belong to current user)."""
+    entry = db.query(Weight).filter(Weight.id == weight_id).first()
+    if not entry or entry.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Weight entry not found")
+    db.delete(entry)
+    db.commit()
     return {"message": "Weight entry deleted"}
 
 
 @app.get("/weight-progress")
 def get_weight_progress(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📊 Get weight progress toward goal for current user
-    
-    Goal: 209lb (Jan 7) → 180lb (Dec 31)
-    """
+    """📊 Get weight progress toward goal (requires auth)."""
     from weight import get_weight_progress
-    user_id = current_user.id if current_user else None
-    return get_weight_progress(db, user_id=user_id)
+    return get_weight_progress(db, user_id=current_user.id)
 
 
 @app.get("/weight-chart")
 def get_weight_chart(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📈 Get weight data for charting for current user
-    """
+    """📈 Get weight data for charting (requires auth)."""
     from weight import get_weight_chart_data
-    user_id = current_user.id if current_user else None
-    return get_weight_chart_data(db, user_id=user_id)
+    return get_weight_chart_data(db, user_id=current_user.id)
 
 
 # ==========================================
@@ -999,18 +979,15 @@ def get_weight_chart(
 def create_step_entry(
     step_data: dict, 
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    👟 Log a step count for a day
-    """
+    """👟 Log a step count for a day (requires auth)."""
     from datetime import datetime
     
     step_count = step_data.get("step_count")
     if not step_count or step_count <= 0:
         raise HTTPException(status_code=400, detail="Step count must be a positive number")
     
-    # Parse date
     recorded_date = None
     if step_data.get("recorded_date"):
         try:
@@ -1020,13 +997,11 @@ def create_step_entry(
     else:
         recorded_date = datetime.now()
     
-    # Create entry with user_id
-    user_id = current_user.id if current_user else None
     entry = StepEntry(
         step_count=step_count,
         recorded_date=recorded_date,
         notes=step_data.get("notes"),
-        user_id=user_id
+        user_id=current_user.id
     )
     db.add(entry)
     db.commit()
@@ -1066,15 +1041,12 @@ def create_step_entry(
 def get_step_entries(
     limit: int = 100, 
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📋 Get step entries for current user
-    """
-    query = db.query(StepEntry)
-    if current_user:
-        query = query.filter(StepEntry.user_id == current_user.id)
-    entries = query.order_by(StepEntry.recorded_date.desc()).limit(limit).all()
+    """📋 Get step entries for current user (requires auth)."""
+    entries = db.query(StepEntry).filter(
+        StepEntry.user_id == current_user.id
+    ).order_by(StepEntry.recorded_date.desc()).limit(limit).all()
     return [
         {
             "id": e.id,
@@ -1087,12 +1059,10 @@ def get_step_entries(
 
 
 @app.delete("/steps/{entry_id}")
-def delete_step_entry(entry_id: int, db: Session = Depends(get_db)):
-    """
-    🗑️ Delete a step entry
-    """
+def delete_step_entry(entry_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """🗑️ Delete a step entry (must belong to current user)."""
     entry = db.query(StepEntry).filter(StepEntry.id == entry_id).first()
-    if not entry:
+    if not entry or entry.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Step entry not found")
     db.delete(entry)
     db.commit()
@@ -1102,22 +1072,16 @@ def delete_step_entry(entry_id: int, db: Session = Depends(get_db)):
 @app.get("/steps/summary")
 def get_steps_summary(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """
-    📊 Get monthly high step day counts for current user
-    
-    Returns counts of 15k+, 20k+, 25k+ days per month.
-    """
+    """📊 Get monthly high step day counts (requires auth)."""
     from datetime import datetime
     from sqlalchemy import extract
     
-    # Get all step entries from 2026 for this user
     query = db.query(StepEntry).filter(
-        StepEntry.recorded_date >= datetime(2026, 1, 1)
+        StepEntry.recorded_date >= datetime(2026, 1, 1),
+        StepEntry.user_id == current_user.id
     )
-    if current_user:
-        query = query.filter(StepEntry.user_id == current_user.id)
     entries = query.all()
     
     # Group by month
@@ -1900,16 +1864,17 @@ def get_daily_wisdom():
 @app.get("/mood-insights")
 def get_mood_insights(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """Mood distribution and day-of-week patterns."""
+    """Mood distribution and day-of-week patterns (requires auth)."""
     from datetime import datetime
     from collections import Counter
     
     min_date = datetime(2026, 1, 1)
-    query = db.query(Run).filter(Run.completed_at >= min_date)
-    if current_user:
-        query = query.filter(Run.user_id == current_user.id)
+    query = db.query(Run).filter(
+        Run.completed_at >= min_date,
+        Run.user_id == current_user.id
+    )
     runs = query.all()
     
     mood_runs = [r for r in runs if getattr(r, 'mood', None)]
@@ -1946,11 +1911,10 @@ def get_mood_insights(
 @app.get("/streak-history")
 def get_streak_history(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """Return list of all streak periods."""
-    user_id = current_user.id if current_user else None
-    return crud.get_streak_history(db, user_id=user_id)
+    """Return list of all streak periods (requires auth)."""
+    return crud.get_streak_history(db, user_id=current_user.id)
 
 
 # ==========================================
@@ -1978,13 +1942,10 @@ SEASON_MONTHS = {
 @app.get("/seasonal-markers")
 def get_seasonal_markers(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(require_auth)
 ):
-    """Detect seasonal running milestones."""
+    """Detect seasonal running milestones (requires auth)."""
     from datetime import datetime
-    
-    if not current_user:
-        return {"markers": []}
     
     min_date = datetime(2026, 1, 1)
     runs = db.query(Run).filter(
@@ -2470,6 +2431,10 @@ def upload_run_photo(
     
     if not base64_data:
         raise HTTPException(status_code=400, detail="photo_data is required")
+    
+    MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+    if len(base64_data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 5MB")
     if distance_marker is None or distance_marker <= 0:
         raise HTTPException(status_code=400, detail="distance_marker_km must be positive")
     if distance_marker > run.distance_km:

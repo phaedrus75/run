@@ -1,28 +1,15 @@
 # Python Dependencies for ZenRun Backend
 # Install with: pip install -r requirements.txt
 
-# FastAPI - The web framework we're using
-fastapi>=0.115.0
-
-# Uvicorn - The server that runs our app
-uvicorn[standard]>=0.30.0
-
-# SQLAlchemy - Helps us talk to the database
-sqlalchemy>=2.0.30
-
-# Pydantic - Validates our data
-pydantic>=2.10.0
-
-# Python-dotenv - Loads environment variables
-python-dotenv>=1.0.0
-
-# PostgreSQL adapter (for production deployment)
-psycopg2-binary>=2.9.9
-
-# Authentication
-python-jose[cryptography]>=3.3.0
-passlib>=1.7.4
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+pydantic==2.10.4
+email-validator==2.2.0
+python-dotenv==1.0.1
+psycopg2-binary==2.9.10
+python-jose[cryptography]==3.3.0
+passlib==1.7.4
 bcrypt==3.2.2
-
-# Email (transactional emails via Resend)
-resend>=2.0.0
+resend==2.7.0
+slowapi==0.1.9

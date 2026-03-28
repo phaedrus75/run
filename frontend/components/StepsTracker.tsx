@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { getToken } from '../services/auth';
 
-const API_BASE_URL = 'https://run-production-83ca.up.railway.app';
+import { API_BASE_URL } from '../services/config';
 
 interface StepsSummary {
   current_month: {
