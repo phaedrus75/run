@@ -455,13 +455,14 @@ const styles = StyleSheet.create({
   },
   optionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
     marginBottom: spacing.xl,
     width: '100%',
     justifyContent: 'center',
   },
   optionButton: {
-    flex: 1,
+    width: '45%',
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,

@@ -604,24 +604,24 @@ export function StatsScreen() {
                 const only25k = month.days_25k - (month.days_30k || 0);
                 const only30k = month.days_30k || 0;
                 const total = month.days_15k;
-                const barWidth = maxDays > 0 ? (total / maxDays) * 100 : 0;
+                const pct = (count: number) => maxDays > 0 ? `${(count / maxDays) * 100}%` : '0%';
                 return (
                   <View key={month.month} style={styles.stepsChartRow}>
                     <Text style={styles.stepsChartLabel}>{month.month.slice(0, 3)}</Text>
                     <View style={styles.stepsChartBarBg}>
                       {total > 0 && (
-                        <View style={[styles.stepsStackedBar, { width: `${Math.max(barWidth, 8)}%` }]}>
-                          {only30k > 0 && (
-                            <View style={[styles.stepsSegment, { flex: only30k, backgroundColor: STEP_COLORS['30k'] }]} />
-                          )}
-                          {only25k > 0 && (
-                            <View style={[styles.stepsSegment, { flex: only25k, backgroundColor: STEP_COLORS['25k'] }]} />
+                        <View style={styles.stepsStackedBar}>
+                          {only15k > 0 && (
+                            <View style={[styles.stepsSegment, { width: pct(only15k), backgroundColor: STEP_COLORS['15k'] }]} />
                           )}
                           {only20k > 0 && (
-                            <View style={[styles.stepsSegment, { flex: only20k, backgroundColor: STEP_COLORS['20k'] }]} />
+                            <View style={[styles.stepsSegment, { width: pct(only20k), backgroundColor: STEP_COLORS['20k'] }]} />
                           )}
-                          {only15k > 0 && (
-                            <View style={[styles.stepsSegment, { flex: only15k, backgroundColor: STEP_COLORS['15k'] }]} />
+                          {only25k > 0 && (
+                            <View style={[styles.stepsSegment, { width: pct(only25k), backgroundColor: STEP_COLORS['25k'] }]} />
+                          )}
+                          {only30k > 0 && (
+                            <View style={[styles.stepsSegment, { width: pct(only30k), backgroundColor: STEP_COLORS['30k'] }]} />
                           )}
                         </View>
                       )}
@@ -1097,6 +1097,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: 'hidden',
     flexDirection: 'row',
+    width: '100%',
   },
   stepsSegment: {
     height: '100%',
