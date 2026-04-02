@@ -157,6 +157,24 @@ export async function resetPassword(email: string, code: string, newPassword: st
   return response.json();
 }
 
+export async function deleteAccount(): Promise<void> {
+  const token = await getToken();
+  const response = await fetch(`${API_BASE_URL}/auth/delete-account`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete account');
+  }
+
+  await removeToken();
+  await removeStoredUser();
+}
+
 export async function getCurrentUser(): Promise<User | null> {
   const token = await getToken();
   if (!token) return null;

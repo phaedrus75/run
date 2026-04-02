@@ -501,6 +501,46 @@ def verify_email(request: Request, body: VerifyEmailRequest, current_user: User 
     return {"message": "Email verified successfully", "verified": True}
 
 
+@app.delete("/auth/delete-account")
+def delete_account(current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+    """
+    Permanently delete the current user's account and all associated data.
+    This action is irreversible.
+    """
+    from models import (
+        Circle, CircleMembership, CircleFeedReaction,
+    )
+
+    user_id = current_user.id
+
+    db.query(RunPhoto).filter(RunPhoto.user_id == user_id).delete()
+    db.query(CircleFeedReaction).filter(CircleFeedReaction.user_id == user_id).delete()
+    db.query(CircleCheckin).filter(CircleCheckin.user_id == user_id).delete()
+    db.query(CircleMembership).filter(CircleMembership.user_id == user_id).delete()
+    db.query(WeeklyReflection).filter(WeeklyReflection.user_id == user_id).delete()
+    db.query(Run).filter(Run.user_id == user_id).delete()
+    db.query(WeeklyPlan).filter(WeeklyPlan.user_id == user_id).delete()
+    db.query(Weight).filter(Weight.user_id == user_id).delete()
+    db.query(StepEntry).filter(StepEntry.user_id == user_id).delete()
+    db.query(UserGoals).filter(UserGoals.user_id == user_id).delete()
+    db.query(PasswordResetToken).filter(PasswordResetToken.user_id == user_id).delete()
+
+    empty_circles = (
+        db.query(Circle)
+        .filter(Circle.created_by == user_id)
+        .outerjoin(CircleMembership, Circle.id == CircleMembership.circle_id)
+        .filter(CircleMembership.id == None)
+        .all()
+    )
+    for circle in empty_circles:
+        db.delete(circle)
+
+    db.delete(current_user)
+    db.commit()
+
+    return {"message": "Account and all associated data have been permanently deleted"}
+
+
 # ==========================================
 # 🎯 USER GOALS ENDPOINTS
 # ==========================================

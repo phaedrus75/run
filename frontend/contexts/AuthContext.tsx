@@ -12,6 +12,7 @@ import {
   login as apiLogin,
   signup as apiSignup,
   logout as apiLogout,
+  deleteAccount as apiDeleteAccount,
   getStoredUser,
   getToken,
   setStoredUser,
@@ -25,6 +26,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   completeOnboarding: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -84,6 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function deleteAccount() {
+    await apiDeleteAccount();
+    setUser(null);
+  }
+
   function completeOnboarding() {
     if (user) {
       const updatedUser = { ...user, onboarding_complete: true };
@@ -121,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         signup,
         logout,
+        deleteAccount,
         completeOnboarding,
         refreshUser,
       }}

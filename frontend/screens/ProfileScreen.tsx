@@ -52,7 +52,8 @@ interface UserGoals {
 }
 
 export function ProfileScreen({ navigation }: { navigation: any }) {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, deleteAccount, refreshUser } = useAuth();
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -250,6 +251,42 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Log Out', style: 'destructive', onPress: () => logout() },
     ]);
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data including runs, goals, and circle memberships. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete My Account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              'All your running history and data will be lost forever.',
+              [
+                { text: 'Keep Account', style: 'cancel' },
+                {
+                  text: 'Delete Forever',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setIsDeleting(true);
+                    try {
+                      await deleteAccount();
+                    } catch (error: any) {
+                      Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+                      setIsDeleting(false);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   }
 
   if (isLoading) {
@@ -571,6 +608,22 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
+        {/* Delete Account */}
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={handleDeleteAccount}
+          disabled={isDeleting}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color={colors.textLight} />
+          ) : (
+            <>
+              <Ionicons name="trash-outline" size={16} color={colors.textLight} />
+              <Text style={styles.deleteAccountText}>Delete Account</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
         <Text style={styles.version}>ZenRun v1.4.0</Text>
       </ScrollView>
     </View>
@@ -831,6 +884,18 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.semibold,
     marginLeft: spacing.sm,
+  },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  deleteAccountText: {
+    color: colors.textLight,
+    fontSize: typography.sizes.sm,
+    marginLeft: spacing.xs,
   },
   version: {
     textAlign: 'center',

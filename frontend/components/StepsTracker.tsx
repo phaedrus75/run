@@ -109,7 +109,9 @@ export function StepsTracker({ summary, onUpdate, onCelebrate }: StepsTrackerPro
   }
 
   function onDateChange(event: any, date?: Date) {
-    setShowDatePicker(Platform.OS === 'ios');
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
     if (date) {
       setSelectedDate(date);
     }
@@ -223,23 +225,38 @@ export function StepsTracker({ summary, onUpdate, onCelebrate }: StepsTrackerPro
             
             {/* Date Picker */}
             <Text style={styles.sectionLabel}>Select Date</Text>
-            <TouchableOpacity 
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={24} color={colors.primary} />
-              <Text style={styles.dateButtonText}>{formatDate(selectedDate)}</Text>
-              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={selectedDate}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={onDateChange}
-                maximumDate={new Date()}
-              />
+            {Platform.OS === 'ios' ? (
+              <View style={styles.datePickerRow}>
+                <Ionicons name="calendar-outline" size={24} color={colors.primary} />
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display="compact"
+                  onChange={onDateChange}
+                  maximumDate={new Date()}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={24} color={colors.primary} />
+                  <Text style={styles.dateButtonText}>{formatDate(selectedDate)}</Text>
+                  <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display="default"
+                    onChange={onDateChange}
+                    maximumDate={new Date()}
+                  />
+                )}
+              </>
             )}
 
             {/* Step Count Selection */}
@@ -437,6 +454,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.md,
     alignSelf: 'flex-start',
+  },
+  datePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    width: '100%',
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
   },
   dateButton: {
     flexDirection: 'row',
