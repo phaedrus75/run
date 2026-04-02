@@ -24,3 +24,4 @@ export { StreakModal } from './StreakModal';
 export { StepsTracker } from './StepsTracker';
 export { WeekSummaryCard } from './WeekSummaryCard';
 export { MonthInReview } from './MonthInReview';
+export { EditStepModal } from './EditStepModal';

@@ -1175,6 +1175,40 @@ def get_step_entries(
     ]
 
 
+@app.put("/steps/{entry_id}")
+def update_step_entry(entry_id: int, step_data: dict, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    """✏️ Update a step entry (must belong to current user)."""
+    from datetime import datetime
+
+    entry = db.query(StepEntry).filter(StepEntry.id == entry_id).first()
+    if not entry or entry.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Step entry not found")
+
+    if "step_count" in step_data:
+        sc = step_data["step_count"]
+        if not sc or sc <= 0:
+            raise HTTPException(status_code=400, detail="Step count must be a positive number")
+        entry.step_count = sc
+
+    if "recorded_date" in step_data and step_data["recorded_date"]:
+        try:
+            entry.recorded_date = datetime.fromisoformat(step_data["recorded_date"].replace("Z", "+00:00"))
+        except:
+            pass
+
+    if "notes" in step_data:
+        entry.notes = _sanitize_text(step_data["notes"], max_length=200) if step_data["notes"] else None
+
+    db.commit()
+    db.refresh(entry)
+    return {
+        "id": entry.id,
+        "step_count": entry.step_count,
+        "recorded_date": entry.recorded_date.isoformat(),
+        "notes": entry.notes,
+    }
+
+
 @app.delete("/steps/{entry_id}")
 def delete_step_entry(entry_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     """🗑️ Delete a step entry (must belong to current user)."""

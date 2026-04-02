@@ -19,14 +19,21 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
+  Modal,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
+import { EditStepModal } from '../components/EditStepModal';
 import { MonthInReview } from '../components/MonthInReview';
-import { runApi, statsApi, type Run, type MonthInReview as MonthInReviewType } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { runApi, statsApi, stepsApi, type Run, type StepEntry, type MonthInReview as MonthInReviewType } from '../services/api';
 
 const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '18k', '21k'];
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
@@ -59,7 +66,11 @@ const getAvailableMonths = () => {
   return months.reverse(); // Most recent first
 };
 
+type ActiveTab = 'runs' | 'steps';
+
 export function HistoryScreen({ navigation }: HistoryScreenProps) {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<ActiveTab>('runs');
   const [runs, setRuns] = useState<Run[]>([]);
   const [filter, setFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -69,6 +80,16 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   // ✏️ Edit modal state
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
+  
+  // 👟 Steps state
+  const [stepEntries, setStepEntries] = useState<StepEntry[]>([]);
+  const [stepsLoading, setStepsLoading] = useState(false);
+  const [editStepModalVisible, setEditStepModalVisible] = useState(false);
+  const [selectedStep, setSelectedStep] = useState<StepEntry | null>(null);
+  const [showAddStep, setShowAddStep] = useState(false);
+  const [addStepCount, setAddStepCount] = useState<number | null>(null);
+  const [addStepDate, setAddStepDate] = useState(new Date());
+  const [addingStep, setAddingStep] = useState(false);
   
   // 📅 Month in Review state
   const [monthReviewData, setMonthReviewData] = useState<MonthInReviewType | null>(null);
@@ -105,21 +126,39 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     }
   }, [filter, categoryFilter]);
   
+  const fetchSteps = useCallback(async () => {
+    setStepsLoading(true);
+    try {
+      const data = await stepsApi.getAll(200);
+      setStepEntries(data);
+    } catch {
+      setStepEntries([]);
+    } finally {
+      setStepsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchRuns();
   }, [fetchRuns]);
+
+  useEffect(() => {
+    if (activeTab === 'steps') fetchSteps();
+  }, [activeTab, fetchSteps]);
   
   // 🔄 Refetch when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      fetchRuns();
-    }, [fetchRuns])
+      if (activeTab === 'runs') fetchRuns();
+      else fetchSteps();
+    }, [fetchRuns, fetchSteps, activeTab])
   );
   
   // 🔄 Pull to refresh
   const onRefresh = () => {
     setRefreshing(true);
-    fetchRuns();
+    if (activeTab === 'runs') fetchRuns();
+    else fetchSteps().finally(() => setRefreshing(false));
   };
   
   // ✏️ Handle run tap for editing
@@ -131,13 +170,49 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   // 💾 Save edited run
   const handleSaveRun = async (id: number, data: { run_type?: string; duration_seconds?: number; notes?: string; category?: string }) => {
     await runApi.update(id, data);
-    fetchRuns(); // Refresh the list
+    fetchRuns();
   };
   
   // 🗑️ Delete run
   const handleDeleteRun = async (id: number) => {
     await runApi.delete(id);
-    fetchRuns(); // Refresh the list
+    fetchRuns();
+  };
+
+  // 👟 Step handlers
+  const handleStepPress = (entry: StepEntry) => {
+    setSelectedStep(entry);
+    setEditStepModalVisible(true);
+  };
+
+  const handleSaveStep = async (id: number, data: { step_count: number; recorded_date: string }) => {
+    await stepsApi.update(id, data);
+    fetchSteps();
+  };
+
+  const handleDeleteStep = async (id: number) => {
+    await stepsApi.delete(id);
+    fetchSteps();
+  };
+
+  const handleAddStep = async () => {
+    if (!addStepCount) return;
+    setAddingStep(true);
+    try {
+      const dateStr = addStepDate.toISOString().split('T')[0];
+      await stepsApi.create({
+        step_count: addStepCount,
+        recorded_date: `${dateStr}T12:00:00`,
+      });
+      setShowAddStep(false);
+      setAddStepCount(null);
+      setAddStepDate(new Date());
+      fetchSteps();
+    } catch {
+      // handled silently
+    } finally {
+      setAddingStep(false);
+    }
   };
   
   // 📊 Calculate stats for filtered runs
@@ -148,6 +223,23 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
       Math.floor((totalTime / totalDistance) % 60).toString().padStart(2, '0')
     : '0:00';
   
+  const getStepBadgeColor = (count: number) => {
+    if (count >= 30000) return '#3D3D3D';
+    if (count >= 25000) return colors.success;
+    if (count >= 20000) return colors.runTypes['20k'];
+    return colors.runTypes['15k'];
+  };
+
+  const formatStepDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
   // 🎨 Render filter button
   const renderFilterButton = (type: string) => {
     const isActive = filter === type;
@@ -208,92 +300,189 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     </View>
   );
   
+  const showStepsTab = !!user?.beta_steps_enabled;
+
   return (
     <SafeAreaView style={styles.container}>
       {/* 📋 Header */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.title}>Run History</Text>
-            <Text style={styles.subtitle}>Tap a run to edit</Text>
+            <Text style={styles.title}>History</Text>
+            <Text style={styles.subtitle}>Tap to edit</Text>
           </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddRun')}
-          >
-            <Text style={styles.addButtonText}>+ Add Past Run</Text>
-          </TouchableOpacity>
+          {activeTab === 'runs' ? (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => navigation.navigate('AddRun')}
+            >
+              <Text style={styles.addButtonText}>+ Add Run</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => { setShowAddStep(true); setAddStepCount(null); setAddStepDate(new Date()); }}
+            >
+              <Text style={styles.addButtonText}>+ Add Steps</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
-      
-      {/* 📅 Month in Review Section */}
-      <View style={styles.monthReviewSection}>
-        <Text style={styles.monthReviewTitle}>📅 Month in Review</Text>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.monthScrollContent}
-        >
-          {availableMonths.map(({ month, year, label }) => (
-            <TouchableOpacity
-              key={`${year}-${month}`}
-              style={[styles.monthChip, shadows.small]}
-              onPress={() => fetchMonthReview(month, year)}
-            >
-              <Text style={styles.monthChipText}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-      
-      {/* 🔍 Filters */}
-      <View style={styles.filterContainer}>
-        {RUN_TYPES.map(renderFilterButton)}
-      </View>
-      
-      {/* Category Filter */}
-      <View style={styles.categoryFilterContainer}>
-        {(['all', 'outdoor', 'treadmill'] as CategoryFilter[]).map(cat => (
+
+      {/* Segment Toggle */}
+      {showStepsTab && (
+        <View style={styles.segmentContainer}>
           <TouchableOpacity
-            key={cat}
-            style={[
-              styles.categoryChip,
-              categoryFilter === cat && styles.categoryChipActive,
-            ]}
-            onPress={() => setCategoryFilter(cat)}
+            style={[styles.segmentButton, activeTab === 'runs' && styles.segmentButtonActive]}
+            onPress={() => setActiveTab('runs')}
           >
-            <Text style={[
-              styles.categoryChipText,
-              categoryFilter === cat && styles.categoryChipTextActive,
-            ]}>
-              {cat === 'all' ? 'All' : cat === 'outdoor' ? '🌳 Outdoor' : '🏋️ Treadmill'}
-            </Text>
+            <Ionicons name="fitness-outline" size={16} color={activeTab === 'runs' ? colors.textOnPrimary : colors.textSecondary} />
+            <Text style={[styles.segmentText, activeTab === 'runs' && styles.segmentTextActive]}>Runs</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-      
-      {/* 📊 Stats */}
-      {renderHeader()}
-      
-      {/* 📜 Run List */}
-      <FlatList
-        data={runs}
-        keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) => (
-          <RunHistoryCard 
-            run={item} 
-            onPress={() => handleRunPress(item)}
+          <TouchableOpacity
+            style={[styles.segmentButton, activeTab === 'steps' && styles.segmentButtonActive]}
+            onPress={() => setActiveTab('steps')}
+          >
+            <Ionicons name="footsteps-outline" size={16} color={activeTab === 'steps' ? colors.textOnPrimary : colors.textSecondary} />
+            <Text style={[styles.segmentText, activeTab === 'steps' && styles.segmentTextActive]}>Steps</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {activeTab === 'runs' ? (
+        <>
+          {/* 📅 Month in Review Section */}
+          <View style={styles.monthReviewSection}>
+            <Text style={styles.monthReviewTitle}>📅 Month in Review</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.monthScrollContent}
+            >
+              {availableMonths.map(({ month, year, label }) => (
+                <TouchableOpacity
+                  key={`${year}-${month}`}
+                  style={[styles.monthChip, shadows.small]}
+                  onPress={() => fetchMonthReview(month, year)}
+                >
+                  <Text style={styles.monthChipText}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+          
+          {/* 🔍 Filters */}
+          <View style={styles.filterContainer}>
+            {RUN_TYPES.map(renderFilterButton)}
+          </View>
+          
+          {/* Category Filter */}
+          <View style={styles.categoryFilterContainer}>
+            {(['all', 'outdoor', 'treadmill'] as CategoryFilter[]).map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.categoryChip,
+                  categoryFilter === cat && styles.categoryChipActive,
+                ]}
+                onPress={() => setCategoryFilter(cat)}
+              >
+                <Text style={[
+                  styles.categoryChipText,
+                  categoryFilter === cat && styles.categoryChipTextActive,
+                ]}>
+                  {cat === 'all' ? 'All' : cat === 'outdoor' ? '🌳 Outdoor' : '🏋️ Treadmill'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          
+          {/* 📊 Stats */}
+          {renderHeader()}
+          
+          {/* 📜 Run List */}
+          <FlatList
+            data={runs}
+            keyExtractor={item => item.id.toString()}
+            renderItem={({ item }) => (
+              <RunHistoryCard 
+                run={item} 
+                onPress={() => handleRunPress(item)}
+              />
+            )}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={renderEmpty}
+            showsVerticalScrollIndicator={false}
           />
-        )}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={renderEmpty}
-        showsVerticalScrollIndicator={false}
-      />
+        </>
+      ) : (
+        <>
+          {/* 👟 Steps Stats Bar */}
+          <View style={styles.statsBar}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stepEntries.length}</Text>
+              <Text style={styles.statLabel}>Days</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {stepEntries.filter(e => e.step_count >= 20000).length}
+              </Text>
+              <Text style={styles.statLabel}>20k+</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {stepEntries.length > 0
+                  ? `${(Math.max(...stepEntries.map(e => e.step_count)) / 1000).toFixed(0)}k`
+                  : '0'}
+              </Text>
+              <Text style={styles.statLabel}>Best</Text>
+            </View>
+          </View>
+
+          {/* 👟 Step Entries List */}
+          <FlatList
+            data={stepEntries}
+            keyExtractor={item => item.id.toString()}
+            renderItem={({ item }) => {
+              const badgeColor = getStepBadgeColor(item.step_count);
+              const label = `${(item.step_count / 1000).toFixed(0)}k`;
+              return (
+                <TouchableOpacity
+                  style={[styles.stepCard, shadows.small]}
+                  onPress={() => handleStepPress(item)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.stepBadge, { backgroundColor: badgeColor }]}>
+                    <Text style={styles.stepBadgeText}>{label}</Text>
+                  </View>
+                  <View style={styles.stepDetails}>
+                    <Text style={styles.stepCount}>{item.step_count.toLocaleString()} steps</Text>
+                    <Text style={styles.stepDate}>{formatStepDate(item.recorded_date)}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                </TouchableOpacity>
+              );
+            }}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>👟</Text>
+                <Text style={styles.emptyTitle}>No step days logged</Text>
+                <Text style={styles.emptyText}>Tap "+ Add Steps" to log a high step day</Text>
+              </View>
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        </>
+      )}
       
-      {/* ✏️ Edit Modal */}
+      {/* ✏️ Edit Run Modal */}
       <EditRunModal
         visible={editModalVisible}
         run={selectedRun}
@@ -304,6 +493,31 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
         onSave={handleSaveRun}
         onDelete={handleDeleteRun}
       />
+
+      {/* ✏️ Edit Step Modal */}
+      <EditStepModal
+        visible={editStepModalVisible}
+        entry={selectedStep}
+        onClose={() => {
+          setEditStepModalVisible(false);
+          setSelectedStep(null);
+        }}
+        onSave={handleSaveStep}
+        onDelete={handleDeleteStep}
+      />
+
+      {/* ➕ Add Step Modal */}
+      {showAddStep && (
+        <AddStepInline
+          stepCount={addStepCount}
+          date={addStepDate}
+          saving={addingStep}
+          onSelectSteps={setAddStepCount}
+          onDateChange={setAddStepDate}
+          onSubmit={handleAddStep}
+          onClose={() => setShowAddStep(false)}
+        />
+      )}
       
       {/* 📅 Month in Review Modal */}
       {monthReviewData && showMonthReview && (
@@ -315,6 +529,156 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     </SafeAreaView>
   );
 }
+
+// ——————————————————————————————
+// Inline Add Step Modal
+// ——————————————————————————————
+
+const ADD_STEP_OPTIONS = [
+  { value: 15000, label: '15k', color: colors.runTypes['15k'] },
+  { value: 20000, label: '20k', color: colors.runTypes['20k'] },
+  { value: 25000, label: '25k', color: colors.success },
+  { value: 30000, label: '30k', color: '#3D3D3D' },
+];
+
+function AddStepInline({
+  stepCount,
+  date,
+  saving,
+  onSelectSteps,
+  onDateChange,
+  onSubmit,
+  onClose,
+}: {
+  stepCount: number | null;
+  date: Date;
+  saving: boolean;
+  onSelectSteps: (v: number) => void;
+  onDateChange: (d: Date) => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={addStyles.container}>
+        <View style={addStyles.header}>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={addStyles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={addStyles.title}>Log High Step Day</Text>
+          <View style={{ width: 50 }} />
+        </View>
+
+        <View style={addStyles.content}>
+          <Text style={{ fontSize: 64, marginBottom: spacing.xl }}>👟</Text>
+
+          <Text style={addStyles.label}>Date</Text>
+          {Platform.OS === 'ios' ? (
+            <View style={addStyles.dateRow}>
+              <Ionicons name="calendar-outline" size={24} color={colors.primary} />
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display="compact"
+                onChange={(_e, d) => d && onDateChange(d)}
+                maximumDate={new Date()}
+                style={{ flex: 1 }}
+              />
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity style={addStyles.dateRow} onPress={() => setShowPicker(true)}>
+                <Ionicons name="calendar-outline" size={24} color={colors.primary} />
+                <Text style={{ flex: 1, fontSize: typography.sizes.md, color: colors.text }}>
+                  {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              {showPicker && (
+                <DateTimePicker
+                  value={date}
+                  mode="date"
+                  display="default"
+                  onChange={(_e, d) => { setShowPicker(false); d && onDateChange(d); }}
+                  maximumDate={new Date()}
+                />
+              )}
+            </>
+          )}
+
+          <Text style={addStyles.label}>Step Count</Text>
+          <View style={addStyles.optionsRow}>
+            {ADD_STEP_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  addStyles.optionBtn,
+                  stepCount === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
+                ]}
+                onPress={() => onSelectSteps(opt.value)}
+              >
+                <Text style={[addStyles.optionLabel, stepCount === opt.value && { color: '#fff' }]}>{opt.label}</Text>
+                <Text style={[addStyles.optionSub, stepCount === opt.value && { color: '#ffffffcc' }]}>steps</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[addStyles.submitBtn, (!stepCount || saving) && { opacity: 0.5 }]}
+            onPress={onSubmit}
+            disabled={!stepCount || saving}
+          >
+            {saving ? (
+              <ActivityIndicator color={colors.surface} />
+            ) : (
+              <Text style={addStyles.submitText}>
+                {stepCount ? `Log ${(stepCount / 1000).toFixed(0)}k Steps` : 'Select Steps'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const addStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: spacing.lg, paddingTop: spacing.xl,
+    borderBottomWidth: 1, borderBottomColor: colors.surface,
+  },
+  cancelText: { fontSize: typography.sizes.md, color: colors.textSecondary },
+  title: { fontSize: typography.sizes.lg, fontWeight: typography.weights.bold, color: colors.text },
+  content: { flex: 1, padding: spacing.lg, alignItems: 'center' },
+  label: {
+    fontSize: typography.sizes.md, fontWeight: typography.weights.semibold,
+    color: colors.text, marginBottom: spacing.md, alignSelf: 'flex-start',
+  },
+  dateRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    borderRadius: radius.md, padding: spacing.md, width: '100%',
+    marginBottom: spacing.xl, gap: spacing.sm,
+  },
+  optionsRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md,
+    marginBottom: spacing.xl, width: '100%', justifyContent: 'center',
+  },
+  optionBtn: {
+    width: '45%', backgroundColor: colors.surface, borderRadius: radius.lg,
+    padding: spacing.lg, alignItems: 'center', borderWidth: 2, borderColor: colors.surface,
+  },
+  optionLabel: { fontSize: typography.sizes.xl, fontWeight: typography.weights.bold, color: colors.text },
+  optionSub: { fontSize: typography.sizes.sm, color: colors.textSecondary, marginTop: spacing.xs },
+  submitBtn: {
+    backgroundColor: colors.primary, paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
+    borderRadius: radius.md, width: '100%', alignItems: 'center', marginTop: spacing.lg,
+  },
+  submitText: { fontSize: typography.sizes.md, fontWeight: typography.weights.bold, color: colors.surface },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -469,5 +833,69 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  // Segment toggle
+  segmentContainer: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    padding: 3,
+  },
+  segmentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    gap: spacing.xs,
+  },
+  segmentButtonActive: {
+    backgroundColor: colors.text,
+  },
+  segmentText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+  },
+  segmentTextActive: {
+    color: colors.textOnPrimary,
+  },
+  // Step cards
+  stepCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  stepBadge: {
+    width: 50,
+    height: 50,
+    borderRadius: radius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepBadgeText: {
+    color: '#fff',
+    fontWeight: typography.weights.bold,
+    fontSize: typography.sizes.sm,
+  },
+  stepDetails: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  stepCount: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  stepDate: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs / 2,
   },
 });

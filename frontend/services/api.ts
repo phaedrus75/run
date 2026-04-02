@@ -557,6 +557,16 @@ export const stepsApi = {
   },
 
   /**
+   * 👟 Update a step entry
+   */
+  update: (id: number, data: { step_count?: number; recorded_date?: string; notes?: string | null }): Promise<StepEntry> => {
+    return apiFetch(`/steps/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
    * 👟 Delete a step entry
    */
   delete: (id: number): Promise<void> => {
