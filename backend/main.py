@@ -184,6 +184,9 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_attempts INTEGER DEFAULT 0
                 """))
+                conn.execute(text("""
+                    ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS user_id INTEGER
+                """))
                 conn.commit()
                 
                 migration_email = os.getenv("MIGRATION_USER_EMAIL")
@@ -518,7 +521,6 @@ def delete_account(request: Request, current_user: User = Depends(require_auth),
         db.query(CircleMembership).filter(CircleMembership.user_id == user_id).delete()
         db.query(WeeklyReflection).filter(WeeklyReflection.user_id == user_id).delete()
         db.query(Run).filter(Run.user_id == user_id).delete()
-        db.query(WeeklyPlan).filter(WeeklyPlan.user_id == user_id).delete()
         db.query(Weight).filter(Weight.user_id == user_id).delete()
         db.query(StepEntry).filter(StepEntry.user_id == user_id).delete()
         db.query(UserGoals).filter(UserGoals.user_id == user_id).delete()
