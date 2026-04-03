@@ -1850,6 +1850,7 @@ def get_public_profile(
         raise HTTPException(status_code=500, detail=f"Profile error: {str(e)}")
 
 def _build_public_profile(handle: str, db: Session, current_user):
+    from datetime import datetime
     from models import CircleMembership, RunPhoto
     from achievements import get_achievements
     from collections import defaultdict
