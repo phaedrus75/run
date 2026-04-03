@@ -1839,6 +1839,17 @@ def get_public_profile(
     current_user: User = Depends(get_current_user),
 ):
     """Public profile endpoint. Respects privacy settings. Own profile always visible."""
+    import traceback
+    try:
+        return _build_public_profile(handle, db, current_user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"PROFILE ERROR: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Profile error: {str(e)}")
+
+def _build_public_profile(handle: str, db: Session, current_user):
     from models import CircleMembership, RunPhoto
     from achievements import get_achievements
     from collections import defaultdict
