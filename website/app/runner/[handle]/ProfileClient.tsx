@@ -338,12 +338,11 @@ function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
             className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-white text-3xl font-bold"
             style={{ backgroundColor: level.color }}
           >
-            {data.name?.[0]?.toUpperCase() || '?'}
+            {data.handle?.[0]?.toUpperCase() || '?'}
           </div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {data.name || 'Runner'}
+            @{data.handle}
           </h1>
-          <p className="text-gray-500 mt-1">@{data.handle}</p>
           <div className="inline-flex items-center gap-1.5 mt-3 bg-gray-100 rounded-full px-3 py-1">
             <span>{level.emoji}</span>
             <span className="text-sm font-medium text-gray-700">{level.name}</span>
@@ -520,25 +519,12 @@ function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
           </div>
         )}
 
-        {data.achievements && data.achievements.length > 0 && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Milestones</h2>
-              <span className="text-sm text-gray-400">
-                {data.achievements_count || 0} / {data.achievements_total || 0}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {data.achievements.map((a, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-1.5 bg-warm-bg rounded-full px-3 py-1.5"
-                  title={a.name}
-                >
-                  <span className="text-lg">{a.emoji}</span>
-                  <span className="text-xs font-medium text-gray-700">{a.name}</span>
-                </div>
-              ))}
+        {(data.achievements_count || 0) > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6 flex items-center gap-4">
+            <span className="text-3xl">🏅</span>
+            <div>
+              <div className="text-2xl font-extrabold text-gray-900">{data.achievements_count}</div>
+              <div className="text-sm text-gray-500">milestones achieved</div>
             </div>
           </div>
         )}
