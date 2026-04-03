@@ -197,10 +197,6 @@ def run_migrations():
                         conn.execute(text("UPDATE step_entries SET user_id = :uid WHERE user_id IS NULL"), {"uid": main_user_id})
                         conn.commit()
                 
-                # Clean up pentest test accounts
-                conn.execute(text("DELETE FROM users WHERE email LIKE '%@test.com'"))
-                conn.commit()
-                
                 print("Migration completed: columns added")
             else:
                 # SQLite - check if columns exist first
@@ -503,7 +499,8 @@ def verify_email(request: Request, body: VerifyEmailRequest, current_user: User 
 
 
 @app.delete("/auth/delete-account")
-def delete_account(current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def delete_account(request: Request, current_user: User = Depends(require_auth), db: Session = Depends(get_db)):
     """
     Permanently delete the current user's account and all associated data.
     This action is irreversible.
@@ -526,15 +523,18 @@ def delete_account(current_user: User = Depends(require_auth), db: Session = Dep
     db.query(UserGoals).filter(UserGoals.user_id == user_id).delete()
     db.query(PasswordResetToken).filter(PasswordResetToken.user_id == user_id).delete()
 
-    empty_circles = (
-        db.query(Circle)
-        .filter(Circle.created_by == user_id)
-        .outerjoin(CircleMembership, Circle.id == CircleMembership.circle_id)
-        .filter(CircleMembership.id == None)
-        .all()
-    )
-    for circle in empty_circles:
-        db.delete(circle)
+    owned_circles = db.query(Circle).filter(Circle.created_by == user_id).all()
+    for circle in owned_circles:
+        remaining = db.query(CircleMembership).filter(
+            CircleMembership.circle_id == circle.id
+        ).count()
+        if remaining == 0:
+            db.delete(circle)
+        else:
+            new_owner = db.query(CircleMembership).filter(
+                CircleMembership.circle_id == circle.id
+            ).first()
+            circle.created_by = new_owner.user_id if new_owner else None
 
     db.delete(current_user)
     db.commit()
@@ -614,7 +614,7 @@ def set_user_goals(goals_data: dict, current_user: User = Depends(require_auth),
     except Exception as e:
         db.rollback()
         print(f"Error saving goals: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save goals: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save goals. Please try again.")
 
 
 @app.post("/user/complete-onboarding")
@@ -766,6 +766,10 @@ def create_run(
     
     if run.notes:
         run.notes = _sanitize_text(run.notes, max_length=500)
+    if hasattr(run, 'mood') and run.mood:
+        run.mood = _sanitize_text(run.mood, max_length=50)
+    if hasattr(run, 'category') and run.category:
+        run.category = _sanitize_text(run.category, max_length=50)
     
     db_run = crud.create_run(db=db, run=run, user_id=current_user.id)
     
@@ -817,6 +821,10 @@ def update_run(run_id: int, run_update: RunUpdate, db: Session = Depends(get_db)
     
     if run_update.notes:
         run_update.notes = _sanitize_text(run_update.notes, max_length=500)
+    if run_update.mood:
+        run_update.mood = _sanitize_text(run_update.mood, max_length=50)
+    if run_update.category:
+        run_update.category = _sanitize_text(run_update.category, max_length=50)
     
     updated_run = crud.update_run(
         db,
@@ -1849,7 +1857,7 @@ def get_public_profile(
     except Exception as e:
         print(f"PROFILE ERROR: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Profile error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Something went wrong loading this profile")
 
 def _build_public_profile(handle: str, db: Session, current_user):
     from datetime import datetime
@@ -2216,9 +2224,7 @@ def create_circle_checkin(
     ).first()
     
     emoji = checkin_data.get("emoji", "👋")
-    message = checkin_data.get("message", "")
-    if len(message) > 100:
-        message = message[:100]
+    message = _sanitize_text(checkin_data.get("message", ""), max_length=100)
     
     if existing:
         existing.emoji = emoji
@@ -2301,7 +2307,7 @@ def save_reflection(
     ).first()
 
     reflection_text = _sanitize_text(body.get("reflection") or "", max_length=200)
-    mood = body.get("mood") or ""
+    mood = _sanitize_text(body.get("mood") or "", max_length=50)
 
     if existing:
         existing.reflection = reflection_text
@@ -2618,6 +2624,11 @@ def upload_run_photo(
     MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
     if len(base64_data) > MAX_PHOTO_BYTES:
         raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 5MB")
+    
+    VALID_IMAGE_PREFIXES = ("/9j/", "iVBOR", "R0lGO", "UklGR", "data:image/")
+    clean_data = base64_data.split(",", 1)[-1] if base64_data.startswith("data:") else base64_data
+    if not any(clean_data.startswith(p) for p in VALID_IMAGE_PREFIXES) and not base64_data.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Invalid image format")
     if distance_marker is None or distance_marker <= 0:
         raise HTTPException(status_code=400, detail="distance_marker_km must be positive")
     if distance_marker > run.distance_km:
