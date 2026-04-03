@@ -4,8 +4,6 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-import { API_BASE_URL } from '../../lib/config';
-
 type Mode = 'login' | 'forgot' | 'reset';
 
 export default function LoginPage() {
@@ -36,7 +34,7 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -49,8 +47,6 @@ function LoginForm() {
         return;
       }
 
-      const data = await res.json();
-      document.cookie = `zenrun_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure`;
       const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/me';
       window.location.href = safeRedirect;
     } catch {
@@ -67,7 +63,7 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      const res = await fetch('/api/backend/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
@@ -109,7 +105,7 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      const res = await fetch('/api/backend/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

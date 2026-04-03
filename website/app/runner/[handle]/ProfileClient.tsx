@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import PrivacyToggle from './PrivacyToggle';
 
-import { API_BASE_URL } from '../../../lib/config';
-
 const LEVEL_META: Record<string, { name: string; emoji: string; color: string }> = {
   breath: { name: 'Breath', emoji: '🌱', color: '#4ECDC4' },
   stride: { name: 'Stride', emoji: '🏃', color: '#E8756F' },
@@ -40,11 +38,6 @@ function formatMonth(ym: string): string {
   return `${MONTH_NAMES[parseInt(month, 10) - 1]} ${year}`;
 }
 
-function getCookie(name: string): string | undefined {
-  if (typeof document === 'undefined') return undefined;
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
-}
 
 interface PersonalRecord {
   time: string;
@@ -99,58 +92,58 @@ type PageState =
   | { status: 'loading' }
   | { status: 'private'; handle: string }
   | { status: 'circles'; handle: string; isLoggedIn: boolean }
-  | { status: 'visible'; data: ProfileData; token?: string };
+  | { status: 'visible'; data: ProfileData; isOwnAuth?: boolean };
 
 export default function ProfileClient({ handle }: { handle: string }) {
   const [state, setState] = useState<PageState>({ status: 'loading' });
 
   useEffect(() => {
-    const token = getCookie('zenrun_token');
-    const authHeaders: Record<string, string> = {};
-    if (token) authHeaders['Authorization'] = `Bearer ${token}`;
-
     async function loadProfile() {
       let meData: { handle?: string; name?: string; runner_level?: string; profile_privacy?: string; created_at?: string } | null = null;
+      let isLoggedIn = false;
 
-      if (token) {
-        try {
-          const meRes = await fetch(`${API_BASE_URL}/user/me`, { headers: authHeaders });
+      try {
+        const sessionRes = await fetch('/api/auth/session');
+        const sessionData = await sessionRes.json();
+        isLoggedIn = sessionData.authenticated;
+        if (isLoggedIn) {
+          const meRes = await fetch('/api/backend/user/me');
           if (meRes.ok) meData = await meRes.json();
-        } catch {}
-      }
+        }
+      } catch {}
 
       const myHandle = meData?.handle?.toLowerCase() || null;
       const isOwnProfile = myHandle === handle.toLowerCase();
 
       try {
-        const res = await fetch(`${API_BASE_URL}/profile/${handle}`, { headers: authHeaders });
+        const res = await fetch(`/api/backend/profile/${handle}`);
 
         if (res.ok) {
           const data: ProfileData = await res.json();
           if (data.visible) {
-            setState({ status: 'visible', data, token });
+            setState({ status: 'visible', data, isOwnAuth: isLoggedIn && isOwnProfile });
             return;
           }
           if (isOwnProfile) {
-            const fullData = await buildOwnProfile(handle, meData!, authHeaders);
-            setState({ status: 'visible', data: fullData, token });
+            const fullData = await buildOwnProfile(handle, meData!);
+            setState({ status: 'visible', data: fullData, isOwnAuth: true });
             return;
           }
-          setState({ status: 'circles', handle, isLoggedIn: !!token });
+          setState({ status: 'circles', handle, isLoggedIn });
           return;
         }
 
         if (isOwnProfile) {
-          const fullData = await buildOwnProfile(handle, meData!, authHeaders);
-          setState({ status: 'visible', data: fullData, token });
+          const fullData = await buildOwnProfile(handle, meData!);
+          setState({ status: 'visible', data: fullData, isOwnAuth: true });
           return;
         }
 
         setState({ status: 'private', handle });
       } catch {
         if (isOwnProfile) {
-          const fullData = await buildOwnProfile(handle, meData!, authHeaders);
-          setState({ status: 'visible', data: fullData, token });
+          const fullData = await buildOwnProfile(handle, meData!);
+          setState({ status: 'visible', data: fullData, isOwnAuth: true });
           return;
         }
         setState({ status: 'private', handle });
@@ -160,15 +153,14 @@ export default function ProfileClient({ handle }: { handle: string }) {
     async function buildOwnProfile(
       profileHandle: string,
       me: { handle?: string; name?: string; runner_level?: string; profile_privacy?: string },
-      headers: Record<string, string>,
     ): Promise<ProfileData> {
       const [statsRes, streakRes, achievementsRes, prsRes, scenicRes, goalsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/stats`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/streak`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/achievements`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/personal-records`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/scenic-runs`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/goals`, { headers }).catch(() => null),
+        fetch('/api/backend/stats').catch(() => null),
+        fetch('/api/backend/streak').catch(() => null),
+        fetch('/api/backend/achievements').catch(() => null),
+        fetch('/api/backend/personal-records').catch(() => null),
+        fetch('/api/backend/scenic-runs').catch(() => null),
+        fetch('/api/backend/goals').catch(() => null),
       ]);
 
       const stats = statsRes?.ok ? await statsRes.json() : {};
@@ -246,7 +238,7 @@ export default function ProfileClient({ handle }: { handle: string }) {
     return <CirclesView handle={state.handle} isLoggedIn={state.isLoggedIn} />;
   }
 
-  return <FullProfile data={state.data} token={state.token} />;
+  return <FullProfile data={state.data} isOwnAuth={state.isOwnAuth} />;
 }
 
 function PrivateView({ handle }: { handle: string }) {
@@ -297,7 +289,7 @@ function CirclesView({ handle, isLoggedIn }: { handle: string; isLoggedIn: boole
 
 const DISTANCE_ORDER = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
 
-function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
+function FullProfile({ data, isOwnAuth }: { data: ProfileData; isOwnAuth?: boolean }) {
   const level = LEVEL_META[data.runner_level || 'breath'] || LEVEL_META.breath;
   const rhythm = getRhythmStage(data.current_streak || 0);
   const memberSince = data.member_since
@@ -329,8 +321,8 @@ function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
   return (
     <section className="py-16 md:py-24">
       <div className="max-w-2xl mx-auto px-6">
-        {data.is_own_profile && token && (
-          <PrivacyToggle currentPrivacy={data.privacy} token={token} />
+        {data.is_own_profile && isOwnAuth && (
+          <PrivacyToggle currentPrivacy={data.privacy} />
         )}
 
         <div className="text-center mb-12">

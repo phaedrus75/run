@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 
-import { API_BASE_URL } from '../../../lib/config';
-
 const PRIVACY_OPTIONS = [
   { value: 'private', label: 'Private', emoji: '🔒', desc: 'Only you can see your profile' },
   { value: 'circles', label: 'Circles', emoji: '👥', desc: 'Visible to your circle members' },
@@ -12,10 +10,8 @@ const PRIVACY_OPTIONS = [
 
 export default function PrivacyToggle({
   currentPrivacy,
-  token,
 }: {
   currentPrivacy: string;
-  token: string;
 }) {
   const [privacy, setPrivacy] = useState(currentPrivacy);
   const [saving, setSaving] = useState(false);
@@ -26,12 +22,9 @@ export default function PrivacyToggle({
     setSaving(true);
     setSaved(false);
     try {
-      const res = await fetch(`${API_BASE_URL}/user/privacy`, {
+      const res = await fetch('/api/backend/user/privacy', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ privacy: newPrivacy }),
       });
       if (res.ok) {

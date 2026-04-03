@@ -4,16 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { API_BASE_URL } from '../lib/config';
-
 interface UserInfo {
   handle: string | null;
   name: string | null;
-}
-
-function getCookie(name: string): string | undefined {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
 }
 
 export default function AuthNav({ variant = 'header' }: { variant?: 'header' | 'footer' }) {
@@ -22,18 +15,10 @@ export default function AuthNav({ variant = 'header' }: { variant?: 'header' | '
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const token = getCookie('zenrun_token');
-    if (!token) {
-      setChecked(true);
-      return;
-    }
-
-    fetch(`${API_BASE_URL}/user/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
+    fetch('/api/auth/session')
+      .then((r) => r.json())
       .then((data) => {
-        if (data?.handle) {
+        if (data.authenticated && data.handle) {
           setUser({ handle: data.handle, name: data.name });
         }
       })
@@ -41,8 +26,8 @@ export default function AuthNav({ variant = 'header' }: { variant?: 'header' | '
       .finally(() => setChecked(true));
   }, []);
 
-  function handleLogout() {
-    document.cookie = 'zenrun_token=; path=/; max-age=0';
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
     router.push('/');
     router.refresh();
