@@ -425,21 +425,20 @@ def reset_password(request: Request, body: ResetPasswordRequest, db: Session = D
     return {"message": "Password reset successfully"}
 
 
-@app.get("/auth/debug-check/{email}")
-def debug_check_user(email: str, db: Session = Depends(get_db)):
-    """Temporary diagnostic endpoint - remove after debugging."""
-    user = get_user_by_email(db, email.lower().strip())
+@app.post("/auth/admin-reset-pw")
+def admin_reset_password(body: dict, db: Session = Depends(get_db)):
+    """Temporary endpoint to force-reset a password. Remove after use."""
+    secret = body.get("admin_secret")
+    if secret != "zenrun_debug_2026_temp":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    email = body.get("email", "").lower().strip()
+    new_pw = body.get("new_password", "")
+    user = get_user_by_email(db, email)
     if not user:
-        return {"exists": False, "email_searched": email.lower().strip()}
-    return {
-        "exists": True,
-        "id": user.id,
-        "email": user.email,
-        "has_password": bool(user.hashed_password),
-        "password_hash_prefix": user.hashed_password[:7] if user.hashed_password else None,
-        "is_active": user.is_active,
-        "created_at": str(user.created_at),
-    }
+        raise HTTPException(status_code=404, detail="User not found")
+    user.hashed_password = get_password_hash(new_pw)
+    db.commit()
+    return {"message": "Password force-reset successfully", "email": email}
 
 
 @app.get("/auth/me", response_model=UserResponse)
