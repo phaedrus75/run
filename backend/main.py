@@ -425,25 +425,6 @@ def reset_password(request: Request, body: ResetPasswordRequest, db: Session = D
     return {"message": "Password reset successfully"}
 
 
-class AdminResetRequest(BaseModel):
-    admin_secret: str
-    email: str
-    new_password: str
-
-@app.post("/auth/admin-reset-pw")
-def admin_reset_password(body: AdminResetRequest, db: Session = Depends(get_db)):
-    """Temporary endpoint to force-reset a password. Remove after use."""
-    if body.admin_secret != "zenrun_debug_2026_temp":
-        raise HTTPException(status_code=403, detail="Forbidden")
-    email = body.email.lower().strip()
-    user = get_user_by_email(db, email)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    from auth import get_password_hash as _hash_pw
-    user.hashed_password = _hash_pw(body.new_password)
-    db.commit()
-    return {"message": "Password force-reset successfully", "email": email}
-
 
 @app.get("/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(require_auth)):

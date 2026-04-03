@@ -62,9 +62,23 @@ export default function AuthScreen() {
         Alert.alert('Missing Fields', 'Please enter your email and password.');
         return;
       }
-      if (mode === 'signup' && password.length < 6) {
-        Alert.alert('Password Too Short', 'Use at least 6 characters.');
-        return;
+      if (mode === 'signup') {
+        if (password.length < 8) {
+          Alert.alert('Password Too Short', 'Use at least 8 characters.');
+          return;
+        }
+        if (!/[A-Z]/.test(password)) {
+          Alert.alert('Weak Password', 'Include at least one uppercase letter.');
+          return;
+        }
+        if (!/[a-z]/.test(password)) {
+          Alert.alert('Weak Password', 'Include at least one lowercase letter.');
+          return;
+        }
+        if (!/[0-9]/.test(password)) {
+          Alert.alert('Weak Password', 'Include at least one number.');
+          return;
+        }
       }
 
       setIsLoading(true);
@@ -102,8 +116,8 @@ export default function AuthScreen() {
         Alert.alert('Error', 'Please fill in all fields');
         return;
       }
-      if (password.length < 6) {
-        Alert.alert('Error', 'Password must be at least 6 characters');
+      if (password.length < 8) {
+        Alert.alert('Error', 'Password must be at least 8 characters with uppercase, lowercase, and a number.');
         return;
       }
       if (password !== confirmPassword) {
@@ -264,7 +278,7 @@ export default function AuthScreen() {
               <Text style={styles.label}>{mode === 'reset' ? 'New Password' : 'Password'}</Text>
               <TextInput
                 style={styles.input}
-                placeholder={mode === 'login' ? 'Your password' : 'At least 6 characters'}
+                placeholder={mode === 'login' ? 'Your password' : 'Min 8, upper + lower + number'}
                 placeholderTextColor={colors.textLight}
                 value={password}
                 onChangeText={setPassword}

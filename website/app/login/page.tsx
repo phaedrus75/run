@@ -90,8 +90,20 @@ function LoginForm() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setError('Password must contain at least one number');
       return;
     }
     setLoading(true);
@@ -206,7 +218,7 @@ function LoginForm() {
                   required
                   autoComplete="new-password"
                   className="w-full px-4 py-3 rounded-xl bg-warm-bg border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-coral/40 focus:border-coral transition-colors"
-                  placeholder="At least 6 characters"
+                  placeholder="Min 8 chars, upper + lower + number"
                 />
               </div>
             </>
