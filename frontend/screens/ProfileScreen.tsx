@@ -624,7 +624,7 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
           )}
         </TouchableOpacity>
 
-        <Text style={styles.version}>ZenRun v1.4.0</Text>
+        <Text style={styles.version}>ZenRun v1.5.1</Text>
       </ScrollView>
     </View>
   );
