@@ -7,7 +7,7 @@ import AuthNav from '../components/AuthNav';
 export const metadata: Metadata = {
   title: 'ZenRun — Your running journal.',
   description:
-    'A running journal built for consistency. Log your run in 2 seconds, build your rhythm and find joy in running.',
+    'A running journal built for consistency. Log your run in 2 seconds, build your rhythm and find joy in every step.',
   openGraph: {
     title: 'ZenRun — Your running journal.',
     description: 'Your running journal.',
@@ -65,7 +65,7 @@ function Footer() {
               <span className="text-xl font-bold text-white">ZenRun</span>
             </div>
             <p className="text-sm leading-relaxed max-w-md">
-              Show up. That&apos;s the whole plan. A running journal so you find joy in running.
+              Show up. That&apos;s the whole plan. A journal so you find joy in every run.
             </p>
           </div>
           <div>

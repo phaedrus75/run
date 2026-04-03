@@ -12,8 +12,8 @@ export default function Home() {
               </h1>
               <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
                 Running apps turned running into a spreadsheet. ZenRun is a
-                running journal &mdash; Log your run in 2 seconds, build your rhythm
-                and find joy in running.
+                journal &mdash; Log your run in 2 seconds, build your rhythm
+                and find joy in every step.
               </p>
               <div id="download" className="flex flex-wrap gap-4">
                 <a
