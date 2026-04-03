@@ -30,7 +30,7 @@ export function GoalsProgress({ goals }: GoalsProgressProps) {
                 style={[
                   styles.progressFill,
                   {
-                    width: `${yearly.percent}%`,
+                    width: `${Math.min(yearly.percent, 100)}%`,
                     backgroundColor: yearly.percent >= 100 ? colors.success : colors.primary,
                   },
                 ]}
@@ -79,7 +79,7 @@ export function GoalsProgress({ goals }: GoalsProgressProps) {
                 style={[
                   styles.progressFill,
                   {
-                    width: `${monthly.percent}%`,
+                    width: `${Math.min(monthly.percent, 100)}%`,
                     backgroundColor: monthly.is_complete ? colors.success : colors.secondary,
                   },
                 ]}

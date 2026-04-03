@@ -32,6 +32,7 @@ import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
 import { EditStepModal } from '../components/EditStepModal';
 import { MonthInReview } from '../components/MonthInReview';
+import { QuarterInReview } from '../components/QuarterInReview';
 import { useAuth } from '../contexts/AuthContext';
 import { runApi, statsApi, stepsApi, type Run, type StepEntry, type MonthInReview as MonthInReviewType } from '../services/api';
 
@@ -95,6 +96,25 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   const [monthReviewData, setMonthReviewData] = useState<MonthInReviewType | null>(null);
   const [showMonthReview, setShowMonthReview] = useState(false);
   const availableMonths = getAvailableMonths();
+
+  // 📊 Quarter in Review state
+  const [showQuarterReview, setShowQuarterReview] = useState(false);
+  const [selectedQuarter, setSelectedQuarter] = useState(1);
+  const [selectedQuarterYear, setSelectedQuarterYear] = useState(2026);
+
+  const getAvailableQuarters = () => {
+    const now = new Date();
+    const quarters: { q: number; year: number; label: string }[] = [];
+    const currentQ = Math.ceil((now.getMonth() + 1) / 3);
+    for (let year = 2026; year <= now.getFullYear(); year++) {
+      const maxQ = year === now.getFullYear() ? currentQ : 4;
+      for (let q = 1; q <= maxQ; q++) {
+        quarters.push({ q, year, label: `Q${q} ${year}` });
+      }
+    }
+    return quarters.reverse();
+  };
+  const availableQuarters = getAvailableQuarters();
   
   // 📅 Fetch month review for a specific month
   const fetchMonthReview = async (month: number, year: number) => {
@@ -370,6 +390,30 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
               ))}
             </ScrollView>
           </View>
+
+          {/* 📊 Quarter in Review Section */}
+          <View style={styles.monthReviewSection}>
+            <Text style={styles.monthReviewTitle}>📊 Quarter in Review</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.monthScrollContent}
+            >
+              {availableQuarters.map(({ q, year: qYear, label }) => (
+                <TouchableOpacity
+                  key={`${qYear}-Q${q}`}
+                  style={[styles.monthChip, shadows.small]}
+                  onPress={() => {
+                    setSelectedQuarter(q);
+                    setSelectedQuarterYear(qYear);
+                    setShowQuarterReview(true);
+                  }}
+                >
+                  <Text style={styles.monthChipText}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
           
           {/* 🔍 Filters */}
           <View style={styles.filterContainer}>
@@ -526,6 +570,14 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
           onDismiss={() => setShowMonthReview(false)}
         />
       )}
+
+      {/* 📊 Quarter in Review Modal */}
+      <QuarterInReview
+        visible={showQuarterReview}
+        quarter={selectedQuarter}
+        year={selectedQuarterYear}
+        onClose={() => setShowQuarterReview(false)}
+      />
     </SafeAreaView>
   );
 }

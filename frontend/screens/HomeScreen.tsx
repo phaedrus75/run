@@ -39,6 +39,7 @@ import {
   WeekSummaryCard,
 } from '../components';
 import { MonthInReview } from '../components/MonthInReview';
+import { QuarterInReview } from '../components/QuarterInReview';
 import { WeeklyReflection } from '../components/WeeklyReflection';
 import { RhythmPlant } from '../components/RhythmPlant';
 import { ScenicRunsModal } from './ScenicRunsScreen';
@@ -90,6 +91,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [achievements, setAchievements] = useState<AchievementsData | null>(null);
   const [monthReview, setMonthReview] = useState<MonthInReviewType | null>(null);
   const [showMonthReview, setShowMonthReview] = useState(false);
+  const [showQuarterReview, setShowQuarterReview] = useState(false);
+  const [autoQuarter, setAutoQuarter] = useState<{ q: number; year: number } | null>(null);
   const [dailyWisdom, setDailyWisdom] = useState<DailyWisdom | null>(null);
   const [seasonalMarkers, setSeasonalMarkers] = useState<SeasonalMarker[]>([]);
   const [streakHistory, setStreakHistory] = useState<StreakPeriod[]>([]);
@@ -161,6 +164,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           setMonthReview(monthReviewData);
           setShowMonthReview(true);
         }
+
+        const now = new Date();
+        const dayOfMonth = now.getDate();
+        const month = now.getMonth() + 1;
+        if (dayOfMonth <= 7 && [1, 4, 7, 10].includes(month)) {
+          const prevQ = month === 1 ? 4 : Math.ceil((month - 1) / 3);
+          const prevYear = month === 1 ? now.getFullYear() - 1 : now.getFullYear();
+          setAutoQuarter({ q: prevQ, year: prevYear });
+          setShowQuarterReview(true);
+        }
+
         if (wisdomData) setDailyWisdom(wisdomData);
         setSeasonalMarkers(markersData?.markers || []);
         setStreakHistory(historyData || []);
@@ -452,6 +466,16 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <MonthInReview 
           data={monthReview}
           onDismiss={() => setShowMonthReview(false)}
+        />
+      )}
+
+      {/* 📊 Quarter in Review Modal */}
+      {autoQuarter && (
+        <QuarterInReview
+          visible={showQuarterReview}
+          quarter={autoQuarter.q}
+          year={autoQuarter.year}
+          onClose={() => setShowQuarterReview(false)}
         />
       )}
       

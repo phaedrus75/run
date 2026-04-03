@@ -525,10 +525,13 @@ export interface MonthInReview {
   days_15k: number;
   days_20k: number;
   days_25k: number;
+  days_30k: number;
   start_weight: number | null;
   end_weight: number | null;
   weight_change: number | null;
   best_streak_in_month: number;
+  rhythm_weeks_hit: number;
+  rhythm_weeks_total: number;
   monthly_km_goal: number;
   monthly_km_achieved: number;
   goal_percent: number;

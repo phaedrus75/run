@@ -723,6 +723,8 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
                 "end_weight": None,
                 "weight_change": None,
                 "best_streak_in_month": 0,
+                "rhythm_weeks_hit": 0,
+                "rhythm_weeks_total": 0,
                 "monthly_km_goal": 0,
                 "monthly_km_achieved": 0,
                 "goal_percent": 0,
@@ -792,6 +794,7 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
     days_15k = len([s for s in step_entries if s.step_count >= 15000])
     days_20k = len([s for s in step_entries if s.step_count >= 20000])
     days_25k = len([s for s in step_entries if s.step_count >= 25000])
+    days_30k = len([s for s in step_entries if s.step_count >= 30000])
     
     # Weight progress for the month
     weight_query = db.query(Weight).filter(
@@ -818,7 +821,27 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
             current_streak = 1
         best_streak = max(best_streak, current_streak)
         prev_date = d
-    
+
+    # Rhythm weeks: count Sun-Sat weeks in this month with 2+ runs
+    first_sunday = month_start - timedelta(days=(month_start.weekday() + 1) % 7)
+    if first_sunday < month_start:
+        first_sunday = first_sunday  # keep it, we'll check overlap
+    week_start = first_sunday
+    rhythm_weeks_hit = 0
+    rhythm_weeks_total = 0
+    while week_start <= month_end:
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        overlap_start = max(week_start, month_start)
+        overlap_end = min(week_end, month_end)
+        if overlap_start <= overlap_end:
+            mid = overlap_start + (overlap_end - overlap_start) / 2
+            if mid.month == review_month and mid.year == review_year:
+                rhythm_weeks_total += 1
+                week_runs = [r for r in runs if week_start <= r.completed_at <= week_end]
+                if len(week_runs) >= 2:
+                    rhythm_weeks_hit += 1
+        week_start = week_start + timedelta(days=7)
+
     from models import UserGoals, User as UserModel
     from schemas import LEVEL_GOALS
     goals_query = db.query(UserGoals)
@@ -834,7 +857,7 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
             if u:
                 level = getattr(u, 'runner_level', 'breath') or 'breath'
         monthly_km_goal = LEVEL_GOALS.get(level, LEVEL_GOALS['breath'])["monthly_km"]
-    goal_percent = min((total_km / monthly_km_goal) * 100, 100) if monthly_km_goal > 0 else 0
+    goal_percent = (total_km / monthly_km_goal) * 100 if monthly_km_goal > 0 else 0
     goal_met = total_km >= monthly_km_goal
     
     # PRs achieved (simplified - would need to track actual PR dates)
@@ -885,10 +908,13 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
         "days_15k": days_15k,
         "days_20k": days_20k,
         "days_25k": days_25k,
+        "days_30k": days_30k,
         "start_weight": start_weight,
         "end_weight": end_weight,
         "weight_change": weight_change,
         "best_streak_in_month": best_streak,
+        "rhythm_weeks_hit": rhythm_weeks_hit,
+        "rhythm_weeks_total": rhythm_weeks_total,
         "monthly_km_goal": monthly_km_goal,
         "monthly_km_achieved": round(total_km, 1),
         "goal_percent": round(goal_percent, 1),

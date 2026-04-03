@@ -325,49 +325,49 @@ ACHIEVEMENTS = {
     },
     "streak_4": {
         "id": "streak_4", "name": "Young Tree",
-        "description": "A month of practice",
+        "description": "A month of rhythm",
         "emoji": "🌴", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 4,
     },
     "streak_6": {
         "id": "streak_6", "name": "Sapling",
-        "description": "6 weeks of practice",
+        "description": "6 weeks of rhythm",
         "emoji": "🌾", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 6,
     },
     "streak_8": {
         "id": "streak_8", "name": "Growing Strong",
-        "description": "Two months of practice",
+        "description": "Two months of rhythm",
         "emoji": "🍀", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 8,
     },
     "streak_12": {
         "id": "streak_12", "name": "Deep Roots",
-        "description": "A quarter year of practice",
+        "description": "A quarter year of rhythm",
         "emoji": "🌳", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 12,
     },
     "streak_16": {
         "id": "streak_16", "name": "Through Seasons",
-        "description": "Four months of practice",
+        "description": "Four months of rhythm",
         "emoji": "🍂", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 16,
     },
     "streak_26": {
         "id": "streak_26", "name": "Mighty Oak",
-        "description": "Half a year of practice",
+        "description": "Half a year of rhythm",
         "emoji": "🌲", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 26,
     },
     "streak_40": {
         "id": "streak_40", "name": "Ancient Grove",
-        "description": "Ten months of practice",
+        "description": "Ten months of rhythm",
         "emoji": "🏔️", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 40,
     },
     "streak_52": {
         "id": "streak_52", "name": "Evergreen",
-        "description": "A full year of practice",
+        "description": "A full year of rhythm",
         "emoji": "🌅", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 52,
     },
@@ -739,7 +739,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
         Run.completed_at >= min_date
     ).all()
     yearly_km = sum(r.distance_km for r in year_runs)
-    yearly_percent = min(100, (yearly_km / yearly_target) * 100) if yearly_target > 0 else 0
+    yearly_percent = (yearly_km / yearly_target) * 100 if yearly_target > 0 else 0
 
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_runs = base_query().filter(
@@ -747,7 +747,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
         Run.completed_at >= min_date
     ).all()
     monthly_km = sum(r.distance_km for r in month_runs)
-    monthly_percent = min(100, (monthly_km / monthly_target) * 100) if monthly_target > 0 else 0
+    monthly_percent = (monthly_km / monthly_target) * 100 if monthly_target > 0 else 0
 
     # Count months where full monthly goal was hit (only months after joining)
     first_month = joined_at.month if (joined_at and joined_at.year == now.year) else 1
