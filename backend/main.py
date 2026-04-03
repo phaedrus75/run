@@ -425,6 +425,23 @@ def reset_password(request: Request, body: ResetPasswordRequest, db: Session = D
     return {"message": "Password reset successfully"}
 
 
+@app.get("/auth/debug-check/{email}")
+def debug_check_user(email: str, db: Session = Depends(get_db)):
+    """Temporary diagnostic endpoint - remove after debugging."""
+    user = get_user_by_email(db, email.lower().strip())
+    if not user:
+        return {"exists": False, "email_searched": email.lower().strip()}
+    return {
+        "exists": True,
+        "id": user.id,
+        "email": user.email,
+        "has_password": bool(user.hashed_password),
+        "password_hash_prefix": user.hashed_password[:7] if user.hashed_password else None,
+        "is_active": user.is_active,
+        "created_at": str(user.created_at),
+    }
+
+
 @app.get("/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(require_auth)):
     """
