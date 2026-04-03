@@ -30,7 +30,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E3A5F"
       },
-      "package": "com.phaedrus75.runzen"
+      "package": "com.phaedrus75.runzen",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
