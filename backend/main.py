@@ -511,33 +511,38 @@ def delete_account(request: Request, current_user: User = Depends(require_auth),
 
     user_id = current_user.id
 
-    db.query(RunPhoto).filter(RunPhoto.user_id == user_id).delete()
-    db.query(CircleFeedReaction).filter(CircleFeedReaction.user_id == user_id).delete()
-    db.query(CircleCheckin).filter(CircleCheckin.user_id == user_id).delete()
-    db.query(CircleMembership).filter(CircleMembership.user_id == user_id).delete()
-    db.query(WeeklyReflection).filter(WeeklyReflection.user_id == user_id).delete()
-    db.query(Run).filter(Run.user_id == user_id).delete()
-    db.query(WeeklyPlan).filter(WeeklyPlan.user_id == user_id).delete()
-    db.query(Weight).filter(Weight.user_id == user_id).delete()
-    db.query(StepEntry).filter(StepEntry.user_id == user_id).delete()
-    db.query(UserGoals).filter(UserGoals.user_id == user_id).delete()
-    db.query(PasswordResetToken).filter(PasswordResetToken.user_id == user_id).delete()
+    try:
+        db.query(RunPhoto).filter(RunPhoto.user_id == user_id).delete()
+        db.query(CircleFeedReaction).filter(CircleFeedReaction.user_id == user_id).delete()
+        db.query(CircleCheckin).filter(CircleCheckin.user_id == user_id).delete()
+        db.query(CircleMembership).filter(CircleMembership.user_id == user_id).delete()
+        db.query(WeeklyReflection).filter(WeeklyReflection.user_id == user_id).delete()
+        db.query(Run).filter(Run.user_id == user_id).delete()
+        db.query(WeeklyPlan).filter(WeeklyPlan.user_id == user_id).delete()
+        db.query(Weight).filter(Weight.user_id == user_id).delete()
+        db.query(StepEntry).filter(StepEntry.user_id == user_id).delete()
+        db.query(UserGoals).filter(UserGoals.user_id == user_id).delete()
+        db.query(PasswordResetToken).filter(PasswordResetToken.user_id == user_id).delete()
 
-    owned_circles = db.query(Circle).filter(Circle.created_by == user_id).all()
-    for circle in owned_circles:
-        remaining = db.query(CircleMembership).filter(
-            CircleMembership.circle_id == circle.id
-        ).count()
-        if remaining == 0:
-            db.delete(circle)
-        else:
-            new_owner = db.query(CircleMembership).filter(
+        owned_circles = db.query(Circle).filter(Circle.created_by == user_id).all()
+        for circle in owned_circles:
+            remaining = db.query(CircleMembership).filter(
                 CircleMembership.circle_id == circle.id
-            ).first()
-            circle.created_by = new_owner.user_id if new_owner else None
+            ).count()
+            if remaining == 0:
+                db.delete(circle)
+            else:
+                new_owner = db.query(CircleMembership).filter(
+                    CircleMembership.circle_id == circle.id
+                ).first()
+                circle.created_by = new_owner.user_id if new_owner else None
 
-    db.delete(current_user)
-    db.commit()
+        db.delete(current_user)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"DELETE ACCOUNT ERROR for user {user_id}: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {type(e).__name__}: {e}")
 
     return {"message": "Account and all associated data have been permanently deleted"}
 
