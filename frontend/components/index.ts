@@ -10,7 +10,6 @@ export { RunTypeButton } from './RunTypeButton';
 export { Timer } from './Timer';
 export { StatCard } from './StatCard';
 export { RunHistoryCard } from './RunHistoryCard';
-export { MotivationBanner } from './MotivationBanner';
 export { EditRunModal } from './EditRunModal';
 export { StatsChart } from './StatsChart';
 export { StreakProgress } from './StreakProgress';

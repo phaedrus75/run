@@ -107,13 +107,6 @@ export interface ScenicRun {
   cover_photo: string | null;
 }
 
-export interface WeeklyPlan {
-  id: number;
-  week_id: string;
-  planned_runs: string[];
-  created_at: string;
-}
-
 export interface Stats {
   total_runs: number;
   total_km: number;
@@ -305,39 +298,6 @@ export const runApi = {
 };
 
 // ==========================================
-// 📅 WEEKLY PLAN API
-// ==========================================
-
-export const planApi = {
-  /**
-   * 📅 Create or update a weekly plan
-   */
-  create: (plan: {
-    week_id: string;
-    planned_runs: string[];
-  }): Promise<WeeklyPlan> => {
-    return apiFetch('/plans', {
-      method: 'POST',
-      body: JSON.stringify(plan),
-    });
-  },
-
-  /**
-   * 📅 Get current week's plan
-   */
-  getCurrent: (): Promise<WeeklyPlan> => {
-    return apiFetch('/plans/current');
-  },
-
-  /**
-   * 📅 Get a specific week's plan
-   */
-  get: (weekId: string): Promise<WeeklyPlan> => {
-    return apiFetch(`/plans/${weekId}`);
-  },
-};
-
-// ==========================================
 // 📊 STATS API
 // ==========================================
 
@@ -385,23 +345,6 @@ export const statsApi = {
     return apiFetch('/achievements');
   },
 
-  /**
-   * ⚖️ Get weight progress
-   */
-  getWeightProgress: (): Promise<WeightProgress> => {
-    return apiFetch('/weight-progress');
-  },
-
-  /**
-   * ⚖️ Get weight chart data
-   */
-  getWeightChart: (): Promise<WeightChartData[]> => {
-    return apiFetch('/weight-chart');
-  },
-
-  /**
-   * 📅 Get month in review data
-   */
   getDailyWisdom: (): Promise<DailyWisdom> => {
     return apiFetch('/daily-wisdom');
   },
@@ -618,45 +561,6 @@ export const photoApi = {
 // ==========================================
 
 /**
- * Get the current week ID (YYYY-Www)
- * Uses Sunday-Saturday weeks (US standard)
- */
-export function getCurrentWeekId(): string {
-  const now = new Date();
-  
-  // Find the Sunday that starts this week
-  const dayOfWeek = now.getDay(); // 0 = Sunday
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() - dayOfWeek);
-  sunday.setHours(0, 0, 0, 0);
-  
-  // Calculate week number (weeks since start of year)
-  const startOfYear = new Date(sunday.getFullYear(), 0, 1);
-  const days = Math.floor((sunday.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
-  const weekNumber = Math.floor(days / 7) + 1;
-  
-  return `${sunday.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
-}
-
-/**
- * Get the start (Sunday) and end (Saturday) of current week
- */
-export function getCurrentWeekRange(): { start: Date; end: Date } {
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday
-  
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() - dayOfWeek);
-  sunday.setHours(0, 0, 0, 0);
-  
-  const saturday = new Date(sunday);
-  saturday.setDate(sunday.getDate() + 6);
-  saturday.setHours(23, 59, 59, 999);
-  
-  return { start: sunday, end: saturday };
-}
-
-/**
  * Format seconds to mm:ss
  */
 export function formatDuration(seconds: number): string {
@@ -693,9 +597,6 @@ export const reflectionsApi = {
       method: 'POST',
       body: JSON.stringify({ reflection, mood }),
     });
-  },
-  getAll: (): Promise<any[]> => {
-    return apiFetch('/reflections');
   },
 };
 

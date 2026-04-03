@@ -11,29 +11,9 @@ Think of them as blueprints for our data.
 - SQLAlchemy converts these Python classes to SQL automatically!
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.sql import func
 from database import Base
-import enum
-
-
-class RunType(str, enum.Enum):
-    ONE_K = "1k"
-    TWO_K = "2k"
-    THREE_K = "3k"
-    FIVE_K = "5k"
-    EIGHT_K = "8k"
-    TEN_K = "10k"
-    FIFTEEN_K = "15k"
-    EIGHTEEN_K = "18k"
-    TWENTY_ONE_K = "21k"
-
-
-class RunnerLevel(str, enum.Enum):
-    BREATH = "breath"
-    STRIDE = "stride"
-    FLOW = "flow"
-    ZEN = "zen"
 
 
 class Run(Base):
@@ -83,55 +63,6 @@ class Run(Base):
     mood = Column(String, nullable=True)
 
 
-class WeeklyPlan(Base):
-    """
-    📅 Weekly Plan Model - Your running goals for a week
-    
-    Plan which runs you want to do each week.
-    """
-    __tablename__ = "weekly_plans"
-    
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    
-    # 👤 User who logged this run
-    user_id = Column(Integer, nullable=True, index=True)
-    
-    # 📅 Week identifier (e.g., "2024-W01" for first week of 2024)
-    week_id = Column(String, nullable=False, unique=True)
-    
-    # 🎯 Planned runs as JSON string
-    # Example: ["3k", "5k", "3k", "10k"]
-    planned_runs = Column(String, nullable=False)
-    
-    # 📅 When this plan was created
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class UserStats(Base):
-    """
-    📊 User Stats Model - Aggregated statistics
-    
-    We could calculate these on-the-fly, but storing them
-    makes the app faster. Updated after each run.
-    """
-    __tablename__ = "user_stats"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    
-    # 🔢 Total number of runs completed
-    total_runs = Column(Integer, default=0)
-    
-    # 📏 Total kilometers run
-    total_km = Column(Float, default=0.0)
-    
-    # 🏆 Current streak (consecutive days with runs)
-    current_streak = Column(Integer, default=0)
-    
-    # 🎖️ Longest streak ever
-    longest_streak = Column(Integer, default=0)
-    
-    # 📅 Last updated
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class Weight(Base):

@@ -17,19 +17,6 @@ Why separate? Security and flexibility!
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
-from enum import Enum
-
-
-class RunType(str, Enum):
-    ONE_K = "1k"
-    TWO_K = "2k"
-    THREE_K = "3k"
-    FIVE_K = "5k"
-    EIGHT_K = "8k"
-    TEN_K = "10k"
-    FIFTEEN_K = "15k"
-    EIGHTEEN_K = "18k"
-    TWENTY_ONE_K = "21k"
 
 
 RUN_DISTANCES = {
@@ -160,34 +147,6 @@ class RunResponse(BaseModel):
         from_attributes = True
 
 
-# ==========================================
-# 📅 WEEKLY PLAN SCHEMAS
-# ==========================================
-
-class WeeklyPlanCreate(BaseModel):
-    """Schema for creating a weekly plan"""
-    week_id: str = Field(..., description="Week identifier like '2024-W01'")
-    planned_runs: List[str] = Field(..., description="List of planned run types")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "week_id": "2024-W01",
-                "planned_runs": ["3k", "5k", "3k", "10k"]
-            }
-        }
-
-
-class WeeklyPlanResponse(BaseModel):
-    """Schema for returning weekly plan data"""
-    id: int
-    week_id: str
-    planned_runs: List[str]
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
-
 
 # ==========================================
 # 📊 STATS SCHEMAS
@@ -242,110 +201,3 @@ class WeeklyStreakProgress(BaseModel):
     missed_last_week: bool = False
 
 
-# ==========================================
-# ⚖️ WEIGHT TRACKING SCHEMAS
-# ==========================================
-
-class WeightCreate(BaseModel):
-    """
-    📥 Schema for CREATING a weight entry
-    """
-    weight_lbs: float = Field(..., gt=0, description="Weight in pounds")
-    recorded_at: Optional[datetime] = Field(None, description="When this weight was recorded (for backdating)")
-    notes: Optional[str] = Field(None, description="Optional notes")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "weight_lbs": 205.5,
-                "recorded_at": "2026-01-10T08:00:00",
-                "notes": "Morning weight"
-            }
-        }
-
-
-class WeightResponse(BaseModel):
-    """
-    📤 Schema for RETURNING weight data
-    """
-    id: int
-    weight_lbs: float
-    recorded_at: datetime
-    notes: Optional[str]
-    
-    class Config:
-        from_attributes = True
-
-
-class WeightProgress(BaseModel):
-    """
-    📊 Weight Progress Summary
-    
-    Shows progress toward weight goal.
-    """
-    start_weight: float  # Starting weight (Jan 7: 209lb)
-    current_weight: float  # Most recent weight
-    goal_weight: float  # Target weight (180lb)
-    weight_lost: float  # How much lost so far
-    weight_to_lose: float  # How much left to lose
-    percent_complete: float  # Progress percentage
-    on_track: bool  # Are we on track to hit goal?
-    trend: str  # "down", "up", "stable"
-    entries_count: int  # Total weight entries
-
-
-# ==========================================
-# 📅 MONTH IN REVIEW SCHEMAS
-# ==========================================
-
-class MonthInReview(BaseModel):
-    """
-    📅 Month in Review Summary
-    
-    Comprehensive monthly stats shown at end of month / start of next.
-    """
-    # Month info
-    month_name: str  # "January 2026"
-    year: int
-    month: int
-    
-    # Running stats
-    total_runs: int
-    total_km: float
-    total_duration_seconds: int
-    avg_pace: str  # "6:30"
-    
-    # Run breakdown
-    outdoor_runs: int
-    treadmill_runs: int
-    runs_by_type: dict  # {"3k": 5, "5k": 10, "10k": 3}
-    
-    # Steps stats
-    total_step_days: int
-    total_steps: int
-    avg_daily_steps: int
-    high_step_days: int  # Days with 10k+ steps
-    
-    # Weight progress
-    start_weight: Optional[float]
-    end_weight: Optional[float]
-    weight_change: Optional[float]
-    
-    # Streaks
-    best_streak_in_month: int
-    
-    # Goals
-    monthly_km_goal: float
-    monthly_km_achieved: float
-    goal_percent: float
-    goal_met: bool
-    
-    # Personal bests achieved
-    prs_achieved: List[str]  # ["Fastest 5k", "Longest run"]
-    
-    # Comparison to previous month
-    km_vs_last_month: float  # +5.2 or -3.1
-    runs_vs_last_month: int  # +3 or -2
-    
-    # Should show (last day of month or first 7 days of next month)
-    should_show: bool

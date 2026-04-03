@@ -40,7 +40,7 @@ def _get_real_client_ip(request: Request) -> str:
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, WeeklyPlan, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection
+from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email, get_user_by_id,
@@ -48,7 +48,6 @@ from auth import (
 )
 from schemas import (
     RunCreate, RunUpdate, RunResponse, 
-    WeeklyPlanCreate, WeeklyPlanResponse,
     StatsResponse, MotivationalMessage, WeeklyStreakProgress,
     RUN_DISTANCES, LEVEL_DISTANCES, LEVEL_MAX, LEVEL_ORDER, LEVEL_INFO, LEVEL_GOALS
 )
@@ -183,9 +182,6 @@ def run_migrations():
                 """))
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_attempts INTEGER DEFAULT 0
-                """))
-                conn.execute(text("""
-                    ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS user_id INTEGER
                 """))
                 conn.commit()
                 
@@ -544,7 +540,7 @@ def delete_account(request: Request, current_user: User = Depends(require_auth),
     except Exception as e:
         db.rollback()
         print(f"DELETE ACCOUNT ERROR for user {user_id}: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete account: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete account")
 
     return {"message": "Account and all associated data have been permanently deleted"}
 
@@ -859,43 +855,6 @@ def delete_run(run_id: int, db: Session = Depends(get_db), current_user: User = 
     if not success:
         raise HTTPException(status_code=404, detail="Run not found")
     return {"message": "Run deleted successfully"}
-
-
-# ==========================================
-# 📅 WEEKLY PLAN ENDPOINTS
-# ==========================================
-
-@app.post("/plans", response_model=WeeklyPlanResponse)
-def create_weekly_plan(plan: WeeklyPlanCreate, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
-    """📅 Create or update a weekly plan (requires auth)."""
-    for run_type in plan.planned_runs:
-        if run_type not in RUN_DISTANCES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid run type: {run_type}"
-            )
-    
-    db_plan = crud.create_weekly_plan(db=db, plan=plan)
-    return format_plan_response(db_plan)
-
-
-@app.get("/plans/current", response_model=WeeklyPlanResponse)
-def get_current_week_plan(db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
-    """📅 Get this week's plan (requires auth)."""
-    week_id = crud.get_current_week_id()
-    plan = crud.get_weekly_plan(db, week_id=week_id)
-    if plan is None:
-        raise HTTPException(status_code=404, detail="No plan for this week")
-    return format_plan_response(plan)
-
-
-@app.get("/plans/{week_id}", response_model=WeeklyPlanResponse)
-def get_weekly_plan(week_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
-    """📅 Get a specific week's plan (requires auth)."""
-    plan = crud.get_weekly_plan(db, week_id=week_id)
-    if plan is None:
-        raise HTTPException(status_code=404, detail="Plan not found")
-    return format_plan_response(plan)
 
 
 # ==========================================
@@ -1487,15 +1446,6 @@ def check_all_celebrations(db: Session, new_run: Run, current_user) -> list:
     return celebrations
 
 
-def format_plan_response(plan: WeeklyPlan) -> dict:
-    """Format a WeeklyPlan for API response."""
-    return {
-        "id": plan.id,
-        "week_id": plan.week_id,
-        "planned_runs": json.loads(plan.planned_runs),
-        "created_at": plan.created_at,
-    }
-
 
 # ==========================================
 # 👥 CIRCLES (SOCIAL FEATURES)
@@ -2053,52 +2003,6 @@ def get_daily_wisdom(current_user: User = Depends(require_auth)):
     return {"text": quote["text"], "author": quote["author"]}
 
 
-# ==========================================
-# 🎭 MOOD INSIGHTS
-# ==========================================
-
-@app.get("/mood-insights")
-def get_mood_insights(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth)
-):
-    """Mood distribution and day-of-week patterns (requires auth)."""
-    from datetime import datetime
-    from collections import Counter
-    
-    min_date = datetime(2026, 1, 1)
-    query = db.query(Run).filter(
-        Run.completed_at >= min_date,
-        Run.user_id == current_user.id
-    )
-    runs = query.all()
-    
-    mood_runs = [r for r in runs if getattr(r, 'mood', None)]
-    total_with_mood = len(mood_runs)
-    
-    distribution = Counter(r.mood for r in mood_runs)
-    
-    day_moods = {}
-    for r in mood_runs:
-        day_name = r.completed_at.strftime("%A")
-        if day_name not in day_moods:
-            day_moods[day_name] = []
-        day_moods[day_name].append(r.mood)
-    
-    best_day = None
-    if day_moods:
-        day_scores = {}
-        mood_values = {"great": 4, "good": 3, "easy": 2, "tough": 1}
-        for day, moods in day_moods.items():
-            day_scores[day] = sum(mood_values.get(m, 0) for m in moods) / len(moods)
-        best_day = max(day_scores, key=day_scores.get)
-    
-    return {
-        "total_with_mood": total_with_mood,
-        "distribution": dict(distribution),
-        "best_day": best_day,
-    }
-
 
 # ==========================================
 # 📜 STREAK HISTORY
@@ -2253,44 +2157,6 @@ def create_circle_checkin(
     
     return {"id": checkin.id, "emoji": checkin.emoji, "message": checkin.message, "updated": False}
 
-
-@app.get("/circles/{circle_id}/checkins")
-def get_circle_checkins(
-    circle_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth)
-):
-    """Get this week's check-ins for a circle."""
-    membership = db.query(CircleMembership).filter(
-        CircleMembership.circle_id == circle_id,
-        CircleMembership.user_id == current_user.id
-    ).first()
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not a member of this circle")
-    
-    from datetime import datetime
-    now = datetime.now()
-    week_start, _ = crud.get_week_boundaries_for_date(now)
-    
-    checkins = db.query(CircleCheckin).filter(
-        CircleCheckin.circle_id == circle_id,
-        CircleCheckin.week_start == week_start
-    ).all()
-    
-    result = []
-    for c in checkins:
-        user = db.query(User).filter(User.id == c.user_id).first()
-        result.append({
-            "user_id": c.user_id,
-            "name": user.name if user else "Runner",
-            "handle": user.handle if user else None,
-            "emoji": c.emoji,
-            "message": c.message,
-            "is_you": c.user_id == current_user.id,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-        })
-    
-    return result
 
 
 # ==========================================

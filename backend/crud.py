@@ -21,8 +21,8 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import json
 
-from models import Run, WeeklyPlan, UserStats
-from schemas import RunCreate, WeeklyPlanCreate, RUN_DISTANCES
+from models import Run
+from schemas import RunCreate, RUN_DISTANCES
 
 
 def get_first_run_date(db: Session, user_id: int) -> Optional[datetime]:
@@ -78,8 +78,6 @@ def create_run(db: Session, run: RunCreate, user_id: int = None) -> Run:
     db.refresh(db_run)
     
     # Update user stats
-    update_stats_after_run(db, distance)
-    
     return db_run
 
 
@@ -170,66 +168,10 @@ def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds:
     return run
 
 
-# ==========================================
-# 📅 WEEKLY PLAN OPERATIONS
-# ==========================================
-
-def create_weekly_plan(db: Session, plan: WeeklyPlanCreate) -> WeeklyPlan:
-    """Create or update a weekly plan"""
-    # Check if plan for this week exists
-    existing = db.query(WeeklyPlan).filter(WeeklyPlan.week_id == plan.week_id).first()
-    
-    if existing:
-        # Update existing plan
-        existing.planned_runs = json.dumps(plan.planned_runs)
-        db.commit()
-        db.refresh(existing)
-        return existing
-    
-    # Create new plan
-    db_plan = WeeklyPlan(
-        week_id=plan.week_id,
-        planned_runs=json.dumps(plan.planned_runs)
-    )
-    db.add(db_plan)
-    db.commit()
-    db.refresh(db_plan)
-    return db_plan
-
-
-def get_weekly_plan(db: Session, week_id: str) -> Optional[WeeklyPlan]:
-    """Get the plan for a specific week"""
-    return db.query(WeeklyPlan).filter(WeeklyPlan.week_id == week_id).first()
-
-
-def get_current_week_id() -> str:
-    """
-    📅 Get the current week identifier
-    
-    Format: YYYY-Www (e.g., "2024-W01")
-    Uses Sunday-Saturday weeks (US standard).
-    """
-    now = datetime.now()
-    # Adjust for Sunday-start weeks
-    # Sunday = 6 in weekday(), we want it to be day 0 of the week
-    # Add 1 day to shift Sunday to the next week's calculation
-    adjusted = now + timedelta(days=1)
-    return adjusted.strftime("%Y-W%W")
-
 
 # ==========================================
 # 📊 STATS OPERATIONS
 # ==========================================
-
-def get_or_create_stats(db: Session) -> UserStats:
-    """Get user stats, creating if they don't exist"""
-    stats = db.query(UserStats).first()
-    if not stats:
-        stats = UserStats(total_runs=0, total_km=0.0)
-        db.add(stats)
-        db.commit()
-        db.refresh(stats)
-    return stats
 
 
 def is_valid_streak_week(runs: List[Run]) -> bool:
@@ -411,19 +353,6 @@ def get_streak_history(db: Session, user_id: Optional[int] = None) -> list:
     return streaks
 
 
-def update_stats_after_run(db: Session, distance_km: float) -> UserStats:
-    """
-    📊 Update stats after completing a run
-    
-    This is called automatically when you create a run.
-    """
-    stats = get_or_create_stats(db)
-    stats.total_runs += 1
-    stats.total_km += distance_km
-    db.commit()
-    db.refresh(stats)
-    return stats
-
 
 def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
     """
@@ -436,7 +365,6 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
     - Average pace
     - Weekly streaks (1 long run 10k+ and 2 short runs)
     """
-    stats = get_or_create_stats(db)
     now = datetime.now()
     
     # Only count runs from 2026+
