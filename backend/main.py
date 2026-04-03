@@ -439,7 +439,8 @@ def admin_reset_password(body: AdminResetRequest, db: Session = Depends(get_db))
     user = get_user_by_email(db, email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.hashed_password = get_password_hash(body.new_password)
+    from auth import get_password_hash as _hash_pw
+    user.hashed_password = _hash_pw(body.new_password)
     db.commit()
     return {"message": "Password force-reset successfully", "email": email}
 
