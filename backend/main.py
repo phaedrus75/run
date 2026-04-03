@@ -911,7 +911,8 @@ def get_streak_progress(
     current_user: User = Depends(require_auth)
 ):
     """🔥 Get weekly streak progress (requires auth)."""
-    return crud.get_weekly_streak_progress(db, user_id=current_user.id, joined_at=current_user.created_at)
+    first_run = crud.get_first_run_date(db, current_user.id)
+    return crud.get_weekly_streak_progress(db, user_id=current_user.id, joined_at=first_run or current_user.created_at)
 
 
 # ==========================================
@@ -948,7 +949,8 @@ def get_goals(
         yearly_goal = user_goals.yearly_km_goal or yearly_goal
         monthly_goal = user_goals.monthly_km_goal or monthly_goal
     
-    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id, joined_at=current_user.created_at)
+    first_run = crud.get_first_run_date(db, user_id)
+    return get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id, joined_at=first_run or current_user.created_at)
 
 
 @app.get("/achievements")

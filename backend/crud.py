@@ -25,6 +25,14 @@ from models import Run, WeeklyPlan, UserStats
 from schemas import RunCreate, WeeklyPlanCreate, RUN_DISTANCES
 
 
+def get_first_run_date(db: Session, user_id: int) -> Optional[datetime]:
+    """Return the completed_at of the user's earliest run, or None."""
+    first = db.query(Run.completed_at).filter(
+        Run.user_id == user_id
+    ).order_by(Run.completed_at.asc()).first()
+    return first[0] if first else None
+
+
 # ==========================================
 # 🏃 RUN OPERATIONS
 # ==========================================
