@@ -468,8 +468,8 @@ const s = StyleSheet.create({
   stepBadgeValue: { color: '#fff', fontSize: typography.sizes.xl, fontWeight: typography.weights.bold, marginTop: spacing.xs },
   stepBadgeLabel: { color: '#ffffffaa', fontSize: typography.sizes.xs, marginTop: 2 },
 
-  summaryGrid: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.lg },
-  summaryItem: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.lg, padding: spacing.md, minWidth: 72 },
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md, marginTop: spacing.lg, width: '100%', paddingHorizontal: spacing.xl },
+  summaryItem: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.lg, padding: spacing.lg, width: '44%' },
   summaryValue: { color: '#fff', fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold },
   summaryLabel: { color: '#ffffffaa', fontSize: typography.sizes.xs, marginTop: 2 },
   avgPaceSmall: { color: '#ffffffaa', fontSize: typography.sizes.sm, marginTop: spacing.md },

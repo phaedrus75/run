@@ -65,7 +65,12 @@ const FEATURES = [
       {
         icon: '📅',
         title: 'Month in Review',
-        desc: 'A calm summary of your month. Run breakdown by distance, step highlights, and a moment to reflect.',
+        desc: 'A Spotify Wrapped-style carousel at the end of each month. Swipe through your distance, runs, pace, rhythm, scenic photos, and goals — all on beautiful gradient slides.',
+      },
+      {
+        icon: '📊',
+        title: 'Quarter in Review',
+        desc: 'Every quarter, get a full-screen carousel summarising your running journey — total km, run breakdown, consistency, PRs, scenic moments, and more.',
       },
     ],
   },
@@ -118,7 +123,7 @@ const FEATURES = [
       {
         icon: '👟',
         title: 'Step Tracking (Optional)',
-        desc: 'Log high step days. See your 15K+, 20K+, and 25K+ milestones. Simple and optional.',
+        desc: 'Log high step days. See your 15K+, 20K+, 25K+, and 30K+ milestones. Simple and optional.',
       },
       {
         icon: '⚖️',

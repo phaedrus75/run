@@ -1937,6 +1937,11 @@ def get_public_profile(
                 "caption": cover.caption if cover else None,
             })
 
+    user_goals = db.query(UserGoals).filter(UserGoals.user_id == profile_user.id).first()
+    yearly_km_goal = user_goals.yearly_km_goal if user_goals else level_goals["yearly_km"]
+    yearly_km_done = round(sum(r.distance_km for r in all_runs), 1)
+    yearly_percent = round((yearly_km_done / yearly_km_goal) * 100, 1) if yearly_km_goal > 0 else 0
+
     return {
         "privacy": privacy,
         "visible": True,
@@ -1954,6 +1959,9 @@ def get_public_profile(
         "outdoor_km": outdoor_km,
         "treadmill_runs": len(treadmill_runs),
         "treadmill_km": treadmill_km,
+        "yearly_km_goal": yearly_km_goal,
+        "yearly_km_done": yearly_km_done,
+        "yearly_percent": yearly_percent,
         "monthly_summary": monthly_list,
         "scenic_photos": scenic_count,
         "scenic_runs": scenic_runs_count,

@@ -81,6 +81,9 @@ interface ProfileData {
   outdoor_km?: number;
   treadmill_runs?: number;
   treadmill_km?: number;
+  yearly_km_goal?: number;
+  yearly_km_done?: number;
+  yearly_percent?: number;
   monthly_summary?: { month: string; runs: number; km: number }[];
   scenic_photos?: number;
   scenic_runs?: number;
@@ -159,12 +162,13 @@ export default function ProfileClient({ handle }: { handle: string }) {
       me: { handle?: string; name?: string; runner_level?: string; profile_privacy?: string },
       headers: Record<string, string>,
     ): Promise<ProfileData> {
-      const [statsRes, streakRes, achievementsRes, prsRes, scenicRes] = await Promise.all([
+      const [statsRes, streakRes, achievementsRes, prsRes, scenicRes, goalsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/stats`, { headers }).catch(() => null),
         fetch(`${API_BASE_URL}/streak`, { headers }).catch(() => null),
         fetch(`${API_BASE_URL}/achievements`, { headers }).catch(() => null),
         fetch(`${API_BASE_URL}/personal-records`, { headers }).catch(() => null),
         fetch(`${API_BASE_URL}/scenic-runs`, { headers }).catch(() => null),
+        fetch(`${API_BASE_URL}/goals`, { headers }).catch(() => null),
       ]);
 
       const stats = statsRes?.ok ? await statsRes.json() : {};
@@ -172,6 +176,7 @@ export default function ProfileClient({ handle }: { handle: string }) {
       const achievements = achievementsRes?.ok ? await achievementsRes.json() : {};
       const prs = prsRes?.ok ? await prsRes.json() : {};
       const scenicRuns = scenicRes?.ok ? await scenicRes.json() : [];
+      const goalsData = goalsRes?.ok ? await goalsRes.json() : {};
 
       const totalSeconds = stats.total_duration_seconds || 0;
 
@@ -185,6 +190,10 @@ export default function ProfileClient({ handle }: { handle: string }) {
         caption: undefined,
       }));
 
+      const yearlyGoal = goalsData.yearly_km_goal || 0;
+      const yearlyDone = stats.total_km || 0;
+      const yearlyPct = yearlyGoal > 0 ? Math.round((yearlyDone / yearlyGoal) * 1000) / 10 : 0;
+
       return {
         privacy: me.profile_privacy || 'private',
         visible: true,
@@ -197,6 +206,9 @@ export default function ProfileClient({ handle }: { handle: string }) {
         total_hours: totalSeconds ? Math.round((totalSeconds / 3600) * 10) / 10 : 0,
         current_streak: streak.current_streak || 0,
         longest_streak: streak.longest_streak || 0,
+        yearly_km_goal: yearlyGoal,
+        yearly_km_done: Math.round(yearlyDone * 10) / 10,
+        yearly_percent: yearlyPct,
         outdoor_runs: stats.outdoor_runs,
         outdoor_km: stats.outdoor_km,
         treadmill_runs: stats.treadmill_runs,
@@ -346,6 +358,28 @@ function FullProfile({ data, token }: { data: ProfileData; token?: string }) {
           <StatCard value={`${data.total_km || 0}`} label="km" />
           <StatCard value={`${data.total_hours || 0}`} label="hours" />
         </div>
+
+        {(data.yearly_km_goal || 0) > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">2026 Goal</h2>
+              <span className="text-sm font-bold text-gray-900">{Math.round(data.yearly_percent || 0)}%</span>
+            </div>
+            <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min(data.yearly_percent || 0, 100)}%`,
+                  backgroundColor: (data.yearly_percent || 0) >= 100 ? '#4ECDC4' : '#E8756F',
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>{data.yearly_km_done || 0} km done</span>
+              <span>{data.yearly_km_goal} km goal</span>
+            </div>
+          </div>
+        )}
 
         {totalRuns > 0 && (
           <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
