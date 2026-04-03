@@ -23,7 +23,9 @@ export default async function MePage() {
         redirect(`/runner/${data.handle}`);
       }
     }
-  } catch {}
+  } catch (e: unknown) {
+    if (e && typeof e === 'object' && 'digest' in e) throw e;
+  }
 
   redirect('/login?redirect=/me');
 }

@@ -52,7 +52,7 @@ function LoginForm() {
       const data = await res.json();
       document.cookie = `zenrun_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure`;
       const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/me';
-      router.push(safeRedirect);
+      window.location.href = safeRedirect;
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
