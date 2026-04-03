@@ -91,7 +91,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [achievements, setAchievements] = useState<AchievementsData | null>(null);
   const [monthReview, setMonthReview] = useState<MonthInReviewType | null>(null);
   const [showMonthReview, setShowMonthReview] = useState(false);
+  const [monthBannerVisible, setMonthBannerVisible] = useState(false);
+  const monthDismissedRef = useRef(false);
   const [showQuarterReview, setShowQuarterReview] = useState(false);
+  const [quarterBannerVisible, setQuarterBannerVisible] = useState(false);
+  const quarterDismissedRef = useRef(false);
   const [autoQuarter, setAutoQuarter] = useState<{ q: number; year: number } | null>(null);
   const [dailyWisdom, setDailyWisdom] = useState<DailyWisdom | null>(null);
   const [seasonalMarkers, setSeasonalMarkers] = useState<SeasonalMarker[]>([]);
@@ -162,7 +166,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         }
         if (monthReviewData && monthReviewData.should_show) {
           setMonthReview(monthReviewData);
-          setShowMonthReview(true);
+          if (!monthDismissedRef.current) {
+            setMonthBannerVisible(true);
+          }
         }
 
         const now = new Date();
@@ -172,7 +178,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           const prevQ = month === 1 ? 4 : Math.ceil((month - 1) / 3);
           const prevYear = month === 1 ? now.getFullYear() - 1 : now.getFullYear();
           setAutoQuarter({ q: prevQ, year: prevYear });
-          setShowQuarterReview(true);
+          if (!quarterDismissedRef.current) {
+            setQuarterBannerVisible(true);
+          }
         }
 
         if (wisdomData) setDailyWisdom(wisdomData);
@@ -353,6 +361,58 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
 
+        {/* Review Banners */}
+        {quarterBannerVisible && autoQuarter && (
+          <TouchableOpacity
+            style={[styles.reviewBanner, { backgroundColor: '#E8756F' }]}
+            onPress={() => setShowQuarterReview(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.reviewBannerContent}>
+              <Text style={styles.reviewBannerEmoji}>📊</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.reviewBannerTitle}>Q{autoQuarter.q} {autoQuarter.year} in Review</Text>
+                <Text style={styles.reviewBannerSubtitle}>Tap to see your quarter wrapped</Text>
+              </View>
+              <TouchableOpacity
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  quarterDismissedRef.current = true;
+                  setQuarterBannerVisible(false);
+                }}
+              >
+                <Ionicons name="close" size={18} color="#ffffffaa" />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        )}
+        {monthBannerVisible && monthReview && (
+          <TouchableOpacity
+            style={[styles.reviewBanner, { backgroundColor: '#7BAFA6' }]}
+            onPress={() => setShowMonthReview(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.reviewBannerContent}>
+              <Text style={styles.reviewBannerEmoji}>📅</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.reviewBannerTitle}>{monthReview.month_name.split(' ')[0]} in Review</Text>
+                <Text style={styles.reviewBannerSubtitle}>Tap to see your month wrapped</Text>
+              </View>
+              <TouchableOpacity
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  monthDismissedRef.current = true;
+                  setMonthBannerVisible(false);
+                }}
+              >
+                <Ionicons name="close" size={18} color="#ffffffaa" />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Seasonal Markers */}
         {seasonalMarkers.length > 0 && (
           <View style={styles.seasonalCard}>
@@ -462,7 +522,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       />
       
       {/* 📅 Month in Review Modal */}
-      {monthReview && showMonthReview && (
+      {showMonthReview && monthReview && (
         <MonthInReview 
           data={monthReview}
           onDismiss={() => setShowMonthReview(false)}
@@ -470,7 +530,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       )}
 
       {/* 📊 Quarter in Review Modal */}
-      {autoQuarter && (
+      {showQuarterReview && autoQuarter && (
         <QuarterInReview
           visible={showQuarterReview}
           quarter={autoQuarter.q}
@@ -737,6 +797,29 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     lineHeight: 20,
+    marginTop: 2,
+  },
+  reviewBanner: {
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  reviewBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reviewBannerEmoji: {
+    fontSize: 24,
+    marginRight: spacing.sm,
+  },
+  reviewBannerTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: '#fff',
+  },
+  reviewBannerSubtitle: {
+    fontSize: typography.sizes.xs,
+    color: '#ffffffbb',
     marginTop: 2,
   },
   comebackBanner: {

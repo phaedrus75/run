@@ -51,8 +51,9 @@ const getAvailableMonths = () => {
   const startMonth = 1; // January
   
   for (let year = startYear; year <= now.getFullYear(); year++) {
-    const endMonth = year === now.getFullYear() ? now.getMonth() + 1 : 12;
+    const endMonth = year === now.getFullYear() ? now.getMonth() : 12;
     const start = year === startYear ? startMonth : 1;
+    if (endMonth < start) continue;
     
     for (let month = start; month <= endMonth; month++) {
       const date = new Date(year, month - 1, 1);
@@ -107,7 +108,7 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     const quarters: { q: number; year: number; label: string }[] = [];
     const currentQ = Math.ceil((now.getMonth() + 1) / 3);
     for (let year = 2026; year <= now.getFullYear(); year++) {
-      const maxQ = year === now.getFullYear() ? currentQ : 4;
+      const maxQ = year === now.getFullYear() ? currentQ - 1 : 4;
       for (let q = 1; q <= maxQ; q++) {
         quarters.push({ q, year, label: `Q${q} ${year}` });
       }
