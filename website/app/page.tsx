@@ -17,7 +17,9 @@ export default function Home() {
               </p>
               <div id="download" className="flex flex-wrap gap-4">
                 <a
-                  href="#"
+                  href="https://apps.apple.com/app/zenrun/id6759347621"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-3 bg-gray-900 text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors"
                 >
                   <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
@@ -30,13 +32,13 @@ export default function Home() {
                 </a>
                 <a
                   href="#"
-                  className="inline-flex items-center gap-3 bg-gray-900 text-white px-6 py-3.5 rounded-xl hover:bg-gray-800 transition-colors"
+                  className="inline-flex items-center gap-3 bg-gray-900/50 text-white/70 px-6 py-3.5 rounded-xl cursor-default"
                 >
                   <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.443 1.413a1 1 0 010 1.74l-2.443 1.414L15.18 12l2.518-2.693zM5.864 2.658L16.8 8.99l-2.302 2.302L5.864 2.658z" />
                   </svg>
                   <div className="text-left">
-                    <div className="text-[10px] uppercase tracking-wide opacity-80">Get it on</div>
+                    <div className="text-[10px] uppercase tracking-wide opacity-80">Coming soon on</div>
                     <div className="text-base font-semibold -mt-0.5">Google Play</div>
                   </div>
                 </a>
@@ -421,7 +423,9 @@ export default function Home() {
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a
-              href="#"
+              href="https://apps.apple.com/app/zenrun/id6759347621"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-3 bg-coral hover:bg-coral-dark text-white px-8 py-4 rounded-xl transition-colors font-semibold"
             >
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
@@ -429,15 +433,14 @@ export default function Home() {
               </svg>
               Download for iOS
             </a>
-            <a
-              href="#"
-              className="inline-flex items-center gap-3 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-xl transition-colors font-semibold"
+            <span
+              className="inline-flex items-center gap-3 bg-white/10 text-white/50 px-8 py-4 rounded-xl font-semibold cursor-default"
             >
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.443 1.413a1 1 0 010 1.74l-2.443 1.414L15.18 12l2.518-2.693zM5.864 2.658L16.8 8.99l-2.302 2.302L5.864 2.658z" />
               </svg>
-              Download for Android
-            </a>
+              Android — Coming Soon
+            </span>
           </div>
         </div>
       </section>
