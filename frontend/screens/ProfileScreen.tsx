@@ -27,6 +27,7 @@ import {
 } from '../services/api';
 import { WeightTracker } from '../components/WeightTracker';
 import { StepsTracker } from '../components/StepsTracker';
+import { GymTracker } from '../components/GymTracker';
 
 import { API_BASE_URL } from '../services/config';
 
@@ -451,6 +452,29 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
               thumbColor="#fff"
             />
           </View>
+          <View style={styles.betaRow}>
+            <Ionicons name="barbell-outline" size={20} color={colors.secondary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.betaLabel}>Strength Training</Text>
+              <Text style={styles.betaDesc}>Beginner gym workout tracker</Text>
+            </View>
+            <Switch
+              value={!!user?.beta_gym_enabled}
+              onValueChange={async (val) => {
+                try {
+                  const token = await getToken();
+                  await fetch(`${API_BASE_URL}/user/beta-preferences`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ gym_enabled: val }),
+                  });
+                  await refreshUser();
+                } catch { Alert.alert('Error', 'Failed to update preference'); }
+              }}
+              trackColor={{ false: colors.border, true: colors.secondary }}
+              thumbColor="#fff"
+            />
+          </View>
         </View>
 
         {/* Handle */}
@@ -487,7 +511,7 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
         )}
 
         {/* Log Section Header — only show if any beta feature is enabled */}
-        {(user?.beta_steps_enabled || user?.beta_weight_enabled) && (
+        {(user?.beta_steps_enabled || user?.beta_weight_enabled || user?.beta_gym_enabled) && (
           <Text style={styles.groupTitle}>Log & Track</Text>
         )}
 
@@ -511,6 +535,11 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
               <Text style={styles.emptyText}>Set your start and goal weight below to begin tracking.</Text>
             </View>
           )
+        )}
+
+        {/* Strength Training */}
+        {user?.beta_gym_enabled && (
+          <GymTracker onUpdate={fetchAll} />
         )}
 
         {/* Goals Section Header */}

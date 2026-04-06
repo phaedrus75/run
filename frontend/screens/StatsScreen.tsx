@@ -20,6 +20,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { StatCard, StatsChart, PaceTrendChart, WeightTracker, StreakProgress } from '../components';
+import { GymTracker } from '../components/GymTracker';
 import { 
   runApi, 
   statsApi, 
@@ -33,7 +34,7 @@ import {
   type StepsSummary,
 } from '../services/api';
 
-type Section = 'runs' | 'steps' | 'weight';
+type Section = 'runs' | 'steps' | 'weight' | 'gym';
 type RunViewMode = 'week' | 'month' | 'all';
 type StepsViewMode = 'month' | 'all';
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
@@ -241,6 +242,7 @@ export function StatsScreen() {
     ];
     if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'High Step Days' });
     if (user?.beta_weight_enabled) tabs.push({ key: 'weight', label: 'Weight' });
+    if (user?.beta_gym_enabled) tabs.push({ key: 'gym', label: 'Gym' });
 
     if (tabs.length <= 1) return null;
 
@@ -721,6 +723,11 @@ export function StatsScreen() {
 
         {/* Weight Section */}
         {section === 'weight' && renderWeightSection()}
+
+        {/* Gym Section */}
+        {section === 'gym' && (
+          <GymTracker onUpdate={fetchData} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
