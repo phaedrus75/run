@@ -11,7 +11,7 @@ Think of them as blueprints for our data.
 - SQLAlchemy converts these Python classes to SQL automatically!
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.sql import func
 from database import Base
 
@@ -325,6 +325,27 @@ class PasswordResetToken(Base):
     
     # 📅 When created
     created_at = Column(DateTime, server_default=func.now())
+
+
+class Exercise(Base):
+    """Exercise catalog entry. Built-in exercises have user_id=NULL."""
+    __tablename__ = "exercises"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=True, index=True)
+    name = Column(String, nullable=False)
+    muscle_group = Column(String, nullable=False, server_default='other')
+    equipment = Column(String, nullable=True)
+    default_weight_kg = Column(Float, nullable=False, server_default='0')
+    increment_kg = Column(Float, nullable=False, server_default='2.5')
+    default_sets = Column(Integer, nullable=False, server_default='3')
+    default_reps = Column(Integer, nullable=False, server_default='10')
+    is_timed = Column(Boolean, default=False, server_default='false')
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'name', name='uq_exercise_user_name'),
+    )
 
 
 class GymWorkout(Base):

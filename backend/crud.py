@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import json
 
-from models import Run, GymWorkout
+from models import Run, GymWorkout, Exercise
 from schemas import RunCreate, RUN_DISTANCES
 
 
@@ -866,15 +866,92 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
 # ==========================================
 
 GYM_PROGRAM = [
-    {"name": "Leg Press", "sets": 3, "reps": 10, "default_weight_kg": 70, "machine": "Technogym Selection Leg Press", "increment_kg": 2.5},
-    {"name": "Chest Press", "sets": 3, "reps": 10, "default_weight_kg": 25, "machine": "Technogym Selection Chest Press", "increment_kg": 2.5},
-    {"name": "Lat Pulldown", "sets": 3, "reps": 10, "default_weight_kg": 30, "machine": "Technogym Selection Lat Machine", "increment_kg": 2.5},
-    {"name": "Shoulder Press", "sets": 3, "reps": 10, "default_weight_kg": 15, "machine": "Technogym Selection Shoulder Press", "increment_kg": 2.5},
-    {"name": "Seated Row", "sets": 3, "reps": 10, "default_weight_kg": 30, "machine": "Technogym Selection Low Row", "increment_kg": 2.5},
-    {"name": "Leg Curl", "sets": 3, "reps": 10, "default_weight_kg": 25, "machine": "Technogym Selection Prone Leg Curl", "increment_kg": 2.5},
-    {"name": "Plank", "sets": 3, "reps": 30, "default_weight_kg": 0, "machine": "Floor", "increment_kg": 0, "is_timed": True},
+    {"name": "Leg Press", "sets": 3, "reps": 10, "default_weight_kg": 70, "machine": "Technogym Selection Leg Press", "increment_kg": 2.5, "muscle_group": "legs"},
+    {"name": "Chest Press", "sets": 3, "reps": 10, "default_weight_kg": 25, "machine": "Technogym Selection Chest Press", "increment_kg": 2.5, "muscle_group": "chest"},
+    {"name": "Lat Pulldown", "sets": 3, "reps": 10, "default_weight_kg": 30, "machine": "Technogym Selection Lat Machine", "increment_kg": 2.5, "muscle_group": "back"},
+    {"name": "Shoulder Press", "sets": 3, "reps": 10, "default_weight_kg": 15, "machine": "Technogym Selection Shoulder Press", "increment_kg": 2.5, "muscle_group": "shoulders"},
+    {"name": "Seated Row", "sets": 3, "reps": 10, "default_weight_kg": 30, "machine": "Technogym Selection Low Row", "increment_kg": 2.5, "muscle_group": "back"},
+    {"name": "Leg Curl", "sets": 3, "reps": 10, "default_weight_kg": 25, "machine": "Technogym Selection Prone Leg Curl", "increment_kg": 2.5, "muscle_group": "legs"},
+    {"name": "Plank", "sets": 3, "reps": 30, "default_weight_kg": 0, "machine": "Floor", "increment_kg": 0, "is_timed": True, "muscle_group": "core"},
 ]
 
+
+# ---- Exercise Catalog ----
+
+def seed_builtin_exercises(db: Session):
+    """Upsert built-in exercises from GYM_PROGRAM into the Exercise table."""
+    from sqlalchemy import and_
+    for ex in GYM_PROGRAM:
+        existing = db.query(Exercise).filter(
+            and_(Exercise.user_id.is_(None), Exercise.name == ex["name"])
+        ).first()
+        if existing:
+            existing.muscle_group = ex.get("muscle_group", "other")
+            existing.equipment = ex.get("machine")
+            existing.default_weight_kg = ex["default_weight_kg"]
+            existing.increment_kg = ex["increment_kg"]
+            existing.default_sets = ex["sets"]
+            existing.default_reps = ex["reps"]
+            existing.is_timed = ex.get("is_timed", False)
+        else:
+            db.add(Exercise(
+                user_id=None,
+                name=ex["name"],
+                muscle_group=ex.get("muscle_group", "other"),
+                equipment=ex.get("machine"),
+                default_weight_kg=ex["default_weight_kg"],
+                increment_kg=ex["increment_kg"],
+                default_sets=ex["sets"],
+                default_reps=ex["reps"],
+                is_timed=ex.get("is_timed", False),
+            ))
+    db.commit()
+
+
+def get_exercises(db: Session, user_id: int) -> List[Exercise]:
+    """Return all exercises visible to this user (built-in + their custom)."""
+    from sqlalchemy import or_
+    return db.query(Exercise).filter(
+        or_(Exercise.user_id.is_(None), Exercise.user_id == user_id)
+    ).order_by(Exercise.name).all()
+
+
+def create_exercise(db: Session, user_id: int, name: str,
+                    muscle_group: str = "other", equipment: str = None,
+                    default_weight_kg: float = 0, increment_kg: float = 2.5,
+                    default_sets: int = 3, default_reps: int = 10,
+                    is_timed: bool = False) -> Exercise:
+    ex = Exercise(
+        user_id=user_id,
+        name=name,
+        muscle_group=muscle_group,
+        equipment=equipment,
+        default_weight_kg=default_weight_kg,
+        increment_kg=increment_kg,
+        default_sets=default_sets,
+        default_reps=default_reps,
+        is_timed=is_timed,
+    )
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
+    return ex
+
+
+def delete_exercise(db: Session, exercise_id: int, user_id: int) -> bool:
+    """Delete a user-owned exercise. Cannot delete built-in exercises."""
+    ex = db.query(Exercise).filter(
+        Exercise.id == exercise_id,
+        Exercise.user_id == user_id,
+    ).first()
+    if not ex:
+        return False
+    db.delete(ex)
+    db.commit()
+    return True
+
+
+# ---- Gym Workouts ----
 
 def create_gym_workout(db: Session, user_id: int, exercises: list, notes: str = None, duration_minutes: int = None) -> GymWorkout:
     workout = GymWorkout(
@@ -895,27 +972,50 @@ def get_gym_workouts(db: Session, user_id: int, limit: int = 50, offset: int = 0
     ).order_by(GymWorkout.completed_at.desc()).offset(offset).limit(limit).all()
 
 
-def get_gym_working_weights(db: Session, user_id: int) -> dict:
-    """Get current working weights per exercise based on last workout."""
-    last = db.query(GymWorkout).filter(
+def update_gym_workout(db: Session, workout_id: int, user_id: int, exercises: list = None, notes: str = None, duration_minutes: int = None) -> GymWorkout:
+    workout = db.query(GymWorkout).filter(
+        GymWorkout.id == workout_id,
         GymWorkout.user_id == user_id
-    ).order_by(GymWorkout.completed_at.desc()).first()
+    ).first()
+    if not workout:
+        return None
+    if exercises is not None:
+        workout.exercises = json.dumps(exercises)
+    if notes is not None:
+        workout.notes = notes
+    if duration_minutes is not None:
+        workout.duration_minutes = duration_minutes
+    db.commit()
+    db.refresh(workout)
+    return workout
 
-    if not last:
-        return {ex["name"]: ex["default_weight_kg"] for ex in GYM_PROGRAM}
 
-    try:
-        exercises = json.loads(last.exercises)
-    except (json.JSONDecodeError, TypeError):
-        return {ex["name"]: ex["default_weight_kg"] for ex in GYM_PROGRAM}
+def delete_gym_workout(db: Session, workout_id: int, user_id: int) -> bool:
+    workout = db.query(GymWorkout).filter(
+        GymWorkout.id == workout_id,
+        GymWorkout.user_id == user_id
+    ).first()
+    if not workout:
+        return False
+    db.delete(workout)
+    db.commit()
+    return True
 
-    weights = {}
-    for ex in GYM_PROGRAM:
-        logged = next((e for e in exercises if e.get("name") == ex["name"]), None)
-        if logged:
-            weights[ex["name"]] = logged.get("weight_kg", ex["default_weight_kg"])
-        else:
-            weights[ex["name"]] = ex["default_weight_kg"]
+
+def get_gym_working_weights(db: Session, user_id: int) -> dict:
+    """Get current working weight per exercise by scanning all workouts for
+    the most recent appearance of each exercise."""
+    workouts = db.query(GymWorkout).filter(
+        GymWorkout.user_id == user_id
+    ).order_by(GymWorkout.completed_at.desc()).all()
+
+    weights: dict = {}
+    for w in workouts:
+        for ex in _parse_exercises(w):
+            name = ex.get("name")
+            if name and name not in weights:
+                weights[name] = ex.get("weight_kg", 0)
+
     return weights
 
 
@@ -932,19 +1032,37 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     this_week = len([w for w in workouts if w.completed_at >= week_start])
 
-    # Weight progression per exercise
-    progression = {}
-    if workouts:
-        first_exercises = _parse_exercises(workouts[0])
-        last_exercises = _parse_exercises(workouts[-1])
+    # Collect per-exercise data across all workouts
+    exercise_first: dict = {}   # name -> first weight seen
+    exercise_current: dict = {} # name -> latest weight seen
+    exercise_volume: dict = {}  # name -> [{date, volume}]
+    timed_exercises = {ex["name"] for ex in GYM_PROGRAM if ex.get("is_timed")}
 
-        for ex_def in GYM_PROGRAM:
-            name = ex_def["name"]
-            if ex_def.get("is_timed"):
+    for w in workouts:
+        w_date = w.completed_at.strftime("%Y-%m-%d") if w.completed_at else None
+        for ex in _parse_exercises(w):
+            name = ex.get("name")
+            if not name or name in timed_exercises:
                 continue
-            first_w = next((e.get("weight_kg", 0) for e in first_exercises if e.get("name") == name), ex_def["default_weight_kg"])
-            last_w = next((e.get("weight_kg", 0) for e in last_exercises if e.get("name") == name), ex_def["default_weight_kg"])
-            progression[name] = {"first": first_w, "current": last_w}
+            weight = ex.get("weight_kg", 0)
+            sets = ex.get("sets", [])
+            vol = sum(weight * s.get("reps", 0) for s in sets if s.get("completed", True))
+
+            if name not in exercise_first:
+                exercise_first[name] = weight
+            exercise_current[name] = weight
+
+            if w_date:
+                if name not in exercise_volume:
+                    exercise_volume[name] = []
+                exercise_volume[name].append({"date": w_date, "volume": vol, "weight": weight})
+
+    progression = {}
+    for name in exercise_first:
+        progression[name] = {
+            "first": exercise_first[name],
+            "current": exercise_current[name],
+        }
 
     # Gym streak (consecutive weeks with at least 1 session)
     streak = 0
@@ -966,6 +1084,7 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
         "this_week": this_week,
         "streak_weeks": streak,
         "progression": progression,
+        "volume": exercise_volume,
     }
 
 
