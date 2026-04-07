@@ -180,11 +180,11 @@ function MainTabs() {
         options={{ tabBarLabel: 'Stats' }}
       />
       
-      {/* 📜 History Tab */}
+      {/* 📜 Activities Tab */}
       <Tab.Screen 
         name="History" 
         component={HistoryStack}
-        options={{ tabBarLabel: 'History' }}
+        options={{ tabBarLabel: 'Activities' }}
       />
     </Tab.Navigator>
   );
