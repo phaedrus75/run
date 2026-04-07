@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import json
 
-from models import Run
+from models import Run, GymWorkout
 from schemas import RunCreate, RUN_DISTANCES
 
 
@@ -859,3 +859,118 @@ def get_month_in_review(db: Session, user_id: Optional[int] = None, target_month
         "km_vs_last_month": km_vs_last_month,
         "runs_vs_last_month": runs_vs_last_month,
     }
+
+
+# ==========================================
+# 🏋️ GYM WORKOUT OPERATIONS
+# ==========================================
+
+GYM_PROGRAM = [
+    {"name": "Leg Press", "sets": 3, "reps": 10, "default_weight_kg": 70, "machine": "Technogym Selection Leg Press", "increment_kg": 2.5},
+    {"name": "Chest Press", "sets": 3, "reps": 10, "default_weight_kg": 25, "machine": "Technogym Selection Chest Press", "increment_kg": 2.5},
+    {"name": "Lat Pulldown", "sets": 3, "reps": 10, "default_weight_kg": 30, "machine": "Technogym Selection Lat Machine", "increment_kg": 2.5},
+    {"name": "Shoulder Press", "sets": 3, "reps": 10, "default_weight_kg": 15, "machine": "Technogym Selection Shoulder Press", "increment_kg": 2.5},
+    {"name": "Seated Row", "sets": 3, "reps": 10, "default_weight_kg": 30, "machine": "Technogym Selection Low Row", "increment_kg": 2.5},
+    {"name": "Leg Curl", "sets": 3, "reps": 10, "default_weight_kg": 25, "machine": "Technogym Selection Prone Leg Curl", "increment_kg": 2.5},
+    {"name": "Plank", "sets": 3, "reps": 30, "default_weight_kg": 0, "machine": "Floor", "increment_kg": 0, "is_timed": True},
+]
+
+
+def create_gym_workout(db: Session, user_id: int, exercises: list, notes: str = None, duration_minutes: int = None) -> GymWorkout:
+    workout = GymWorkout(
+        user_id=user_id,
+        exercises=json.dumps(exercises),
+        notes=notes,
+        duration_minutes=duration_minutes,
+    )
+    db.add(workout)
+    db.commit()
+    db.refresh(workout)
+    return workout
+
+
+def get_gym_workouts(db: Session, user_id: int, limit: int = 50, offset: int = 0) -> List[GymWorkout]:
+    return db.query(GymWorkout).filter(
+        GymWorkout.user_id == user_id
+    ).order_by(GymWorkout.completed_at.desc()).offset(offset).limit(limit).all()
+
+
+def get_gym_working_weights(db: Session, user_id: int) -> dict:
+    """Get current working weights per exercise based on last workout."""
+    last = db.query(GymWorkout).filter(
+        GymWorkout.user_id == user_id
+    ).order_by(GymWorkout.completed_at.desc()).first()
+
+    if not last:
+        return {ex["name"]: ex["default_weight_kg"] for ex in GYM_PROGRAM}
+
+    try:
+        exercises = json.loads(last.exercises)
+    except (json.JSONDecodeError, TypeError):
+        return {ex["name"]: ex["default_weight_kg"] for ex in GYM_PROGRAM}
+
+    weights = {}
+    for ex in GYM_PROGRAM:
+        logged = next((e for e in exercises if e.get("name") == ex["name"]), None)
+        if logged:
+            weights[ex["name"]] = logged.get("weight_kg", ex["default_weight_kg"])
+        else:
+            weights[ex["name"]] = ex["default_weight_kg"]
+    return weights
+
+
+def get_gym_stats(db: Session, user_id: int) -> dict:
+    workouts = db.query(GymWorkout).filter(
+        GymWorkout.user_id == user_id
+    ).order_by(GymWorkout.completed_at.asc()).all()
+
+    total = len(workouts)
+
+    now = datetime.now()
+    days_since_sunday = (now.weekday() + 1) % 7
+    week_start = now - timedelta(days=days_since_sunday)
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    this_week = len([w for w in workouts if w.completed_at >= week_start])
+
+    # Weight progression per exercise
+    progression = {}
+    if workouts:
+        first_exercises = _parse_exercises(workouts[0])
+        last_exercises = _parse_exercises(workouts[-1])
+
+        for ex_def in GYM_PROGRAM:
+            name = ex_def["name"]
+            if ex_def.get("is_timed"):
+                continue
+            first_w = next((e.get("weight_kg", 0) for e in first_exercises if e.get("name") == name), ex_def["default_weight_kg"])
+            last_w = next((e.get("weight_kg", 0) for e in last_exercises if e.get("name") == name), ex_def["default_weight_kg"])
+            progression[name] = {"first": first_w, "current": last_w}
+
+    # Gym streak (consecutive weeks with at least 1 session)
+    streak = 0
+    check_week = week_start
+    for _ in range(52):
+        check_end = check_week + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        count = len([w for w in workouts if check_week <= w.completed_at <= check_end])
+        if count > 0:
+            streak += 1
+            check_week -= timedelta(days=7)
+        else:
+            if check_week == week_start:
+                check_week -= timedelta(days=7)
+                continue
+            break
+
+    return {
+        "total_workouts": total,
+        "this_week": this_week,
+        "streak_weeks": streak,
+        "progression": progression,
+    }
+
+
+def _parse_exercises(workout: GymWorkout) -> list:
+    try:
+        return json.loads(workout.exercises)
+    except (json.JSONDecodeError, TypeError):
+        return []

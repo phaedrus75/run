@@ -67,6 +67,7 @@ class UserResponse(BaseModel):
     runner_level: Optional[str] = "breath"
     beta_steps_enabled: bool = False
     beta_weight_enabled: bool = False
+    beta_gym_enabled: bool = False
     email_verified: bool = False
     created_at: datetime
 
