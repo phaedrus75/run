@@ -15,12 +15,12 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { gymApi, GymProgramExercise, GymExerciseLog, GymStats } from '../services/api';
 
 const MACHINE_URLS: Record<string, string> = {
-  'Technogym Selection Leg Press': 'https://www.technogym.com/en-US/product/selection-900-leg-press_MNFP.html',
-  'Technogym Selection Chest Press': 'https://www.technogym.com/en-US/product/selection-700-chest-press_MNHP.html',
-  'Technogym Selection Lat Machine': 'https://www.technogym.com/en-US/product/selection-700-lat-machine_MNHL.html',
-  'Technogym Selection Shoulder Press': 'https://www.technogym.com/en-US/product/selection-900-shoulder-press_MNEP.html',
-  'Technogym Selection Low Row': 'https://www.technogym.com/en-US/product/selection-700-low-row_MNHC.html',
-  'Technogym Selection Prone Leg Curl': 'https://www.technogym.com/en-US/product/selection-900-leg-curl_MNIP.html',
+  'Technogym Selection Leg Press': 'https://www.technogym.com/en-GB/product/selection-900-leg-press_MNFP.html',
+  'Technogym Selection Chest Press': 'https://www.technogym.com/en-GB/product/selection-700-chest-press_MNHP.html',
+  'Technogym Selection Lat Machine': 'https://www.technogym.com/en-GB/product/selection-700-lat-machine_MNHL.html',
+  'Technogym Selection Shoulder Press': 'https://www.technogym.com/en-GB/product/selection-900-shoulder-press_MNEP.html',
+  'Technogym Selection Low Row': 'https://www.technogym.com/en-GB/product/selection-700-low-row_MNHC.html',
+  'Technogym Selection Prone Leg Curl': 'https://www.technogym.com/en-GB/product/selection-900-leg-curl_MNIP.html',
 };
 
 interface GymTrackerProps {
