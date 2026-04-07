@@ -34,8 +34,9 @@ import { EditStepModal } from '../components/EditStepModal';
 import { MonthInReview } from '../components/MonthInReview';
 import { QuarterInReview } from '../components/QuarterInReview';
 import { useAuth } from '../contexts/AuthContext';
-import { runApi, statsApi, stepsApi, type Run, type StepEntry, type MonthInReview as MonthInReviewType } from '../services/api';
+import { runApi, statsApi, stepsApi, gymApi, type Run, type StepEntry, type MonthInReview as MonthInReviewType, type GymWorkout } from '../services/api';
 import { GymTracker } from '../components/GymTracker';
+import { EditGymWorkoutModal } from '../components/EditGymWorkoutModal';
 
 const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '18k', '21k'];
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
@@ -94,6 +95,13 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   const [addStepDate, setAddStepDate] = useState(new Date());
   const [addingStep, setAddingStep] = useState(false);
   
+  // 🏋️ Gym state
+  const [gymWorkouts, setGymWorkouts] = useState<GymWorkout[]>([]);
+  const [gymLoading, setGymLoading] = useState(false);
+  const [showGymTracker, setShowGymTracker] = useState(false);
+  const [editGymModalVisible, setEditGymModalVisible] = useState(false);
+  const [selectedGymWorkout, setSelectedGymWorkout] = useState<GymWorkout | null>(null);
+
   // 📅 Month in Review state
   const [monthReviewData, setMonthReviewData] = useState<MonthInReviewType | null>(null);
   const [showMonthReview, setShowMonthReview] = useState(false);
@@ -160,27 +168,40 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     }
   }, []);
 
+  const fetchGymWorkouts = useCallback(async () => {
+    setGymLoading(true);
+    try {
+      const data = await gymApi.getAll(100);
+      setGymWorkouts(data);
+    } catch {
+      setGymWorkouts([]);
+    } finally {
+      setGymLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchRuns();
   }, [fetchRuns]);
 
   useEffect(() => {
     if (activeTab === 'steps') fetchSteps();
-  }, [activeTab, fetchSteps]);
+    if (activeTab === 'gym') fetchGymWorkouts();
+  }, [activeTab, fetchSteps, fetchGymWorkouts]);
   
-  // 🔄 Refetch when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       if (activeTab === 'runs') fetchRuns();
-      else fetchSteps();
-    }, [fetchRuns, fetchSteps, activeTab])
+      else if (activeTab === 'steps') fetchSteps();
+      else if (activeTab === 'gym') fetchGymWorkouts();
+    }, [fetchRuns, fetchSteps, fetchGymWorkouts, activeTab])
   );
   
-  // 🔄 Pull to refresh
   const onRefresh = () => {
     setRefreshing(true);
     if (activeTab === 'runs') fetchRuns();
     else if (activeTab === 'steps') fetchSteps().finally(() => setRefreshing(false));
+    else if (activeTab === 'gym') fetchGymWorkouts().finally(() => setRefreshing(false));
     else setRefreshing(false);
   };
   
@@ -391,7 +412,71 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          <GymTracker onUpdate={() => { fetchRuns(); }} />
+          {showGymTracker ? (
+            <>
+              <TouchableOpacity
+                style={styles.backToListBtn}
+                onPress={() => setShowGymTracker(false)}
+              >
+                <Ionicons name="arrow-back" size={18} color={colors.primary} />
+                <Text style={styles.backToListText}>Back to History</Text>
+              </TouchableOpacity>
+              <GymTracker onUpdate={() => { fetchGymWorkouts(); setShowGymTracker(false); }} />
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.newWorkoutBtn}
+                onPress={() => setShowGymTracker(true)}
+              >
+                <Ionicons name="add-circle" size={22} color="#fff" />
+                <Text style={styles.newWorkoutText}>New Workout</Text>
+              </TouchableOpacity>
+
+              {gymLoading ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
+              ) : gymWorkouts.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyEmoji}>🏋️</Text>
+                  <Text style={styles.emptyTitle}>No workouts yet</Text>
+                  <Text style={styles.emptyText}>Tap "New Workout" to log your first session</Text>
+                </View>
+              ) : (
+                gymWorkouts.map(w => {
+                  const date = w.completed_at
+                    ? new Date(w.completed_at)
+                    : null;
+                  const dateStr = date
+                    ? date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+                    : 'Unknown';
+                  const exerciseCount = w.exercises?.length ?? 0;
+                  const totalSets = w.exercises?.reduce(
+                    (sum, ex) => sum + ex.sets.filter(s => s.completed).length, 0
+                  ) ?? 0;
+
+                  return (
+                    <TouchableOpacity
+                      key={w.id}
+                      style={[styles.gymWorkoutCard, shadows.small]}
+                      onPress={() => { setSelectedGymWorkout(w); setEditGymModalVisible(true); }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.gymWorkoutBadge}>
+                        <Ionicons name="barbell" size={20} color="#fff" />
+                      </View>
+                      <View style={styles.gymWorkoutDetails}>
+                        <Text style={styles.gymWorkoutDate}>{dateStr}</Text>
+                        <Text style={styles.gymWorkoutMeta}>
+                          {exerciseCount} exercises · {totalSets} sets completed
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </>
+          )}
         </ScrollView>
       )}
 
@@ -605,6 +690,15 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
         quarter={selectedQuarter}
         year={selectedQuarterYear}
         onClose={() => setShowQuarterReview(false)}
+      />
+
+      {/* 🏋️ Edit Gym Workout Modal */}
+      <EditGymWorkoutModal
+        visible={editGymModalVisible}
+        workout={selectedGymWorkout}
+        onClose={() => { setEditGymModalVisible(false); setSelectedGymWorkout(null); }}
+        onSave={fetchGymWorkouts}
+        onDelete={fetchGymWorkouts}
       />
     </SafeAreaView>
   );
@@ -942,6 +1036,65 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: colors.textOnPrimary,
+  },
+  // Gym history
+  newWorkoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+  },
+  newWorkoutText: {
+    color: '#fff',
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+  },
+  backToListBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+  },
+  backToListText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.primary,
+  },
+  gymWorkoutCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  gymWorkoutBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gymWorkoutDetails: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  gymWorkoutDate: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  gymWorkoutMeta: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   // Step cards
   stepCard: {

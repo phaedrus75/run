@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
-import { gymApi, GymProgramExercise, GymExerciseLog, GymStats } from '../services/api';
+import { gymApi, exerciseApi, GymProgramExercise, GymExerciseLog, GymStats, ExerciseCatalogEntry } from '../services/api';
 
 const MACHINE_URLS: Record<string, string> = {
   'Technogym Selection Leg Press': 'https://www.technogym.com/en-GB/product/selection-900-leg-press_MNFP.html',
@@ -35,6 +35,7 @@ interface WorkoutState {
 }
 
 export function GymTracker({ onUpdate }: GymTrackerProps) {
+  const [catalog, setCatalog] = useState<ExerciseCatalogEntry[]>([]);
   const [program, setProgram] = useState<GymProgramExercise[]>([]);
   const [activeExercises, setActiveExercises] = useState<GymProgramExercise[]>([]);
   const [stats, setStats] = useState<GymStats | null>(null);
@@ -43,19 +44,33 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
   const [saving, setSaving] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [showAddExercise, setShowAddExercise] = useState(false);
+  const [customName, setCustomName] = useState('');
+
+  const catalogToProgram = (entries: ExerciseCatalogEntry[]): GymProgramExercise[] =>
+    entries.map(e => ({
+      name: e.name,
+      sets: e.default_sets,
+      reps: e.default_reps,
+      weight_kg: e.weight_kg,
+      machine: e.equipment || '',
+      increment_kg: e.increment_kg,
+      is_timed: e.is_timed,
+    }));
 
   const loadData = useCallback(async () => {
     try {
-      const [programData, statsData] = await Promise.all([
-        gymApi.getProgram(),
+      const [catalogData, statsData] = await Promise.all([
+        exerciseApi.getAll(),
         gymApi.getStats(),
       ]);
-      setProgram(programData.exercises);
-      setActiveExercises(programData.exercises);
+      setCatalog(catalogData);
+      const programExercises = catalogToProgram(catalogData);
+      setProgram(programExercises);
+      setActiveExercises(programExercises);
       setStats(statsData);
 
       const initial: WorkoutState = {};
-      for (const ex of programData.exercises) {
+      for (const ex of programExercises) {
         initial[ex.name] = {
           weight_kg: ex.weight_kg,
           sets: Array.from({ length: ex.sets }, () => ({
@@ -128,6 +143,37 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
         })),
       },
     }));
+    setShowAddExercise(false);
+  };
+
+  const addCustomExercise = async () => {
+    const name = customName.trim();
+    if (!name) return;
+    if (activeExercises.find(a => a.name.toLowerCase() === name.toLowerCase())) {
+      Alert.alert('Duplicate', `${name} is already in this workout.`);
+      return;
+    }
+    try {
+      await exerciseApi.create({ name });
+    } catch {}
+    const customProgramEx: GymProgramExercise = {
+      name,
+      sets: 3,
+      reps: 10,
+      weight_kg: 0,
+      machine: '',
+      increment_kg: 2.5,
+      is_timed: false,
+    };
+    setActiveExercises(prev => [...prev, customProgramEx]);
+    setWorkout(prev => ({
+      ...prev,
+      [name]: {
+        weight_kg: 0,
+        sets: [{ reps: 10, completed: false }, { reps: 10, completed: false }, { reps: 10, completed: false }],
+      },
+    }));
+    setCustomName('');
     setShowAddExercise(false);
   };
 
@@ -206,33 +252,55 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
             />
           ))}
 
-          {showAddExercise && removedExercises.length > 0 && (
-            <View style={styles.addExerciseList}>
-              {removedExercises.map(ex => (
+          {showAddExercise && (
+            <View style={styles.addExercisePanel}>
+              <View style={styles.customExerciseRow}>
+                <TextInput
+                  style={styles.customExerciseInput}
+                  value={customName}
+                  onChangeText={setCustomName}
+                  placeholder="Custom exercise name..."
+                  placeholderTextColor={colors.textLight}
+                  returnKeyType="done"
+                  onSubmitEditing={addCustomExercise}
+                />
                 <TouchableOpacity
-                  key={ex.name}
-                  style={styles.addExerciseItem}
-                  onPress={() => addExercise(ex)}
+                  style={[styles.customExerciseAdd, !customName.trim() && { opacity: 0.4 }]}
+                  onPress={addCustomExercise}
+                  disabled={!customName.trim()}
                 >
-                  <Ionicons name="add-circle-outline" size={20} color={colors.success} />
-                  <Text style={styles.addExerciseText}>{ex.name}</Text>
-                  <Text style={styles.addExerciseMachine}>{ex.machine}</Text>
+                  <Text style={styles.customExerciseAddText}>Add</Text>
                 </TouchableOpacity>
-              ))}
+              </View>
+
+              {removedExercises.length > 0 && (
+                <View style={styles.addExerciseList}>
+                  <Text style={styles.addExerciseSectionLabel}>Your Exercises</Text>
+                  {removedExercises.map(ex => (
+                    <TouchableOpacity
+                      key={ex.name}
+                      style={styles.addExerciseItem}
+                      onPress={() => addExercise(ex)}
+                    >
+                      <Ionicons name="add-circle-outline" size={20} color={colors.success} />
+                      <Text style={styles.addExerciseText}>{ex.name}</Text>
+                      {ex.machine ? <Text style={styles.addExerciseMachine}>{ex.machine}</Text> : null}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
-          {removedExercises.length > 0 && (
-            <TouchableOpacity
-              style={styles.addExerciseBtn}
-              onPress={() => setShowAddExercise(!showAddExercise)}
-            >
-              <Ionicons name={showAddExercise ? 'close' : 'add'} size={18} color={colors.primary} />
-              <Text style={styles.addExerciseBtnText}>
-                {showAddExercise ? 'Cancel' : 'Add Exercise'}
-              </Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.addExerciseBtn}
+            onPress={() => { setShowAddExercise(!showAddExercise); setCustomName(''); }}
+          >
+            <Ionicons name={showAddExercise ? 'close' : 'add'} size={18} color={colors.primary} />
+            <Text style={styles.addExerciseBtnText}>
+              {showAddExercise ? 'Cancel' : 'Add Exercise'}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.completeBtn, !hasAnyCompleted && styles.completeBtnDisabled]}
@@ -307,19 +375,21 @@ function ExerciseCard({
         </View>
       )}
 
-      <TouchableOpacity
-        style={styles.machineRow}
-        onPress={() => {
-          const url = MACHINE_URLS[exercise.machine];
-          if (url) Linking.openURL(url);
-        }}
-        disabled={!MACHINE_URLS[exercise.machine]}
-      >
-        <Text style={styles.machineLabel}>{exercise.machine}</Text>
-        {MACHINE_URLS[exercise.machine] && (
-          <Ionicons name="open-outline" size={12} color={colors.textLight} />
-        )}
-      </TouchableOpacity>
+      {exercise.machine ? (
+        <TouchableOpacity
+          style={styles.machineRow}
+          onPress={() => {
+            const url = MACHINE_URLS[exercise.machine];
+            if (url) Linking.openURL(url);
+          }}
+          disabled={!MACHINE_URLS[exercise.machine]}
+        >
+          <Text style={styles.machineLabel}>{exercise.machine}</Text>
+          {MACHINE_URLS[exercise.machine] && (
+            <Ionicons name="open-outline" size={12} color={colors.textLight} />
+          )}
+        </TouchableOpacity>
+      ) : null}
 
       {sets.map((set, idx) => (
         <SetRow
@@ -398,6 +468,9 @@ function ProgressView({ stats }: { stats: GymStats | null }) {
     return <Text style={styles.emptyText}>No workouts logged yet</Text>;
   }
 
+  const progressionEntries = Object.entries(stats.progression);
+  const volumeEntries = Object.entries(stats.volume || {});
+
   return (
     <View>
       <View style={styles.statsRow}>
@@ -415,17 +488,42 @@ function ProgressView({ stats }: { stats: GymStats | null }) {
         </View>
       </View>
 
-      {Object.keys(stats.progression).length > 0 && (
+      {progressionEntries.length > 0 && (
         <View style={styles.progressionSection}>
           <Text style={styles.progressionTitle}>Weight Progression</Text>
-          {Object.entries(stats.progression).map(([name, data]) => (
-            <View key={name} style={styles.progressionRow}>
-              <Text style={styles.progressionName}>{name}</Text>
-              <Text style={styles.progressionWeight}>
-                {data.first}kg → {data.current}kg
-              </Text>
-            </View>
-          ))}
+          {progressionEntries.map(([name, data]) => {
+            const diff = data.current - data.first;
+            return (
+              <View key={name} style={styles.progressionRow}>
+                <Text style={styles.progressionName}>{name}</Text>
+                <Text style={[styles.progressionWeight, diff < 0 && { color: colors.error }]}>
+                  {data.first}kg {'\u2192'} {data.current}kg
+                  {diff !== 0 ? ` (${diff > 0 ? '+' : ''}${diff})` : ''}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {volumeEntries.length > 0 && (
+        <View style={[styles.progressionSection, { marginTop: spacing.sm }]}>
+          <Text style={styles.progressionTitle}>Volume Trend</Text>
+          {volumeEntries.map(([name, entries]) => {
+            if (entries.length < 2) return null;
+            const firstVol = entries[0].volume;
+            const lastVol = entries[entries.length - 1].volume;
+            const pct = firstVol > 0 ? Math.round(((lastVol - firstVol) / firstVol) * 100) : 0;
+            return (
+              <View key={name} style={styles.progressionRow}>
+                <Text style={styles.progressionName}>{name}</Text>
+                <Text style={[styles.progressionWeight, pct < 0 && { color: colors.error }]}>
+                  {firstVol.toLocaleString()} {'\u2192'} {lastVol.toLocaleString()} kg
+                  {pct !== 0 ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
@@ -567,6 +665,47 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
     color: colors.primary,
+  },
+  addExercisePanel: {
+    marginBottom: spacing.sm,
+  },
+  customExerciseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  customExerciseInput: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  customExerciseAdd: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  customExerciseAddText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: '#fff',
+  },
+  addExerciseSectionLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
   },
   addExerciseList: {
     backgroundColor: colors.surface,

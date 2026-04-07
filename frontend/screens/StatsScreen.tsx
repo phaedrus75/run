@@ -681,6 +681,10 @@ export function StatsScreen() {
     if (!gymStats || gymStats.total_workouts === 0) {
       return <Text style={styles.emptyText}>No gym workouts logged yet. Log your first session from the Activities tab.</Text>;
     }
+
+    const progressionEntries = Object.entries(gymStats.progression);
+    const volumeEntries = Object.entries(gymStats.volume || {});
+
     return (
       <View>
         <View style={styles.weekContainer}>
@@ -697,17 +701,55 @@ export function StatsScreen() {
             <Text style={styles.dayLabel}>Week Streak</Text>
           </View>
         </View>
-        {Object.keys(gymStats.progression).length > 0 && (
+
+        {progressionEntries.length > 0 && (
           <View style={[styles.summaryCard, shadows.small]}>
             <Text style={styles.cardTitle}>Weight Progression</Text>
-            {Object.entries(gymStats.progression).map(([name, data]) => (
-              <View key={name} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceAlt }}>
-                <Text style={{ fontSize: 14, color: colors.text }}>{name}</Text>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: data.current > data.first ? colors.success : colors.text }}>
-                  {data.first}kg → {data.current}kg
-                </Text>
-              </View>
-            ))}
+            {progressionEntries.map(([name, data]) => {
+              const diff = data.current - data.first;
+              return (
+                <View key={name} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceAlt }}>
+                  <Text style={{ fontSize: 14, color: colors.text, flex: 1 }}>{name}</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: diff > 0 ? colors.success : diff < 0 ? colors.error : colors.text }}>
+                    {data.first}kg {'\u2192'} {data.current}kg
+                  </Text>
+                  {diff !== 0 && (
+                    <Text style={{ fontSize: 12, marginLeft: 6, color: diff > 0 ? colors.success : colors.error }}>
+                      {diff > 0 ? '+' : ''}{diff}kg
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {volumeEntries.length > 0 && (
+          <View style={[styles.summaryCard, shadows.small, { marginTop: spacing.md }]}>
+            <Text style={styles.cardTitle}>Volume Trend</Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm }}>
+              Total load (weight x reps) per session
+            </Text>
+            {volumeEntries.map(([name, entries]) => {
+              if (entries.length < 2) return null;
+              const firstVol = entries[0].volume;
+              const lastVol = entries[entries.length - 1].volume;
+              const diff = lastVol - firstVol;
+              const pct = firstVol > 0 ? Math.round((diff / firstVol) * 100) : 0;
+              return (
+                <View key={name} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceAlt }}>
+                  <Text style={{ fontSize: 14, color: colors.text, flex: 1 }}>{name}</Text>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                    {firstVol.toLocaleString()} {'\u2192'} {lastVol.toLocaleString()} kg
+                  </Text>
+                  {pct !== 0 && (
+                    <Text style={{ fontSize: 12, marginLeft: 6, fontWeight: '600', color: pct > 0 ? colors.success : colors.error }}>
+                      {pct > 0 ? '+' : ''}{pct}%
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
       </View>

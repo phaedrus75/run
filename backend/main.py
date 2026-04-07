@@ -40,7 +40,7 @@ def _get_real_client_ip(request: Request) -> str:
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection, GymWorkout
+from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection, GymWorkout, Exercise
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email, get_user_by_id,
@@ -232,6 +232,13 @@ def run_migrations():
     print("All tables created/verified")
 
 run_migrations()
+
+# Seed built-in exercises into the catalog
+_seed_db = next(get_db())
+try:
+    crud.seed_builtin_exercises(_seed_db)
+finally:
+    _seed_db.close()
 
 
 # ==========================================
@@ -1108,6 +1115,44 @@ def list_gym_workouts(
     ]
 
 
+@app.put("/gym/workouts/{workout_id}")
+def update_gym_workout(
+    workout_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    workout = crud.update_gym_workout(
+        db,
+        workout_id=workout_id,
+        user_id=current_user.id,
+        exercises=data.get("exercises"),
+        notes=data.get("notes"),
+        duration_minutes=data.get("duration_minutes"),
+    )
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    return {
+        "id": workout.id,
+        "completed_at": workout.completed_at.isoformat() if workout.completed_at else None,
+        "exercises": json.loads(workout.exercises),
+        "notes": workout.notes,
+        "duration_minutes": workout.duration_minutes,
+    }
+
+
+@app.delete("/gym/workouts/{workout_id}")
+def delete_gym_workout(
+    workout_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    deleted = crud.delete_gym_workout(db, workout_id=workout_id, user_id=current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    return {"detail": "Workout deleted"}
+
+
 @app.get("/gym/program")
 def get_gym_program(
     db: Session = Depends(get_db),
@@ -1126,6 +1171,82 @@ def get_gym_program(
             "is_timed": ex.get("is_timed", False),
         })
     return {"exercises": program}
+
+
+@app.get("/gym/exercises")
+def list_exercises(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    exercises = crud.get_exercises(db, user_id=current_user.id)
+    working_weights = crud.get_gym_working_weights(db, user_id=current_user.id)
+    return [
+        {
+            "id": ex.id,
+            "name": ex.name,
+            "muscle_group": ex.muscle_group,
+            "equipment": ex.equipment,
+            "default_weight_kg": ex.default_weight_kg,
+            "weight_kg": working_weights.get(ex.name, ex.default_weight_kg),
+            "increment_kg": ex.increment_kg,
+            "default_sets": ex.default_sets,
+            "default_reps": ex.default_reps,
+            "is_timed": ex.is_timed,
+            "is_custom": ex.user_id is not None,
+        }
+        for ex in exercises
+    ]
+
+
+@app.post("/gym/exercises")
+def create_exercise(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    try:
+        ex = crud.create_exercise(
+            db,
+            user_id=current_user.id,
+            name=name,
+            muscle_group=data.get("muscle_group", "other"),
+            equipment=data.get("equipment"),
+            default_weight_kg=data.get("default_weight_kg", 0),
+            increment_kg=data.get("increment_kg", 2.5),
+            default_sets=data.get("default_sets", 3),
+            default_reps=data.get("default_reps", 10),
+            is_timed=data.get("is_timed", False),
+        )
+    except Exception:
+        raise HTTPException(status_code=409, detail="Exercise with this name already exists")
+    return {
+        "id": ex.id,
+        "name": ex.name,
+        "muscle_group": ex.muscle_group,
+        "equipment": ex.equipment,
+        "default_weight_kg": ex.default_weight_kg,
+        "weight_kg": ex.default_weight_kg,
+        "increment_kg": ex.increment_kg,
+        "default_sets": ex.default_sets,
+        "default_reps": ex.default_reps,
+        "is_timed": ex.is_timed,
+        "is_custom": True,
+    }
+
+
+@app.delete("/gym/exercises/{exercise_id}")
+def delete_exercise_endpoint(
+    exercise_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth)
+):
+    deleted = crud.delete_exercise(db, exercise_id=exercise_id, user_id=current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Exercise not found or cannot be deleted")
+    return {"detail": "Exercise deleted"}
 
 
 @app.get("/gym/stats")

@@ -555,11 +555,26 @@ export interface GymProgramExercise {
   is_timed: boolean;
 }
 
+export interface ExerciseCatalogEntry {
+  id: number;
+  name: string;
+  muscle_group: string;
+  equipment: string | null;
+  default_weight_kg: number;
+  weight_kg: number;
+  increment_kg: number;
+  default_sets: number;
+  default_reps: number;
+  is_timed: boolean;
+  is_custom: boolean;
+}
+
 export interface GymStats {
   total_workouts: number;
   this_week: number;
   streak_weeks: number;
   progression: Record<string, { first: number; current: number }>;
+  volume: Record<string, { date: string; volume: number; weight: number }[]>;
 }
 
 export const gymApi = {
@@ -578,12 +593,53 @@ export const gymApi = {
     return apiFetch(`/gym/workouts?limit=${limit}&offset=${offset}`);
   },
 
+  update: (id: number, data: {
+    exercises?: GymExerciseLog[];
+    notes?: string;
+    duration_minutes?: number;
+  }): Promise<GymWorkout> => {
+    return apiFetch(`/gym/workouts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/gym/workouts/${id}`, { method: 'DELETE' });
+  },
+
   getProgram: (): Promise<{ exercises: GymProgramExercise[] }> => {
     return apiFetch('/gym/program');
   },
 
   getStats: (): Promise<GymStats> => {
     return apiFetch('/gym/stats');
+  },
+};
+
+export const exerciseApi = {
+  getAll: (): Promise<ExerciseCatalogEntry[]> => {
+    return apiFetch('/gym/exercises');
+  },
+
+  create: (data: {
+    name: string;
+    muscle_group?: string;
+    equipment?: string;
+    default_weight_kg?: number;
+    increment_kg?: number;
+    default_sets?: number;
+    default_reps?: number;
+    is_timed?: boolean;
+  }): Promise<ExerciseCatalogEntry> => {
+    return apiFetch('/gym/exercises', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/gym/exercises/${id}`, { method: 'DELETE' });
   },
 };
 
