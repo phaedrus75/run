@@ -36,11 +36,13 @@ interface WorkoutState {
 
 export function GymTracker({ onUpdate }: GymTrackerProps) {
   const [program, setProgram] = useState<GymProgramExercise[]>([]);
+  const [activeExercises, setActiveExercises] = useState<GymProgramExercise[]>([]);
   const [stats, setStats] = useState<GymStats | null>(null);
   const [workout, setWorkout] = useState<WorkoutState>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
+  const [showAddExercise, setShowAddExercise] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -49,6 +51,7 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
         gymApi.getStats(),
       ]);
       setProgram(programData.exercises);
+      setActiveExercises(programData.exercises);
       setStats(statsData);
 
       const initial: WorkoutState = {};
@@ -103,6 +106,35 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
     });
   };
 
+  const removeExercise = (name: string) => {
+    setActiveExercises(prev => prev.filter(ex => ex.name !== name));
+    setWorkout(prev => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const addExercise = (ex: GymProgramExercise) => {
+    if (activeExercises.find(a => a.name === ex.name)) return;
+    setActiveExercises(prev => [...prev, ex]);
+    setWorkout(prev => ({
+      ...prev,
+      [ex.name]: {
+        weight_kg: ex.weight_kg,
+        sets: Array.from({ length: ex.sets }, () => ({
+          reps: ex.reps,
+          completed: false,
+        })),
+      },
+    }));
+    setShowAddExercise(false);
+  };
+
+  const removedExercises = program.filter(
+    ex => !activeExercises.find(a => a.name === ex.name)
+  );
+
   const hasAnyCompleted = Object.values(workout).some(ex =>
     ex.sets.some(s => s.completed)
   );
@@ -117,7 +149,7 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
         onPress: async () => {
           setSaving(true);
           try {
-            const exercises: GymExerciseLog[] = program.map(ex => ({
+            const exercises: GymExerciseLog[] = activeExercises.map(ex => ({
               name: ex.name,
               weight_kg: workout[ex.name]?.weight_kg ?? ex.weight_kg,
               sets: workout[ex.name]?.sets ?? [],
@@ -162,7 +194,7 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
         <ProgressView stats={stats} />
       ) : (
         <>
-          {program.map(ex => (
+          {activeExercises.map(ex => (
             <ExerciseCard
               key={ex.name}
               exercise={ex}
@@ -170,8 +202,37 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
               onAdjustWeight={(d) => adjustWeight(ex.name, d)}
               onToggleSet={(i) => toggleSet(ex.name, i)}
               onUpdateReps={(i, r) => updateReps(ex.name, i, r)}
+              onRemove={() => removeExercise(ex.name)}
             />
           ))}
+
+          {showAddExercise && removedExercises.length > 0 && (
+            <View style={styles.addExerciseList}>
+              {removedExercises.map(ex => (
+                <TouchableOpacity
+                  key={ex.name}
+                  style={styles.addExerciseItem}
+                  onPress={() => addExercise(ex)}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color={colors.success} />
+                  <Text style={styles.addExerciseText}>{ex.name}</Text>
+                  <Text style={styles.addExerciseMachine}>{ex.machine}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {removedExercises.length > 0 && (
+            <TouchableOpacity
+              style={styles.addExerciseBtn}
+              onPress={() => setShowAddExercise(!showAddExercise)}
+            >
+              <Ionicons name={showAddExercise ? 'close' : 'add'} size={18} color={colors.primary} />
+              <Text style={styles.addExerciseBtnText}>
+                {showAddExercise ? 'Cancel' : 'Add Exercise'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.completeBtn, !hasAnyCompleted && styles.completeBtnDisabled]}
@@ -196,12 +257,14 @@ function ExerciseCard({
   onAdjustWeight,
   onToggleSet,
   onUpdateReps,
+  onRemove,
 }: {
   exercise: GymProgramExercise;
   state: { weight_kg: number; sets: { reps: number; completed: boolean }[] } | undefined;
   onAdjustWeight: (delta: number) => void;
   onToggleSet: (idx: number) => void;
   onUpdateReps: (idx: number, reps: number) => void;
+  onRemove: () => void;
 }) {
   const isTimed = exercise.is_timed;
   const weight = state?.weight_kg ?? exercise.weight_kg;
@@ -214,6 +277,9 @@ function ExerciseCard({
         {!isTimed && (
           <Text style={styles.weightLabel}>{weight} kg</Text>
         )}
+        <TouchableOpacity onPress={onRemove} style={styles.removeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="close-circle" size={20} color={colors.textLight} />
+        </TouchableOpacity>
       </View>
 
       {!isTimed && (
@@ -485,6 +551,46 @@ const styles = StyleSheet.create({
   checkCircleComplete: {
     backgroundColor: colors.success,
     borderColor: colors.success,
+  },
+  removeBtn: {
+    marginLeft: spacing.sm,
+  },
+  addExerciseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  addExerciseBtnText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.primary,
+  },
+  addExerciseList: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+    ...shadows.small,
+  },
+  addExerciseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.surfaceAlt,
+  },
+  addExerciseText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.text,
+    flex: 1,
+  },
+  addExerciseMachine: {
+    fontSize: typography.sizes.xs,
+    color: colors.textLight,
   },
   completeBtn: {
     backgroundColor: colors.primary,
