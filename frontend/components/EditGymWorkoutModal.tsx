@@ -44,7 +44,23 @@ export function EditGymWorkoutModal({ visible, workout, onClose, onSave, onDelet
 
   useEffect(() => {
     if (visible) {
-      exerciseApi.getAll().then(setCatalog).catch(() => {});
+      exerciseApi.getAll().then(setCatalog).catch(() => {
+        gymApi.getProgram().then(data => {
+          setCatalog(data.exercises.map((ex, i) => ({
+            id: i,
+            name: ex.name,
+            muscle_group: 'other',
+            equipment: ex.machine,
+            default_weight_kg: ex.weight_kg,
+            weight_kg: ex.weight_kg,
+            increment_kg: ex.increment_kg,
+            default_sets: ex.sets,
+            default_reps: ex.reps,
+            is_timed: ex.is_timed,
+            is_custom: false,
+          })));
+        }).catch(() => {});
+      });
     }
   }, [visible]);
 

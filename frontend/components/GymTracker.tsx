@@ -59,12 +59,26 @@ export function GymTracker({ onUpdate }: GymTrackerProps) {
 
   const loadData = useCallback(async () => {
     try {
-      const [catalogData, statsData] = await Promise.all([
-        exerciseApi.getAll(),
-        gymApi.getStats(),
-      ]);
-      setCatalog(catalogData);
-      const programExercises = catalogToProgram(catalogData);
+      let programExercises: GymProgramExercise[];
+      let statsData: GymStats;
+
+      try {
+        const [catalogData, stats] = await Promise.all([
+          exerciseApi.getAll(),
+          gymApi.getStats(),
+        ]);
+        setCatalog(catalogData);
+        programExercises = catalogToProgram(catalogData);
+        statsData = stats;
+      } catch {
+        const [programData, stats] = await Promise.all([
+          gymApi.getProgram(),
+          gymApi.getStats(),
+        ]);
+        programExercises = programData.exercises;
+        statsData = stats;
+      }
+
       setProgram(programExercises);
       setActiveExercises(programExercises);
       setStats(statsData);
