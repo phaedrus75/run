@@ -245,7 +245,7 @@ export function StatsScreen() {
     const tabs: { key: Section; label: string }[] = [
       { key: 'runs', label: 'Runs' },
     ];
-    if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'High Step Days' });
+    if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'Steps' });
     if (user?.beta_weight_enabled) tabs.push({ key: 'weight', label: 'Weight' });
     if (user?.beta_gym_enabled) tabs.push({ key: 'gym', label: 'Gym' });
 
