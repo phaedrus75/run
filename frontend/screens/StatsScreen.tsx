@@ -810,23 +810,21 @@ const styles = StyleSheet.create({
   sectionTabContainer: {
     flexDirection: 'row',
     marginBottom: spacing.md,
-    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    padding: 3,
   },
   sectionTab: {
     flex: 1,
     paddingVertical: spacing.sm,
     alignItems: 'center',
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radius.full,
   },
   sectionTabActive: {
     backgroundColor: colors.text,
-    borderColor: colors.text,
   },
   sectionTabText: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     fontWeight: typography.weights.medium,
     color: colors.textSecondary,
   },
