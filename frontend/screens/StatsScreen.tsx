@@ -20,7 +20,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { StatCard, StatsChart, PaceTrendChart, WeightTracker, StreakProgress } from '../components';
-import { gymApi, type GymStats } from '../services/api';
 import { 
   runApi, 
   statsApi, 
@@ -34,7 +33,7 @@ import {
   type StepsSummary,
 } from '../services/api';
 
-type Section = 'runs' | 'steps' | 'weight' | 'gym';
+type Section = 'runs' | 'steps' | 'weight';
 type RunViewMode = 'week' | 'month' | 'all';
 type StepsViewMode = 'month' | 'all';
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
@@ -55,7 +54,6 @@ export function StatsScreen() {
   const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
   const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
-  const [gymStats, setGymStats] = useState<GymStats | null>(null);
 
   // Derived synchronously — no useEffect delay
   const runs = useMemo(() => {
@@ -79,11 +77,7 @@ export function StatsScreen() {
       setWeightChart(weightChartData);
       setStreakProgress(streakData);
       setStepsSummary(stepsData);
-
-      if (user?.beta_gym_enabled) {
-        try { setGymStats(await gymApi.getStats()); } catch {}
-      }
-
+      
       const filteredRuns = runsData.filter((run: Run) => {
         const runDate = new Date(run.completed_at);
         return runDate.getFullYear() >= MIN_YEAR;
@@ -245,9 +239,8 @@ export function StatsScreen() {
     const tabs: { key: Section; label: string }[] = [
       { key: 'runs', label: 'Runs' },
     ];
-    if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'Steps' });
+    if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'High Step Days' });
     if (user?.beta_weight_enabled) tabs.push({ key: 'weight', label: 'Weight' });
-    if (user?.beta_gym_enabled) tabs.push({ key: 'gym', label: 'Gym' });
 
     if (tabs.length <= 1) return null;
 
@@ -677,43 +670,6 @@ export function StatsScreen() {
     </View>
   );
 
-  const renderGymSection = () => {
-    if (!gymStats || gymStats.total_workouts === 0) {
-      return <Text style={styles.emptyText}>No gym workouts logged yet. Log your first session from the Activities tab.</Text>;
-    }
-    return (
-      <View>
-        <View style={styles.weekContainer}>
-          <View style={styles.dayCard}>
-            <Text style={styles.dayNumber}>{gymStats.total_workouts}</Text>
-            <Text style={styles.dayLabel}>Total</Text>
-          </View>
-          <View style={styles.dayCard}>
-            <Text style={styles.dayNumber}>{gymStats.this_week}/3</Text>
-            <Text style={styles.dayLabel}>This Week</Text>
-          </View>
-          <View style={styles.dayCard}>
-            <Text style={styles.dayNumber}>{gymStats.streak_weeks}</Text>
-            <Text style={styles.dayLabel}>Week Streak</Text>
-          </View>
-        </View>
-        {Object.keys(gymStats.progression).length > 0 && (
-          <View style={[styles.summaryCard, shadows.small]}>
-            <Text style={styles.cardTitle}>Weight Progression</Text>
-            {Object.entries(gymStats.progression).map(([name, data]) => (
-              <View key={name} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceAlt }}>
-                <Text style={{ fontSize: 14, color: colors.text }}>{name}</Text>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: data.current > data.first ? colors.success : colors.text }}>
-                  {data.first}kg → {data.current}kg
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-    );
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -765,9 +721,6 @@ export function StatsScreen() {
 
         {/* Weight Section */}
         {section === 'weight' && renderWeightSection()}
-
-        {/* Gym Section */}
-        {section === 'gym' && renderGymSection()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -810,21 +763,23 @@ const styles = StyleSheet.create({
   sectionTabContainer: {
     flexDirection: 'row',
     marginBottom: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    padding: 3,
+    gap: spacing.sm,
   },
   sectionTab: {
     flex: 1,
     paddingVertical: spacing.sm,
     alignItems: 'center',
-    borderRadius: radius.full,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   sectionTabActive: {
     backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   sectionTabText: {
-    fontSize: typography.sizes.xs,
+    fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
     color: colors.textSecondary,
   },

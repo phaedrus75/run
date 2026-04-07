@@ -126,7 +126,6 @@ class User(Base):
     # 🧪 Beta feature opt-ins
     beta_steps_enabled = Column(Boolean, default=False, server_default='false')
     beta_weight_enabled = Column(Boolean, default=False, server_default='false')
-    beta_gym_enabled = Column(Boolean, default=False, server_default='false')
     
     # 📧 Email verification
     email_verified = Column(Boolean, default=False, server_default='false')
@@ -324,17 +323,4 @@ class PasswordResetToken(Base):
     used = Column(Boolean, default=False)
     
     # 📅 When created
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class GymWorkout(Base):
-    """Logged strength training workout with per-exercise data stored as JSON."""
-    __tablename__ = "gym_workouts"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False, index=True)
-    completed_at = Column(DateTime, server_default=func.now())
-    exercises = Column(String, nullable=False)
-    notes = Column(String, nullable=True)
-    duration_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime, server_default=func.now())

@@ -528,66 +528,6 @@ export const stepsApi = {
 };
 
 // ==========================================
-// 🏋️ GYM API (Strength Training)
-// ==========================================
-
-export interface GymExerciseLog {
-  name: string;
-  sets: { reps: number; completed: boolean }[];
-  weight_kg: number;
-}
-
-export interface GymWorkout {
-  id: number;
-  completed_at: string | null;
-  exercises: GymExerciseLog[];
-  notes: string | null;
-  duration_minutes: number | null;
-}
-
-export interface GymProgramExercise {
-  name: string;
-  sets: number;
-  reps: number;
-  weight_kg: number;
-  machine: string;
-  increment_kg: number;
-  is_timed: boolean;
-}
-
-export interface GymStats {
-  total_workouts: number;
-  this_week: number;
-  streak_weeks: number;
-  progression: Record<string, { first: number; current: number }>;
-}
-
-export const gymApi = {
-  create: (data: {
-    exercises: GymExerciseLog[];
-    notes?: string;
-    duration_minutes?: number;
-  }): Promise<GymWorkout> => {
-    return apiFetch('/gym/workouts', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  getAll: (limit: number = 50, offset: number = 0): Promise<GymWorkout[]> => {
-    return apiFetch(`/gym/workouts?limit=${limit}&offset=${offset}`);
-  },
-
-  getProgram: (): Promise<{ exercises: GymProgramExercise[] }> => {
-    return apiFetch('/gym/program');
-  },
-
-  getStats: (): Promise<GymStats> => {
-    return apiFetch('/gym/stats');
-  },
-};
-
-// ==========================================
 // 📸 PHOTO API (Scenic Runs)
 // ==========================================
 

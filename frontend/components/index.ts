@@ -25,4 +25,3 @@ export { WeekSummaryCard } from './WeekSummaryCard';
 export { MonthInReview } from './MonthInReview';
 export { EditStepModal } from './EditStepModal';
 export { QuarterInReview } from './QuarterInReview';
-export { GymTracker } from './GymTracker';

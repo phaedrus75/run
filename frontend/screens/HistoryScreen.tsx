@@ -35,7 +35,6 @@ import { MonthInReview } from '../components/MonthInReview';
 import { QuarterInReview } from '../components/QuarterInReview';
 import { useAuth } from '../contexts/AuthContext';
 import { runApi, statsApi, stepsApi, type Run, type StepEntry, type MonthInReview as MonthInReviewType } from '../services/api';
-import { GymTracker } from '../components/GymTracker';
 
 const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '18k', '21k'];
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
@@ -69,7 +68,7 @@ const getAvailableMonths = () => {
   return months.reverse(); // Most recent first
 };
 
-type ActiveTab = 'runs' | 'steps' | 'gym';
+type ActiveTab = 'runs' | 'steps';
 
 export function HistoryScreen({ navigation }: HistoryScreenProps) {
   const { user } = useAuth();
@@ -180,8 +179,7 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
   const onRefresh = () => {
     setRefreshing(true);
     if (activeTab === 'runs') fetchRuns();
-    else if (activeTab === 'steps') fetchSteps().finally(() => setRefreshing(false));
-    else setRefreshing(false);
+    else fetchSteps().finally(() => setRefreshing(false));
   };
   
   // ✏️ Handle run tap for editing
@@ -323,7 +321,7 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     </View>
   );
   
-  const showTabs = !!user?.beta_steps_enabled || !!user?.beta_gym_enabled;
+  const showStepsTab = !!user?.beta_steps_enabled;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -331,18 +329,17 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.title}>Activities</Text>
+            <Text style={styles.title}>History</Text>
             <Text style={styles.subtitle}>Tap to edit</Text>
           </View>
-          {activeTab === 'runs' && (
+          {activeTab === 'runs' ? (
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => navigation.navigate('AddRun')}
             >
               <Text style={styles.addButtonText}>+ Add Run</Text>
             </TouchableOpacity>
-          )}
-          {activeTab === 'steps' && (
+          ) : (
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => { setShowAddStep(true); setAddStepCount(null); setAddStepDate(new Date()); }}
@@ -354,7 +351,7 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
       </View>
 
       {/* Segment Toggle */}
-      {showTabs && (
+      {showStepsTab && (
         <View style={styles.segmentContainer}>
           <TouchableOpacity
             style={[styles.segmentButton, activeTab === 'runs' && styles.segmentButtonActive]}
@@ -363,39 +360,17 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
             <Ionicons name="fitness-outline" size={16} color={activeTab === 'runs' ? colors.textOnPrimary : colors.textSecondary} />
             <Text style={[styles.segmentText, activeTab === 'runs' && styles.segmentTextActive]}>Runs</Text>
           </TouchableOpacity>
-          {user?.beta_steps_enabled && (
-            <TouchableOpacity
-              style={[styles.segmentButton, activeTab === 'steps' && styles.segmentButtonActive]}
-              onPress={() => setActiveTab('steps')}
-            >
-              <Ionicons name="footsteps-outline" size={16} color={activeTab === 'steps' ? colors.textOnPrimary : colors.textSecondary} />
-              <Text style={[styles.segmentText, activeTab === 'steps' && styles.segmentTextActive]}>Steps</Text>
-            </TouchableOpacity>
-          )}
-          {user?.beta_gym_enabled && (
-            <TouchableOpacity
-              style={[styles.segmentButton, activeTab === 'gym' && styles.segmentButtonActive]}
-              onPress={() => setActiveTab('gym')}
-            >
-              <Ionicons name="barbell-outline" size={16} color={activeTab === 'gym' ? colors.textOnPrimary : colors.textSecondary} />
-              <Text style={[styles.segmentText, activeTab === 'gym' && styles.segmentTextActive]}>Gym</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.segmentButton, activeTab === 'steps' && styles.segmentButtonActive]}
+            onPress={() => setActiveTab('steps')}
+          >
+            <Ionicons name="footsteps-outline" size={16} color={activeTab === 'steps' ? colors.textOnPrimary : colors.textSecondary} />
+            <Text style={[styles.segmentText, activeTab === 'steps' && styles.segmentTextActive]}>Steps</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {activeTab === 'gym' && (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
-          <GymTracker onUpdate={() => { fetchRuns(); }} />
-        </ScrollView>
-      )}
-
-      {activeTab === 'runs' && (
+      {activeTab === 'runs' ? (
         <>
           {/* 📅 Month in Review Section */}
           <View style={styles.monthReviewSection}>
@@ -488,9 +463,7 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
             showsVerticalScrollIndicator={false}
           />
         </>
-      )}
-
-      {activeTab === 'steps' && (
+      ) : (
         <>
           {/* 👟 Steps Stats Bar */}
           <View style={styles.statsBar}>

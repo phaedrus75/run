@@ -21,7 +21,6 @@ export interface User {
   onboarding_complete: boolean;
   beta_steps_enabled: boolean;
   beta_weight_enabled: boolean;
-  beta_gym_enabled: boolean;
   email_verified: boolean;
   created_at: string;
 }

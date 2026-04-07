@@ -40,7 +40,7 @@ def _get_real_client_ip(request: Request) -> str:
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection, GymWorkout
+from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email, get_user_by_id,
@@ -182,9 +182,6 @@ def run_migrations():
                 """))
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_attempts INTEGER DEFAULT 0
-                """))
-                conn.execute(text("""
-                    ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_gym_enabled BOOLEAN DEFAULT false
                 """))
                 conn.commit()
                 
@@ -524,7 +521,6 @@ def delete_account(request: Request, current_user: User = Depends(require_auth),
         db.query(StepEntry).filter(StepEntry.user_id == user_id).delete()
         db.query(UserGoals).filter(UserGoals.user_id == user_id).delete()
         db.query(PasswordResetToken).filter(PasswordResetToken.user_id == user_id).delete()
-        db.query(GymWorkout).filter(GymWorkout.user_id == user_id).delete()
 
         owned_circles = db.query(Circle).filter(Circle.created_by == user_id).all()
         for circle in owned_circles:
@@ -643,7 +639,6 @@ def get_beta_preferences(current_user: User = Depends(require_auth)):
     return {
         "steps_enabled": getattr(current_user, 'beta_steps_enabled', False) or False,
         "weight_enabled": getattr(current_user, 'beta_weight_enabled', False) or False,
-        "gym_enabled": getattr(current_user, 'beta_gym_enabled', False) or False,
     }
 
 @app.post("/user/beta-preferences")
@@ -652,13 +647,10 @@ def set_beta_preferences(data: dict, current_user: User = Depends(require_auth),
         current_user.beta_steps_enabled = bool(data["steps_enabled"])
     if "weight_enabled" in data:
         current_user.beta_weight_enabled = bool(data["weight_enabled"])
-    if "gym_enabled" in data:
-        current_user.beta_gym_enabled = bool(data["gym_enabled"])
     db.commit()
     return {
         "steps_enabled": current_user.beta_steps_enabled or False,
         "weight_enabled": current_user.beta_weight_enabled or False,
-        "gym_enabled": getattr(current_user, 'beta_gym_enabled', False) or False,
     }
 
 
@@ -1061,79 +1053,6 @@ def get_weight_chart(
     """📈 Get weight data for charting (requires auth)."""
     from weight import get_weight_chart_data
     return get_weight_chart_data(db, user_id=current_user.id)
-
-
-# ==========================================
-# 🏋️ GYM / STRENGTH TRAINING ENDPOINTS
-# ==========================================
-
-@app.post("/gym/workouts")
-def log_gym_workout(
-    data: dict,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth)
-):
-    exercises = data.get("exercises", [])
-    if not exercises:
-        raise HTTPException(status_code=400, detail="exercises list is required")
-    notes = data.get("notes")
-    duration_minutes = data.get("duration_minutes")
-    workout = crud.create_gym_workout(db, user_id=current_user.id, exercises=exercises, notes=notes, duration_minutes=duration_minutes)
-    return {
-        "id": workout.id,
-        "completed_at": workout.completed_at.isoformat() if workout.completed_at else None,
-        "exercises": json.loads(workout.exercises),
-        "notes": workout.notes,
-        "duration_minutes": workout.duration_minutes,
-    }
-
-
-@app.get("/gym/workouts")
-def list_gym_workouts(
-    limit: int = 50,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth)
-):
-    workouts = crud.get_gym_workouts(db, user_id=current_user.id, limit=limit, offset=offset)
-    return [
-        {
-            "id": w.id,
-            "completed_at": w.completed_at.isoformat() if w.completed_at else None,
-            "exercises": json.loads(w.exercises) if w.exercises else [],
-            "notes": w.notes,
-            "duration_minutes": w.duration_minutes,
-        }
-        for w in workouts
-    ]
-
-
-@app.get("/gym/program")
-def get_gym_program(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth)
-):
-    working_weights = crud.get_gym_working_weights(db, user_id=current_user.id)
-    program = []
-    for ex in crud.GYM_PROGRAM:
-        program.append({
-            "name": ex["name"],
-            "sets": ex["sets"],
-            "reps": ex["reps"],
-            "weight_kg": working_weights.get(ex["name"], ex["default_weight_kg"]),
-            "machine": ex["machine"],
-            "increment_kg": ex["increment_kg"],
-            "is_timed": ex.get("is_timed", False),
-        })
-    return {"exercises": program}
-
-
-@app.get("/gym/stats")
-def get_gym_stats_endpoint(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth)
-):
-    return crud.get_gym_stats(db, user_id=current_user.id)
 
 
 # ==========================================
