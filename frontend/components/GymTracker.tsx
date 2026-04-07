@@ -8,10 +8,20 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { gymApi, GymProgramExercise, GymExerciseLog, GymStats } from '../services/api';
+
+const MACHINE_URLS: Record<string, string> = {
+  'Technogym Selection Leg Press': 'https://www.technogym.com/en-US/product/selection-900-leg-press_MNFP.html',
+  'Technogym Selection Chest Press': 'https://www.technogym.com/en-US/product/selection-700-chest-press_MNHP.html',
+  'Technogym Selection Lat Machine': 'https://www.technogym.com/en-US/product/selection-700-lat-machine_MNHL.html',
+  'Technogym Selection Shoulder Press': 'https://www.technogym.com/en-US/product/selection-900-shoulder-press_MNEP.html',
+  'Technogym Selection Low Row': 'https://www.technogym.com/en-US/product/selection-700-low-row_MNHC.html',
+  'Technogym Selection Prone Leg Curl': 'https://www.technogym.com/en-US/product/selection-900-leg-curl_MNIP.html',
+};
 
 interface GymTrackerProps {
   onUpdate?: () => void;
@@ -231,35 +241,88 @@ function ExerciseCard({
         </View>
       )}
 
-      <Text style={styles.machineLabel}>{exercise.machine}</Text>
+      <TouchableOpacity
+        style={styles.machineRow}
+        onPress={() => {
+          const url = MACHINE_URLS[exercise.machine];
+          if (url) Linking.openURL(url);
+        }}
+        disabled={!MACHINE_URLS[exercise.machine]}
+      >
+        <Text style={styles.machineLabel}>{exercise.machine}</Text>
+        {MACHINE_URLS[exercise.machine] && (
+          <Ionicons name="open-outline" size={12} color={colors.textLight} />
+        )}
+      </TouchableOpacity>
 
       {sets.map((set, idx) => (
-        <View key={idx} style={styles.setRow}>
-          <Text style={styles.setLabel}>Set {idx + 1}:</Text>
-          {isTimed ? (
-            <Text style={styles.repsText}>{set.reps}s</Text>
-          ) : (
-            <TextInput
-              style={styles.repsInput}
-              keyboardType="number-pad"
-              value={String(set.reps)}
-              onChangeText={t => {
-                const n = parseInt(t, 10);
-                if (!isNaN(n) && n >= 0) onUpdateReps(idx, n);
-              }}
-              selectTextOnFocus
-            />
-          )}
-          <TouchableOpacity
-            style={[styles.checkCircle, set.completed && styles.checkCircleComplete]}
-            onPress={() => onToggleSet(idx)}
-          >
-            {set.completed && (
-              <Ionicons name="checkmark" size={16} color="#fff" />
-            )}
-          </TouchableOpacity>
-        </View>
+        <SetRow
+          key={idx}
+          idx={idx}
+          reps={set.reps}
+          completed={set.completed}
+          isTimed={isTimed}
+          onToggle={() => onToggleSet(idx)}
+          onUpdateReps={(r) => onUpdateReps(idx, r)}
+        />
       ))}
+    </View>
+  );
+}
+
+function SetRow({
+  idx,
+  reps,
+  completed,
+  isTimed,
+  onToggle,
+  onUpdateReps,
+}: {
+  idx: number;
+  reps: number;
+  completed: boolean;
+  isTimed: boolean;
+  onToggle: () => void;
+  onUpdateReps: (r: number) => void;
+}) {
+  const [text, setText] = useState(String(reps));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setText(String(reps));
+  }, [reps, editing]);
+
+  return (
+    <View style={styles.setRow}>
+      <Text style={styles.setLabel}>Set {idx + 1}:</Text>
+      {isTimed ? (
+        <Text style={styles.repsText}>{reps}s</Text>
+      ) : (
+        <TextInput
+          style={styles.repsInput}
+          keyboardType="number-pad"
+          value={text}
+          onFocus={() => { setEditing(true); setText(''); }}
+          onChangeText={setText}
+          onBlur={() => {
+            setEditing(false);
+            const n = parseInt(text, 10);
+            if (!isNaN(n) && n >= 0) {
+              onUpdateReps(n);
+            } else {
+              setText(String(reps));
+            }
+          }}
+        />
+      )}
+      <TouchableOpacity
+        style={[styles.checkCircle, completed && styles.checkCircleComplete]}
+        onPress={onToggle}
+      >
+        {completed && (
+          <Ionicons name="checkmark" size={16} color="#fff" />
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -372,10 +435,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 4,
   },
+  machineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: spacing.sm,
+  },
   machineLabel: {
     fontSize: typography.sizes.xs,
     color: colors.textLight,
-    marginBottom: spacing.sm,
   },
   setRow: {
     flexDirection: 'row',
