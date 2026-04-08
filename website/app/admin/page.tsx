@@ -40,7 +40,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/backend/admin/stats')
+    fetch('/api/backend/admin/stats/')
       .then((r) => {
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json();
