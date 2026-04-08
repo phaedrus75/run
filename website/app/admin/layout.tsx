@@ -8,7 +8,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [state, setState] = useState<'loading' | 'authorized' | 'denied'>('loading');
 
   useEffect(() => {
-    fetch('/api/auth/session')
+    fetch('/api/auth/session/')
       .then((r) => r.json())
       .then((data) => {
         if (data.authenticated && data.is_admin) {

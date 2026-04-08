@@ -5,7 +5,7 @@ const API_BASE_URL = process.env.API_BASE_URL || 'https://run-production-83ca.up
 async function proxyRequest(request: NextRequest, method: string) {
   const token = request.cookies.get('zenrun_token')?.value;
   const url = new URL(request.url);
-  const backendPath = url.pathname.replace('/api/backend/', '/');
+  const backendPath = url.pathname.replace('/api/backend/', '/').replace(/\/+$/, '') || '/';
   const backendUrl = `${API_BASE_URL}${backendPath}${url.search}`;
 
   const headers: Record<string, string> = {
