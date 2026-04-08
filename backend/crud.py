@@ -1032,30 +1032,58 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     this_week = len([w for w in workouts if w.completed_at >= week_start])
 
-    # Collect per-exercise data across all workouts
-    exercise_first: dict = {}   # name -> first weight seen
-    exercise_current: dict = {} # name -> latest weight seen
-    exercise_volume: dict = {}  # name -> [{date, volume}]
+    # ---- Aggregates ----
+    agg_total_sets = 0
+    agg_total_reps = 0
+    agg_total_volume = 0.0
+
+    # ---- Per-exercise collection ----
+    exercise_first: dict = {}
+    exercise_current: dict = {}
+    exercise_history: dict = {}     # name -> [{date, weight, volume, best_set_reps}]
+    personal_records: dict = {}     # name -> {weight, date}
     timed_exercises = {ex["name"] for ex in GYM_PROGRAM if ex.get("is_timed")}
+    exercise_names_seen: set = set()
 
     for w in workouts:
         w_date = w.completed_at.strftime("%Y-%m-%d") if w.completed_at else None
         for ex in _parse_exercises(w):
             name = ex.get("name")
-            if not name or name in timed_exercises:
+            if not name:
+                continue
+            exercise_names_seen.add(name)
+            if name in timed_exercises:
                 continue
             weight = ex.get("weight_kg", 0)
             sets = ex.get("sets", [])
-            vol = sum(weight * s.get("reps", 0) for s in sets if s.get("completed", True))
+            completed_sets = [s for s in sets if s.get("completed", True)]
+            num_sets = len(completed_sets)
+            num_reps = sum(s.get("reps", 0) for s in completed_sets)
+            vol = sum(weight * s.get("reps", 0) for s in completed_sets)
+            best_reps = max((s.get("reps", 0) for s in completed_sets), default=0)
+
+            agg_total_sets += num_sets
+            agg_total_reps += num_reps
+            agg_total_volume += vol
 
             if name not in exercise_first:
                 exercise_first[name] = weight
             exercise_current[name] = weight
 
+            if name not in personal_records or weight > personal_records[name]["weight"]:
+                personal_records[name] = {"weight": weight, "date": w_date or ""}
+
             if w_date:
-                if name not in exercise_volume:
-                    exercise_volume[name] = []
-                exercise_volume[name].append({"date": w_date, "volume": vol, "weight": weight})
+                if name not in exercise_history:
+                    exercise_history[name] = []
+                exercise_history[name].append({
+                    "date": w_date,
+                    "weight": weight,
+                    "volume": vol,
+                    "best_set_reps": best_reps,
+                    "sets": num_sets,
+                    "reps": num_reps,
+                })
 
     progression = {}
     for name in exercise_first:
@@ -1064,7 +1092,20 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
             "current": exercise_current[name],
         }
 
-    # Gym streak (consecutive weeks with at least 1 session)
+    # ---- Workout frequency: last 12 weeks ----
+    frequency = []
+    freq_week = week_start
+    for _ in range(12):
+        freq_end = freq_week + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        count = len([w for w in workouts if freq_week <= w.completed_at <= freq_end])
+        frequency.append({
+            "week_start": freq_week.strftime("%Y-%m-%d"),
+            "count": count,
+        })
+        freq_week -= timedelta(days=7)
+    frequency.reverse()
+
+    # ---- Gym streak (consecutive weeks with at least 1 session) ----
     streak = 0
     check_week = week_start
     for _ in range(52):
@@ -1083,8 +1124,15 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
         "total_workouts": total,
         "this_week": this_week,
         "streak_weeks": streak,
+        "total_sets": agg_total_sets,
+        "total_reps": agg_total_reps,
+        "total_volume": round(agg_total_volume, 1),
+        "unique_exercises": len(exercise_names_seen),
         "progression": progression,
-        "volume": exercise_volume,
+        "volume": exercise_history,
+        "frequency": frequency,
+        "personal_records": personal_records,
+        "exercise_history": exercise_history,
     }
 
 
