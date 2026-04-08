@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
       authenticated: true,
       handle: data.handle,
       name: data.name,
+      is_admin: data.is_admin ?? false,
     });
   } catch {
     return NextResponse.json({ authenticated: false });

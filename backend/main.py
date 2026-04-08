@@ -55,6 +55,12 @@ import crud
 
 limiter = Limiter(key_func=_get_real_client_ip)
 
+
+def require_admin(user: User = Depends(require_auth)):
+    if not getattr(user, 'is_admin', False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
 # ==========================================
 # 🚀 CREATE THE APP
 # ==========================================
@@ -185,6 +191,9 @@ def run_migrations():
                 """))
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_gym_enabled BOOLEAN DEFAULT false
+                """))
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false
                 """))
                 conn.commit()
                 
@@ -1950,6 +1959,7 @@ def get_current_user_info(
         "profile_privacy": getattr(current_user, 'profile_privacy', 'private') or 'private',
         "beta_steps_enabled": getattr(current_user, 'beta_steps_enabled', False) or False,
         "beta_weight_enabled": getattr(current_user, 'beta_weight_enabled', False) or False,
+        "is_admin": getattr(current_user, 'is_admin', False) or False,
     }
 
 
@@ -2831,3 +2841,15 @@ def get_scenic_runs(
         })
     
     return result
+
+
+# ==========================================
+# 🛡️ ADMIN ENDPOINTS
+# ==========================================
+
+@app.get("/admin/stats")
+def admin_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    return crud.get_admin_stats(db)

@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import json
 
-from models import Run, GymWorkout, Exercise
+from models import Run, GymWorkout, Exercise, User, Weight, StepEntry, CircleMembership
 from schemas import RunCreate, RUN_DISTANCES
 
 
@@ -1141,3 +1141,187 @@ def _parse_exercises(workout: GymWorkout) -> list:
         return json.loads(workout.exercises)
     except (json.JSONDecodeError, TypeError):
         return []
+
+
+# ==========================================
+# 🛡️ ADMIN ANALYTICS
+# ==========================================
+
+def get_admin_stats(db: Session) -> dict:
+    """Aggregate analytics across all users for the admin dashboard."""
+    from collections import defaultdict
+
+    now = datetime.now()
+    thirty_days_ago = now - timedelta(days=30)
+    seven_days_ago = now - timedelta(days=7)
+
+    # --- Users ---
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    new_this_week = db.query(func.count(User.id)).filter(User.created_at >= seven_days_ago).scalar() or 0
+    new_this_month = db.query(func.count(User.id)).filter(User.created_at >= thirty_days_ago).scalar() or 0
+    onboarded = db.query(func.count(User.id)).filter(User.onboarding_complete == True).scalar() or 0
+    verified = db.query(func.count(User.id)).filter(User.email_verified == True).scalar() or 0
+
+    # --- Totals ---
+    total_runs = db.query(func.count(Run.id)).scalar() or 0
+    total_km = db.query(func.coalesce(func.sum(Run.distance_km), 0)).scalar()
+    total_gym = db.query(func.count(GymWorkout.id)).scalar() or 0
+    total_steps = db.query(func.count(StepEntry.id)).scalar() or 0
+    total_weights = db.query(func.count(Weight.id)).scalar() or 0
+
+    # --- Active users (last 7 days) ---
+    run_users_week = db.query(func.count(func.distinct(Run.user_id))).filter(Run.completed_at >= seven_days_ago).scalar() or 0
+    gym_users_week = db.query(func.count(func.distinct(GymWorkout.user_id))).filter(GymWorkout.completed_at >= seven_days_ago).scalar() or 0
+    active_user_ids = set()
+    for uid in db.query(Run.user_id).filter(Run.completed_at >= seven_days_ago).distinct():
+        if uid[0]:
+            active_user_ids.add(uid[0])
+    for uid in db.query(GymWorkout.user_id).filter(GymWorkout.completed_at >= seven_days_ago).distinct():
+        if uid[0]:
+            active_user_ids.add(uid[0])
+    for uid in db.query(StepEntry.user_id).filter(StepEntry.created_at >= seven_days_ago).distinct():
+        if uid[0]:
+            active_user_ids.add(uid[0])
+    active_this_week = len(active_user_ids)
+
+    # --- Feature adoption ---
+    users_with_runs = db.query(func.count(func.distinct(Run.user_id))).scalar() or 0
+    users_with_gym = db.query(func.count(func.distinct(GymWorkout.user_id))).scalar() or 0
+    users_with_steps = db.query(func.count(func.distinct(StepEntry.user_id))).scalar() or 0
+    users_with_weight = db.query(func.count(func.distinct(Weight.user_id))).scalar() or 0
+    users_in_circles = db.query(func.count(func.distinct(CircleMembership.user_id))).scalar() or 0
+
+    def pct(n):
+        return round((n / total_users) * 100, 1) if total_users > 0 else 0
+
+    # --- Signups over time (last 30 days) ---
+    signups_by_day = defaultdict(int)
+    users_30d = db.query(User.created_at).filter(User.created_at >= thirty_days_ago).all()
+    for (created,) in users_30d:
+        if created:
+            signups_by_day[created.strftime("%Y-%m-%d")] += 1
+
+    signups_over_time = []
+    for i in range(30):
+        day = (thirty_days_ago + timedelta(days=i)).strftime("%Y-%m-%d")
+        signups_over_time.append({"date": day, "count": signups_by_day.get(day, 0)})
+
+    # --- Activity over time (last 30 days) ---
+    runs_by_day = defaultdict(int)
+    gym_by_day = defaultdict(int)
+    steps_by_day = defaultdict(int)
+
+    for (completed,) in db.query(Run.completed_at).filter(Run.completed_at >= thirty_days_ago).all():
+        if completed:
+            runs_by_day[completed.strftime("%Y-%m-%d")] += 1
+    for (completed,) in db.query(GymWorkout.completed_at).filter(GymWorkout.completed_at >= thirty_days_ago).all():
+        if completed:
+            gym_by_day[completed.strftime("%Y-%m-%d")] += 1
+    for (recorded,) in db.query(StepEntry.recorded_date).filter(StepEntry.recorded_date >= thirty_days_ago).all():
+        if recorded:
+            steps_by_day[recorded.strftime("%Y-%m-%d")] += 1
+
+    activity_over_time = []
+    for i in range(30):
+        day = (thirty_days_ago + timedelta(days=i)).strftime("%Y-%m-%d")
+        activity_over_time.append({
+            "date": day,
+            "runs": runs_by_day.get(day, 0),
+            "gym": gym_by_day.get(day, 0),
+            "steps": steps_by_day.get(day, 0),
+        })
+
+    # --- DAU (last 30 days) ---
+    dau = []
+    for i in range(30):
+        day_start = (thirty_days_ago + timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        day_ids = set()
+        for (uid,) in db.query(Run.user_id).filter(Run.completed_at >= day_start, Run.completed_at < day_end).distinct():
+            if uid:
+                day_ids.add(uid)
+        for (uid,) in db.query(GymWorkout.user_id).filter(GymWorkout.completed_at >= day_start, GymWorkout.completed_at < day_end).distinct():
+            if uid:
+                day_ids.add(uid)
+        for (uid,) in db.query(StepEntry.user_id).filter(StepEntry.recorded_date >= day_start, StepEntry.recorded_date < day_end).distinct():
+            if uid:
+                day_ids.add(uid)
+        dau.append({"date": day_start.strftime("%Y-%m-%d"), "count": len(day_ids)})
+
+    # --- WAU (last 12 weeks) ---
+    wau = []
+    days_since_sunday = (now.weekday() + 1) % 7
+    current_week_start = now - timedelta(days=days_since_sunday)
+    current_week_start = current_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    for i in range(12):
+        ws = current_week_start - timedelta(weeks=i)
+        we = ws + timedelta(days=7)
+        week_ids = set()
+        for (uid,) in db.query(Run.user_id).filter(Run.completed_at >= ws, Run.completed_at < we).distinct():
+            if uid:
+                week_ids.add(uid)
+        for (uid,) in db.query(GymWorkout.user_id).filter(GymWorkout.completed_at >= ws, GymWorkout.completed_at < we).distinct():
+            if uid:
+                week_ids.add(uid)
+        wau.append({"week_start": ws.strftime("%Y-%m-%d"), "count": len(week_ids)})
+    wau.reverse()
+
+    # --- Top users by activity ---
+    from sqlalchemy import case
+    top_users_q = db.query(
+        User.id,
+        User.name,
+        User.handle,
+        User.email,
+        User.created_at,
+        func.count(func.distinct(Run.id)).label("run_count"),
+    ).outerjoin(Run, Run.user_id == User.id).group_by(
+        User.id, User.name, User.handle, User.email, User.created_at
+    ).order_by(func.count(func.distinct(Run.id)).desc()).limit(15).all()
+
+    top_users = []
+    for u in top_users_q:
+        gym_count = db.query(func.count(GymWorkout.id)).filter(GymWorkout.user_id == u.id).scalar() or 0
+        last_run = db.query(func.max(Run.completed_at)).filter(Run.user_id == u.id).scalar()
+        last_gym = db.query(func.max(GymWorkout.completed_at)).filter(GymWorkout.user_id == u.id).scalar()
+        last_active = max(filter(None, [last_run, last_gym]), default=None)
+        top_users.append({
+            "id": u.id,
+            "name": u.name or u.email.split("@")[0],
+            "handle": u.handle,
+            "runs": u.run_count,
+            "gym_workouts": gym_count,
+            "last_active": last_active.strftime("%Y-%m-%d") if last_active else None,
+        })
+
+    return {
+        "users": {
+            "total": total_users,
+            "new_this_week": new_this_week,
+            "new_this_month": new_this_month,
+            "onboarded": onboarded,
+            "onboarding_pct": pct(onboarded),
+            "verified": verified,
+            "verified_pct": pct(verified),
+            "active_this_week": active_this_week,
+        },
+        "activity": {
+            "total_runs": total_runs,
+            "total_km": round(total_km, 1),
+            "total_gym_workouts": total_gym,
+            "total_step_entries": total_steps,
+            "total_weight_entries": total_weights,
+        },
+        "feature_adoption": {
+            "runs": {"users": users_with_runs, "pct": pct(users_with_runs)},
+            "gym": {"users": users_with_gym, "pct": pct(users_with_gym)},
+            "steps": {"users": users_with_steps, "pct": pct(users_with_steps)},
+            "weight": {"users": users_with_weight, "pct": pct(users_with_weight)},
+            "circles": {"users": users_in_circles, "pct": pct(users_in_circles)},
+        },
+        "signups_over_time": signups_over_time,
+        "activity_over_time": activity_over_time,
+        "dau": dau,
+        "wau": wau,
+        "top_users": top_users,
+    }

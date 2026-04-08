@@ -134,6 +134,9 @@ class User(Base):
     verification_code_expires = Column(DateTime, nullable=True)
     verification_attempts = Column(Integer, default=0, server_default='0')
     
+    # 🛡️ Admin flag
+    is_admin = Column(Boolean, default=False, server_default='false')
+
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
 
