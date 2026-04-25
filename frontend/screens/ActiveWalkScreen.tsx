@@ -2,14 +2,7 @@
  * 🚶 ACTIVE WALK SCREEN
  * =====================
  *
- * Live walk tracking screen.
- * - Shows the user's route on a map (expo-maps).
- * - Live distance, duration and pace.
- * - Pause / Resume / Finish controls.
- * - Auto-pause if the user stops moving (handled by walkLocationTracker).
- *
- * On finish, navigates to WalkSummaryScreen with the captured snapshot so the
- * user can add a mood / note / photos before saving.
+ * Live walk tracking screen with in-walk photo capture.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -23,10 +16,14 @@ import {
   Platform,
   AppState,
   AppStateStatus,
+  Image,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { WalkMap } from '../components/WalkMap';
@@ -49,21 +46,30 @@ interface Props {
   route: any;
 }
 
+export interface PendingPhoto {
+  uri: string;
+  base64: string;
+  lat: number | null;
+  lng: number | null;
+  distanceKm: number;
+  capturedAt: number;
+}
+
 export function ActiveWalkScreen({ navigation, route }: Props) {
-  const publicWalk = route?.params?.publicWalk; // optional: following a public walk
+  const publicWalk = route?.params?.publicWalk;
   const [snapshot, setSnapshot] = useState<WalkSnapshot>(walkTracker.getSnapshot());
   const [starting, setStarting] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [backgroundEnabled, setBackgroundEnabled] = useState(false);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
+  const [capturing, setCapturing] = useState(false);
   const startedOnceRef = useRef(false);
 
-  // Subscribe to tracker updates.
   useEffect(() => {
     const unsub = walkTracker.subscribe(setSnapshot);
     return () => unsub();
   }, []);
 
-  // Auto-start tracking on mount if we're not already tracking.
   useEffect(() => {
     if (startedOnceRef.current) return;
     startedOnceRef.current = true;
@@ -72,7 +78,6 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Warn user if they try to leave with an active walk.
   useFocusEffect(
     React.useCallback(() => {
       const sub = navigation.addListener('beforeRemove', (e: any) => {
@@ -98,9 +103,6 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
     }, [navigation]),
   );
 
-  // Drain any background-collected points whenever the app returns to the
-  // foreground. This is the bridge between the headless TaskManager task and
-  // the live snapshot the user sees in the UI.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'active') {
@@ -116,7 +118,6 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
     try {
       let useBackground = await getBackgroundTrackingEnabled();
       if (useBackground) {
-        // Always permission may have been revoked since opt-in — re-check.
         const { granted } = await requestAlwaysLocationPermission();
         if (!granted) {
           useBackground = false;
@@ -136,27 +137,69 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
     }
   };
 
-  const handlePauseResume = () => {
+  const capturePhoto = async () => {
+    if (capturing) return;
+    setCapturing(true);
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {}
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Camera access needed', 'Allow camera access in Settings to take walk photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: false,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+
+      // Resize to max 1200px wide so base64 stays small
+      const manipulated = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 1200 } }],
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+
+      const snap = walkTracker.getSnapshot();
+      const lastPt = snap.points.length > 0 ? snap.points[snap.points.length - 1] : null;
+
+      const photo: PendingPhoto = {
+        uri: manipulated.uri,
+        base64: manipulated.base64 ?? '',
+        lat: lastPt?.lat ?? null,
+        lng: lastPt?.lng ?? null,
+        distanceKm: snap.distanceKm,
+        capturedAt: Date.now(),
+      };
+
+      setPendingPhotos((prev) => [...prev, photo]);
+    } catch (e) {
+      console.warn('Photo capture failed', e);
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  const handlePauseResume = () => {
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
     if (snapshot.isPaused) walkTracker.resume();
     else walkTracker.pause();
   };
 
   const handleFinish = () => {
-    try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {}
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
     if (snapshot.distanceKm < 0.05) {
-      Alert.alert(
-        'Walk too short',
-        'You need to move a little before saving. Keep walking and try again.',
-        [{ text: 'OK' }],
-      );
+      Alert.alert('Walk too short', 'You need to move a little before saving. Keep walking and try again.');
       return;
     }
-    Alert.alert('Finish walk?', 'Save this walk?', [
+    const photoNote = pendingPhotos.length > 0
+      ? `\n\n${pendingPhotos.length} photo${pendingPhotos.length > 1 ? 's' : ''} will be saved with the walk.`
+      : '';
+    Alert.alert('Finish walk?', `Save this walk?${photoNote}`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Discard',
@@ -170,23 +213,18 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
         text: 'Save',
         onPress: async () => {
           const final = await walkTracker.stop();
-          // Navigate to summary, replace so back goes to WalkScreen.
           navigation.replace('WalkSummary', {
             snapshot: serialiseSnapshot(final),
             publicWalkId: publicWalk?.id,
+            pendingPhotos,
           });
         },
       },
     ]);
   };
 
-  const lastPoint =
-    snapshot.points.length > 0
-      ? snapshot.points[snapshot.points.length - 1]
-      : null;
-  const center = lastPoint
-    ? { lat: lastPoint.lat, lng: lastPoint.lng }
-    : undefined;
+  const lastPoint = snapshot.points.length > 0 ? snapshot.points[snapshot.points.length - 1] : null;
+  const center = lastPoint ? { lat: lastPoint.lat, lng: lastPoint.lng } : undefined;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -198,38 +236,43 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
           showUserLocation
           routeColor={colors.primary}
         />
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-          hitSlop={8}
-        >
+        <Pressable onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={8}>
           <Ionicons name="close" size={22} color={colors.text} />
         </Pressable>
         {publicWalk && (
           <View style={styles.publicBadge}>
             <Ionicons name="map" size={14} color={colors.textOnPrimary} />
-            <Text style={styles.publicBadgeText} numberOfLines={1}>
-              Following: {publicWalk.name}
-            </Text>
+            <Text style={styles.publicBadgeText} numberOfLines={1}>Following: {publicWalk.name}</Text>
           </View>
         )}
         {backgroundEnabled && snapshot.isTracking && (
           <View style={[styles.publicBadge, styles.bgBadge, publicWalk && { top: 56 }]}>
             <Ionicons name="moon" size={12} color={colors.textOnPrimary} />
-            <Text style={styles.publicBadgeText} numberOfLines={1}>
-              Background tracking on
-            </Text>
+            <Text style={styles.publicBadgeText} numberOfLines={1}>Background tracking on</Text>
           </View>
         )}
       </View>
 
       <View style={styles.statsCard}>
+        {/* Photo strip — visible while tracking */}
+        {pendingPhotos.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.photoStrip}
+            contentContainerStyle={styles.photoStripContent}
+          >
+            {pendingPhotos.map((p, i) => (
+              <View key={p.capturedAt} style={styles.thumbWrap}>
+                <Image source={{ uri: p.uri }} style={styles.thumb} />
+                <Text style={styles.thumbDist}>{p.distanceKm.toFixed(1)} km</Text>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+
         <View style={styles.statsRow}>
-          <Stat
-            label="Distance"
-            value={formatDistanceKm(snapshot.distanceKm)}
-            big
-          />
+          <Stat label="Distance" value={formatDistanceKm(snapshot.distanceKm)} big />
           <View style={styles.divider} />
           <Stat label="Time" value={formatDurationHms(snapshot.durationSeconds)} big />
         </View>
@@ -239,38 +282,26 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
           <Stat
             label="Status"
             value={
-              starting
-                ? 'Starting…'
-                : !snapshot.isTracking
-                  ? permissionError
-                    ? 'Blocked'
-                    : 'Idle'
-                  : snapshot.isPaused
-                    ? 'Paused'
-                    : 'Tracking'
+              starting ? 'Starting…'
+                : !snapshot.isTracking ? (permissionError ? 'Blocked' : 'Idle')
+                : snapshot.isPaused ? 'Paused'
+                : 'Tracking'
             }
             color={
-              !snapshot.isTracking
-                ? colors.textSecondary
-                : snapshot.isPaused
-                  ? colors.warning
-                  : colors.success
+              !snapshot.isTracking ? colors.textSecondary
+                : snapshot.isPaused ? colors.warning
+                : colors.success
             }
           />
         </View>
 
-        {permissionError && (
-          <Text style={styles.permissionError}>{permissionError}</Text>
-        )}
+        {permissionError && <Text style={styles.permissionError}>{permissionError}</Text>}
 
         <View style={styles.controls}>
           {!snapshot.isTracking ? (
             <Pressable
               onPress={startTracking}
-              style={({ pressed }) => [
-                styles.primaryBtn,
-                { transform: [{ scale: pressed ? 0.97 : 1 }] },
-              ]}
+              style={({ pressed }) => [styles.primaryBtn, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
               disabled={starting}
             >
               {starting ? (
@@ -286,26 +317,39 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
             <>
               <Pressable
                 onPress={handlePauseResume}
+                style={({ pressed }) => [styles.secondaryBtn, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+              >
+                <Ionicons name={snapshot.isPaused ? 'play' : 'pause'} size={20} color={colors.text} />
+                <Text style={styles.secondaryBtnText}>{snapshot.isPaused ? 'Resume' : 'Pause'}</Text>
+              </Pressable>
+
+              {/* 📸 Camera button */}
+              <Pressable
+                onPress={capturePhoto}
+                disabled={capturing}
                 style={({ pressed }) => [
-                  styles.secondaryBtn,
+                  styles.cameraBtn,
                   { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                  capturing && { opacity: 0.6 },
                 ]}
               >
-                <Ionicons
-                  name={snapshot.isPaused ? 'play' : 'pause'}
-                  size={20}
-                  color={colors.text}
-                />
-                <Text style={styles.secondaryBtnText}>
-                  {snapshot.isPaused ? 'Resume' : 'Pause'}
-                </Text>
+                {capturing ? (
+                  <ActivityIndicator color={colors.secondary} size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="camera" size={20} color={colors.secondary} />
+                    {pendingPhotos.length > 0 && (
+                      <View style={styles.photoBadge}>
+                        <Text style={styles.photoBadgeText}>{pendingPhotos.length}</Text>
+                      </View>
+                    )}
+                  </>
+                )}
               </Pressable>
+
               <Pressable
                 onPress={handleFinish}
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  { transform: [{ scale: pressed ? 0.97 : 1 }] },
-                ]}
+                style={({ pressed }) => [styles.primaryBtn, styles.finishBtn, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
               >
                 <Ionicons name="checkmark" size={20} color={colors.textOnPrimary} />
                 <Text style={styles.primaryBtnText}>Finish</Text>
@@ -315,37 +359,17 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
         </View>
 
         {Platform.OS !== 'ios' && Platform.OS !== 'android' && (
-          <Text style={styles.webHint}>
-            Live walk tracking requires the iOS or Android app.
-          </Text>
+          <Text style={styles.webHint}>Live walk tracking requires the iOS or Android app.</Text>
         )}
       </View>
     </SafeAreaView>
   );
 }
 
-function Stat({
-  label,
-  value,
-  big,
-  color,
-}: {
-  label: string;
-  value: string;
-  big?: boolean;
-  color?: string;
-}) {
+function Stat({ label, value, big, color }: { label: string; value: string; big?: boolean; color?: string }) {
   return (
     <View style={styles.stat}>
-      <Text
-        style={[
-          styles.statValue,
-          big && styles.statValueBig,
-          color ? { color } : null,
-        ]}
-      >
-        {value}
-      </Text>
+      <Text style={[styles.statValue, big && styles.statValueBig, color ? { color } : null]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -402,9 +426,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.semibold,
     flexShrink: 1,
   },
-  bgBadge: {
-    backgroundColor: colors.text,
-  },
+  bgBadge: { backgroundColor: colors.text },
   statsCard: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
@@ -413,6 +435,31 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     ...shadows.large,
   },
+  // Photo strip
+  photoStrip: {
+    marginBottom: spacing.sm,
+    marginHorizontal: -spacing.lg,
+  },
+  photoStripContent: {
+    paddingHorizontal: spacing.lg,
+    gap: 8,
+    flexDirection: 'row',
+  },
+  thumbWrap: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  thumb: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  thumbDist: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  // Stats
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -424,23 +471,19 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  statValueBig: {
-    fontSize: typography.sizes.xxl,
-  },
+  statValueBig: { fontSize: typography.sizes.xxl },
   statLabel: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,
   },
-  divider: {
-    width: 1,
-    height: 40,
-    backgroundColor: colors.border,
-  },
+  divider: { width: 1, height: 40, backgroundColor: colors.border },
+  // Controls
   controls: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.sm,
+    alignItems: 'center',
   },
   primaryBtn: {
     flex: 1,
@@ -452,6 +495,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingVertical: 14,
     ...shadows.small,
+  },
+  finishBtn: {
+    flex: 1,
   },
   primaryBtnText: {
     color: colors.textOnPrimary,
@@ -472,6 +518,34 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.semibold,
+  },
+  cameraBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.lg,
+    backgroundColor: colors.secondary + '18',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.secondary + '40',
+    position: 'relative',
+  },
+  photoBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  photoBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   permissionError: {
     fontSize: typography.sizes.xs,

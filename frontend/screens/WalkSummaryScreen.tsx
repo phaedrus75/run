@@ -36,7 +36,7 @@ import {
   encodePolyline,
   TrackedPoint,
 } from '../services/walkLocationTracker';
-import { walkApi } from '../services/api';
+import { walkApi, walkPhotoApi } from '../services/api';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
 interface SerialisedSnapshot {
@@ -47,12 +47,22 @@ interface SerialisedSnapshot {
   points: { lat: number; lng: number; timestamp: number; altitude: number | null }[];
 }
 
+interface PendingPhoto {
+  uri: string;
+  base64: string;
+  lat: number | null;
+  lng: number | null;
+  distanceKm: number;
+  capturedAt: number;
+}
+
 interface Props {
   navigation: any;
   route: {
     params?: {
       snapshot?: SerialisedSnapshot;
       publicWalkId?: number;
+      pendingPhotos?: PendingPhoto[];
     };
   };
 }
@@ -67,6 +77,7 @@ const MOODS = [
 export function WalkSummaryScreen({ navigation, route }: Props) {
   const snapshot = route?.params?.snapshot;
   const publicWalkId = route?.params?.publicWalkId;
+  const pendingPhotos = route?.params?.pendingPhotos ?? [];
   const [mood, setMood] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -110,6 +121,20 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
         category: 'outdoor',
         public_walk_id: publicWalkId,
       });
+
+      // Upload any photos captured during the walk
+      if (pendingPhotos.length > 0) {
+        await Promise.allSettled(
+          pendingPhotos.map((p) =>
+            walkPhotoApi.upload(walk.id, {
+              photo_data: p.base64,
+              lat: p.lat ?? undefined,
+              lng: p.lng ?? undefined,
+              distance_marker_km: p.distanceKm,
+            }),
+          ),
+        );
+      }
 
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -165,6 +190,7 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
           <Text style={styles.subtitle}>
             {formatDistanceKm(snapshot.distanceKm)} ·{' '}
             {formatDurationHms(snapshot.durationSeconds)} · {pace} /km
+            {pendingPhotos.length > 0 ? ` · 📸 ${pendingPhotos.length} photo${pendingPhotos.length > 1 ? 's' : ''}` : ''}
           </Text>
 
           <View style={styles.mapWrap}>
