@@ -20,16 +20,35 @@
         "buildType": "apk"
       }
     },
+    "beta": {
+      "distribution": "store",
+      "channel": "beta",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
     "production": {
       "ios": {
         "resourceClass": "m-medium"
+      },
+      "android": {
+        "buildType": "app-bundle"
       }
     }
   },
   "submit": {
+    "beta": {
+      "ios": {
+        "ascAppId": "6759347621"
+      }
+    },
     "production": {
       "ios": {
         "ascAppId": "6759347621"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
       }
     }
   }

@@ -20,6 +20,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { StatCard, StatsChart, PaceTrendChart, WeightTracker, StreakProgress } from '../components';
+import { gymApi, type GymStats, walkApi, type WalkStats } from '../services/api';
+import { GymStatsSection } from '../components/GymStatsSection';
+import { WalkStatsSection } from '../components/WalkStatsSection';
 import { 
   runApi, 
   statsApi, 
@@ -33,7 +36,7 @@ import {
   type StepsSummary,
 } from '../services/api';
 
-type Section = 'runs' | 'steps' | 'weight';
+type Section = 'runs' | 'steps' | 'weight' | 'gym' | 'walks';
 type RunViewMode = 'week' | 'month' | 'all';
 type StepsViewMode = 'month' | 'all';
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
@@ -54,6 +57,8 @@ export function StatsScreen() {
   const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
   const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
+  const [gymStats, setGymStats] = useState<GymStats | null>(null);
+  const [walkStats, setWalkStats] = useState<WalkStats | null>(null);
 
   // Derived synchronously — no useEffect delay
   const runs = useMemo(() => {
@@ -77,7 +82,13 @@ export function StatsScreen() {
       setWeightChart(weightChartData);
       setStreakProgress(streakData);
       setStepsSummary(stepsData);
-      
+
+      if (user?.beta_gym_enabled) {
+        try { setGymStats(await gymApi.getStats()); } catch {}
+      }
+
+      try { setWalkStats(await walkApi.getStats()); } catch {}
+
       const filteredRuns = runsData.filter((run: Run) => {
         const runDate = new Date(run.completed_at);
         return runDate.getFullYear() >= MIN_YEAR;
@@ -239,8 +250,10 @@ export function StatsScreen() {
     const tabs: { key: Section; label: string }[] = [
       { key: 'runs', label: 'Runs' },
     ];
-    if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'High Step Days' });
+    tabs.push({ key: 'walks', label: 'Walks' });
+    if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'Steps' });
     if (user?.beta_weight_enabled) tabs.push({ key: 'weight', label: 'Weight' });
+    if (user?.beta_gym_enabled) tabs.push({ key: 'gym', label: 'Gym' });
 
     if (tabs.length <= 1) return null;
 
@@ -670,6 +683,13 @@ export function StatsScreen() {
     </View>
   );
 
+  const renderGymSection = () => {
+    if (!gymStats) {
+      return <Text style={styles.emptyText}>No gym workouts logged yet. Log your first session from the Activities tab.</Text>;
+    }
+    return <GymStatsSection stats={gymStats} />;
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -721,6 +741,12 @@ export function StatsScreen() {
 
         {/* Weight Section */}
         {section === 'weight' && renderWeightSection()}
+
+        {/* Gym Section */}
+        {section === 'gym' && renderGymSection()}
+
+        {/* Walks Section */}
+        {section === 'walks' && <WalkStatsSection stats={walkStats} />}
       </ScrollView>
     </SafeAreaView>
   );

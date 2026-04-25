@@ -40,7 +40,7 @@ def _get_real_client_ip(request: Request) -> str:
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection, GymWorkout, Exercise
+from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection, GymWorkout, Exercise, Walk, WalkPhoto, PublicWalk
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email, get_user_by_id,
@@ -195,6 +195,72 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false
                 """))
+
+                # Walk feature tables
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS walks (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER,
+                        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        ended_at TIMESTAMP,
+                        duration_seconds INTEGER NOT NULL,
+                        distance_km FLOAT NOT NULL,
+                        route_polyline TEXT,
+                        start_lat FLOAT,
+                        start_lng FLOAT,
+                        end_lat FLOAT,
+                        end_lng FLOAT,
+                        elevation_gain_m FLOAT,
+                        avg_pace_seconds_per_km FLOAT,
+                        notes VARCHAR,
+                        mood VARCHAR,
+                        category VARCHAR DEFAULT 'outdoor',
+                        public_walk_id INTEGER,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_walks_user_started ON walks(user_id, started_at DESC)
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS walk_photos (
+                        id SERIAL PRIMARY KEY,
+                        walk_id INTEGER NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        photo_data TEXT NOT NULL,
+                        lat FLOAT,
+                        lng FLOAT,
+                        distance_marker_km FLOAT,
+                        caption VARCHAR,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_walk_photos_walk ON walk_photos(walk_id)
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS public_walks (
+                        id SERIAL PRIMARY KEY,
+                        osm_id VARCHAR,
+                        name VARCHAR NOT NULL,
+                        description TEXT,
+                        distance_km FLOAT NOT NULL,
+                        estimated_duration_min INTEGER,
+                        difficulty VARCHAR,
+                        route_polyline TEXT NOT NULL,
+                        start_lat FLOAT NOT NULL,
+                        start_lng FLOAT NOT NULL,
+                        region VARCHAR,
+                        country VARCHAR,
+                        tags VARCHAR,
+                        source VARCHAR,
+                        cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_public_walks_osm ON public_walks(osm_id)
+                """))
+
                 conn.commit()
                 
                 migration_email = os.getenv("MIGRATION_USER_EMAIL")
@@ -2841,6 +2907,389 @@ def get_scenic_runs(
         })
     
     return result
+
+
+# ==========================================
+# 🚶 WALK ENDPOINTS
+# ==========================================
+
+def _walk_to_dict(walk: Walk, photo_count: int = 0) -> dict:
+    return {
+        "id": walk.id,
+        "user_id": walk.user_id,
+        "started_at": walk.started_at.isoformat() if walk.started_at else None,
+        "ended_at": walk.ended_at.isoformat() if walk.ended_at else None,
+        "duration_seconds": walk.duration_seconds,
+        "distance_km": walk.distance_km,
+        "route_polyline": walk.route_polyline,
+        "start_lat": walk.start_lat,
+        "start_lng": walk.start_lng,
+        "end_lat": walk.end_lat,
+        "end_lng": walk.end_lng,
+        "elevation_gain_m": walk.elevation_gain_m,
+        "avg_pace_seconds_per_km": walk.avg_pace_seconds_per_km,
+        "notes": walk.notes,
+        "mood": walk.mood,
+        "category": walk.category,
+        "public_walk_id": walk.public_walk_id,
+        "photo_count": photo_count,
+    }
+
+
+@app.post("/walks")
+def create_walk_endpoint(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Create a walk record from a completed walk session."""
+    duration_seconds = payload.get("duration_seconds")
+    distance_km = payload.get("distance_km")
+    if duration_seconds is None or duration_seconds <= 0:
+        raise HTTPException(status_code=400, detail="duration_seconds is required and must be positive")
+    if distance_km is None or distance_km < 0:
+        raise HTTPException(status_code=400, detail="distance_km is required and must be non-negative")
+    if distance_km > 200:
+        raise HTTPException(status_code=400, detail="distance_km is unreasonably large")
+
+    notes = payload.get("notes")
+    if notes:
+        notes = _sanitize_text(notes, max_length=500)
+
+    started_at = payload.get("started_at")
+    ended_at = payload.get("ended_at")
+    from datetime import datetime as _dt
+    started_at_dt = None
+    ended_at_dt = None
+    if started_at:
+        try:
+            started_at_dt = _dt.fromisoformat(started_at.replace("Z", "+00:00"))
+        except Exception:
+            started_at_dt = None
+    if ended_at:
+        try:
+            ended_at_dt = _dt.fromisoformat(ended_at.replace("Z", "+00:00"))
+        except Exception:
+            ended_at_dt = None
+
+    walk = crud.create_walk(
+        db,
+        user_id=current_user.id,
+        duration_seconds=int(duration_seconds),
+        distance_km=float(distance_km),
+        started_at=started_at_dt,
+        ended_at=ended_at_dt,
+        route_polyline=payload.get("route_polyline"),
+        start_lat=payload.get("start_lat"),
+        start_lng=payload.get("start_lng"),
+        end_lat=payload.get("end_lat"),
+        end_lng=payload.get("end_lng"),
+        elevation_gain_m=payload.get("elevation_gain_m"),
+        notes=notes,
+        mood=payload.get("mood"),
+        category=payload.get("category"),
+        public_walk_id=payload.get("public_walk_id"),
+    )
+    return _walk_to_dict(walk)
+
+
+@app.get("/walks")
+def list_walks(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    walks = crud.get_walks(db, user_id=current_user.id, limit=min(limit, 200), offset=offset)
+    walk_ids = [w.id for w in walks]
+    photo_counts = {}
+    if walk_ids:
+        rows = (
+            db.query(WalkPhoto.walk_id, func.count(WalkPhoto.id))
+            .filter(WalkPhoto.walk_id.in_(walk_ids))
+            .group_by(WalkPhoto.walk_id)
+            .all()
+        )
+        photo_counts = {wid: count for wid, count in rows}
+    return [_walk_to_dict(w, photo_counts.get(w.id, 0)) for w in walks]
+
+
+@app.get("/walks/stats")
+def walk_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    return crud.get_walk_stats(db, user_id=current_user.id)
+
+
+@app.get("/walks/{walk_id}")
+def get_walk_endpoint(
+    walk_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    walk = crud.get_walk(db, walk_id=walk_id, user_id=current_user.id)
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    photo_count = (
+        db.query(func.count(WalkPhoto.id))
+        .filter(WalkPhoto.walk_id == walk_id)
+        .scalar()
+    ) or 0
+    return _walk_to_dict(walk, photo_count)
+
+
+@app.put("/walks/{walk_id}")
+def update_walk_endpoint(
+    walk_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    notes = payload.get("notes")
+    if notes is not None:
+        notes = _sanitize_text(notes, max_length=500)
+    walk = crud.update_walk(
+        db,
+        walk_id=walk_id,
+        user_id=current_user.id,
+        notes=notes,
+        mood=payload.get("mood"),
+        category=payload.get("category"),
+    )
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    return _walk_to_dict(walk)
+
+
+@app.delete("/walks/{walk_id}")
+def delete_walk_endpoint(
+    walk_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    ok = crud.delete_walk(db, walk_id=walk_id, user_id=current_user.id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    return {"message": "Walk deleted"}
+
+
+# --- Walk Photos ---
+
+@app.post("/walks/{walk_id}/photos")
+def upload_walk_photo(
+    walk_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    walk = crud.get_walk(db, walk_id=walk_id, user_id=current_user.id)
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+
+    base64_data = payload.get("photo_data")
+    if not base64_data:
+        raise HTTPException(status_code=400, detail="photo_data is required")
+    MAX_PHOTO_BYTES = 5 * 1024 * 1024
+    if len(base64_data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 5MB")
+    VALID_IMAGE_PREFIXES = ("/9j/", "iVBOR", "R0lGO", "UklGR", "data:image/")
+    clean_data = base64_data.split(",", 1)[-1] if base64_data.startswith("data:") else base64_data
+    if not any(clean_data.startswith(p) for p in VALID_IMAGE_PREFIXES) and not base64_data.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Invalid image format")
+
+    caption = payload.get("caption")
+    if caption:
+        caption = _sanitize_text(caption, max_length=200)
+
+    photo = crud.create_walk_photo(
+        db,
+        walk_id=walk_id,
+        user_id=current_user.id,
+        photo_data=base64_data,
+        lat=payload.get("lat"),
+        lng=payload.get("lng"),
+        distance_marker_km=payload.get("distance_marker_km"),
+        caption=caption,
+    )
+    return {
+        "id": photo.id,
+        "walk_id": photo.walk_id,
+        "lat": photo.lat,
+        "lng": photo.lng,
+        "distance_marker_km": photo.distance_marker_km,
+        "caption": photo.caption,
+        "created_at": photo.created_at.isoformat() if photo.created_at else None,
+    }
+
+
+@app.get("/walks/{walk_id}/photos")
+def list_walk_photos(
+    walk_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    walk = crud.get_walk(db, walk_id=walk_id, user_id=current_user.id)
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    photos = crud.get_walk_photos(db, walk_id=walk_id)
+    return [
+        {
+            "id": p.id,
+            "walk_id": p.walk_id,
+            "photo_data": p.photo_data,
+            "lat": p.lat,
+            "lng": p.lng,
+            "distance_marker_km": p.distance_marker_km,
+            "caption": p.caption,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in photos
+    ]
+
+
+@app.delete("/walks/{walk_id}/photos/{photo_id}")
+def delete_walk_photo_endpoint(
+    walk_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    ok = crud.delete_walk_photo(db, photo_id=photo_id, walk_id=walk_id, user_id=current_user.id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {"message": "Photo deleted"}
+
+
+# --- Public Walks (Overpass / OpenStreetMap powered) ---
+
+from services import overpass  # noqa: E402
+
+
+def _serialize_public_walk(w: PublicWalk) -> dict:
+    return {
+        "id": w.id,
+        "osm_id": w.osm_id,
+        "name": w.name,
+        "description": w.description,
+        "distance_km": w.distance_km,
+        "estimated_duration_min": w.estimated_duration_min,
+        "difficulty": w.difficulty,
+        "route_polyline": w.route_polyline,
+        "start_lat": w.start_lat,
+        "start_lng": w.start_lng,
+        "region": w.region,
+        "country": w.country,
+        "tags": w.tags,
+        "source": w.source,
+    }
+
+
+@app.get("/public-walks")
+def list_public_walks(
+    region: Optional[str] = None,
+    country: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    radius_km: float = 15.0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    walks = crud.get_public_walks(
+        db, region=region, country=country, difficulty=difficulty, limit=min(limit, 200)
+    )
+    serialized = [_serialize_public_walk(w) for w in walks]
+
+    # If the caller passed a location, sort by proximity and filter within
+    # the requested radius so results are locally relevant.
+    if lat is not None and lng is not None:
+        for w in serialized:
+            w["distance_from_user_km"] = round(
+                overpass.haversine_km((lat, lng), (w["start_lat"], w["start_lng"])), 2
+            )
+        serialized = [w for w in serialized if w["distance_from_user_km"] <= radius_km]
+        serialized.sort(key=lambda w: w["distance_from_user_km"])
+
+    return serialized
+
+
+@app.post("/public-walks/discover")
+def discover_public_walks_endpoint(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Refresh the public-walk cache around a (lat,lng) using Overpass.
+
+    Returns the freshly cached walks sorted by distance from the user.
+    Falls back to whatever is already cached on Overpass failure.
+    """
+    try:
+        lat = float(payload.get("lat"))
+        lng = float(payload.get("lng"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="lat/lng required")
+
+    radius_km = float(payload.get("radius_km") or 10.0)
+    radius_km = max(1.0, min(radius_km, 30.0))
+    limit = int(payload.get("limit") or 25)
+    limit = max(1, min(limit, 50))
+
+    fetched = overpass.discover_public_walks(lat=lat, lng=lng, radius_km=radius_km, limit=limit)
+    cached: List[dict] = []
+    for w in fetched:
+        try:
+            row = crud.upsert_public_walk(
+                db,
+                osm_id=w["osm_id"],
+                name=w["name"],
+                distance_km=w["distance_km"],
+                route_polyline=w["route_polyline"],
+                start_lat=w["start_lat"],
+                start_lng=w["start_lng"],
+                description=w.get("description"),
+                estimated_duration_min=w.get("estimated_duration_min"),
+                difficulty=w.get("difficulty"),
+                region=w.get("region"),
+                country=w.get("country"),
+                tags=w.get("tags"),
+                source=w.get("source") or "osm",
+            )
+            cached.append(_serialize_public_walk(row))
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            continue
+
+    # Always merge in already-cached nearby walks so the user sees something
+    # even when Overpass returns nothing new.
+    existing = [_serialize_public_walk(x) for x in crud.get_public_walks(db, limit=200)]
+    merged = {w["id"]: w for w in cached}
+    for w in existing:
+        if w["id"] not in merged:
+            merged[w["id"]] = w
+
+    out = list(merged.values())
+    for w in out:
+        w["distance_from_user_km"] = round(
+            overpass.haversine_km((lat, lng), (w["start_lat"], w["start_lng"])), 2
+        )
+    out = [w for w in out if w["distance_from_user_km"] <= radius_km]
+    out.sort(key=lambda w: w["distance_from_user_km"])
+    return {"refreshed": len(cached), "walks": out[:limit]}
+
+
+@app.get("/public-walks/{walk_id}")
+def get_public_walk_endpoint(
+    walk_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    w = crud.get_public_walk(db, walk_id=walk_id)
+    if not w:
+        raise HTTPException(status_code=404, detail="Public walk not found")
+    return _serialize_public_walk(w)
 
 
 # ==========================================

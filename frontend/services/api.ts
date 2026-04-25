@@ -107,6 +107,75 @@ export interface ScenicRun {
   cover_photo: string | null;
 }
 
+// 🚶 Walk types
+export interface Walk {
+  id: number;
+  user_id: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number;
+  distance_km: number;
+  route_polyline: string | null;
+  start_lat: number | null;
+  start_lng: number | null;
+  end_lat: number | null;
+  end_lng: number | null;
+  elevation_gain_m: number | null;
+  avg_pace_seconds_per_km: number | null;
+  notes: string | null;
+  mood: string | null;
+  category: string | null;
+  public_walk_id: number | null;
+  photo_count?: number;
+}
+
+export interface WalkPhoto {
+  id: number;
+  walk_id: number;
+  photo_data: string;
+  lat: number | null;
+  lng: number | null;
+  distance_marker_km: number | null;
+  caption: string | null;
+  created_at: string | null;
+}
+
+export interface WalkStats {
+  total_walks: number;
+  total_km: number;
+  total_minutes: number;
+  walks_this_week: number;
+  km_this_week: number;
+  walks_this_month: number;
+  km_this_month: number;
+  longest_walk_km: number;
+  longest_walk_minutes: number;
+  avg_pace_seconds_per_km: number | null;
+}
+
+export interface PublicWalk {
+  id: number;
+  osm_id: string | null;
+  name: string;
+  description: string | null;
+  distance_km: number;
+  estimated_duration_min: number | null;
+  difficulty: string | null;
+  route_polyline: string;
+  start_lat: number;
+  start_lng: number;
+  region: string | null;
+  country: string | null;
+  tags: string | null;
+  source: string | null;
+  distance_from_user_km?: number;
+}
+
+export interface DiscoverPublicWalksResponse {
+  refreshed: number;
+  walks: PublicWalk[];
+}
+
 export interface Stats {
   total_runs: number;
   total_km: number;
@@ -528,6 +597,138 @@ export const stepsApi = {
 };
 
 // ==========================================
+// 🏋️ GYM API (Strength Training)
+// ==========================================
+
+export interface GymExerciseLog {
+  name: string;
+  sets: { reps: number; completed: boolean }[];
+  weight_kg: number;
+}
+
+export interface GymWorkout {
+  id: number;
+  completed_at: string | null;
+  exercises: GymExerciseLog[];
+  notes: string | null;
+  duration_minutes: number | null;
+}
+
+export interface GymProgramExercise {
+  name: string;
+  sets: number;
+  reps: number;
+  weight_kg: number;
+  machine: string;
+  increment_kg: number;
+  is_timed: boolean;
+}
+
+export interface ExerciseCatalogEntry {
+  id: number;
+  name: string;
+  muscle_group: string;
+  equipment: string | null;
+  default_weight_kg: number;
+  weight_kg: number;
+  increment_kg: number;
+  default_sets: number;
+  default_reps: number;
+  is_timed: boolean;
+  is_custom: boolean;
+}
+
+export interface ExerciseHistoryEntry {
+  date: string;
+  weight: number;
+  volume: number;
+  best_set_reps: number;
+  sets: number;
+  reps: number;
+}
+
+export interface GymStats {
+  total_workouts: number;
+  this_week: number;
+  streak_weeks: number;
+  total_sets: number;
+  total_reps: number;
+  total_volume: number;
+  unique_exercises: number;
+  progression: Record<string, { first: number; current: number }>;
+  volume: Record<string, ExerciseHistoryEntry[]>;
+  frequency: { week_start: string; count: number }[];
+  personal_records: Record<string, { weight: number; date: string }>;
+  exercise_history: Record<string, ExerciseHistoryEntry[]>;
+}
+
+export const gymApi = {
+  create: (data: {
+    exercises: GymExerciseLog[];
+    notes?: string;
+    duration_minutes?: number;
+  }): Promise<GymWorkout> => {
+    return apiFetch('/gym/workouts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getAll: (limit: number = 50, offset: number = 0): Promise<GymWorkout[]> => {
+    return apiFetch(`/gym/workouts?limit=${limit}&offset=${offset}`);
+  },
+
+  update: (id: number, data: {
+    exercises?: GymExerciseLog[];
+    notes?: string;
+    duration_minutes?: number;
+  }): Promise<GymWorkout> => {
+    return apiFetch(`/gym/workouts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/gym/workouts/${id}`, { method: 'DELETE' });
+  },
+
+  getProgram: (): Promise<{ exercises: GymProgramExercise[] }> => {
+    return apiFetch('/gym/program');
+  },
+
+  getStats: (): Promise<GymStats> => {
+    return apiFetch('/gym/stats');
+  },
+};
+
+export const exerciseApi = {
+  getAll: (): Promise<ExerciseCatalogEntry[]> => {
+    return apiFetch('/gym/exercises');
+  },
+
+  create: (data: {
+    name: string;
+    muscle_group?: string;
+    equipment?: string;
+    default_weight_kg?: number;
+    increment_kg?: number;
+    default_sets?: number;
+    default_reps?: number;
+    is_timed?: boolean;
+  }): Promise<ExerciseCatalogEntry> => {
+    return apiFetch('/gym/exercises', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/gym/exercises/${id}`, { method: 'DELETE' });
+  },
+};
+
+// ==========================================
 // 📸 PHOTO API (Scenic Runs)
 // ==========================================
 
@@ -609,6 +810,122 @@ export const levelApi = {
     return apiFetch('/user/level', {
       method: 'PUT',
       body: JSON.stringify({ level }),
+    });
+  },
+};
+
+// ==========================================
+// 🚶 WALK API
+// ==========================================
+
+export const walkApi = {
+  create: (data: {
+    duration_seconds: number;
+    distance_km: number;
+    started_at?: string;
+    ended_at?: string;
+    route_polyline?: string;
+    start_lat?: number;
+    start_lng?: number;
+    end_lat?: number;
+    end_lng?: number;
+    elevation_gain_m?: number;
+    notes?: string;
+    mood?: string;
+    category?: string;
+    public_walk_id?: number;
+  }): Promise<Walk> => {
+    return apiFetch('/walks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  list: (limit = 50, offset = 0): Promise<Walk[]> => {
+    return apiFetch(`/walks?limit=${limit}&offset=${offset}`);
+  },
+
+  get: (id: number): Promise<Walk> => {
+    return apiFetch(`/walks/${id}`);
+  },
+
+  update: (id: number, data: { notes?: string; mood?: string; category?: string }): Promise<Walk> => {
+    return apiFetch(`/walks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return apiFetch(`/walks/${id}`, { method: 'DELETE' });
+  },
+
+  getStats: (): Promise<WalkStats> => {
+    return apiFetch('/walks/stats');
+  },
+};
+
+export const walkPhotoApi = {
+  upload: (
+    walkId: number,
+    data: {
+      photo_data: string;
+      lat?: number;
+      lng?: number;
+      distance_marker_km?: number;
+      caption?: string;
+    }
+  ): Promise<WalkPhoto> => {
+    return apiFetch(`/walks/${walkId}/photos`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getForWalk: (walkId: number): Promise<WalkPhoto[]> => {
+    return apiFetch(`/walks/${walkId}/photos`);
+  },
+
+  delete: (walkId: number, photoId: number): Promise<void> => {
+    return apiFetch(`/walks/${walkId}/photos/${photoId}`, { method: 'DELETE' });
+  },
+};
+
+export const publicWalkApi = {
+  list: (params?: {
+    region?: string;
+    country?: string;
+    difficulty?: string;
+    lat?: number;
+    lng?: number;
+    radius_km?: number;
+    limit?: number;
+  }): Promise<PublicWalk[]> => {
+    const query = new URLSearchParams();
+    if (params?.region) query.append('region', params.region);
+    if (params?.country) query.append('country', params.country);
+    if (params?.difficulty) query.append('difficulty', params.difficulty);
+    if (params?.lat != null) query.append('lat', String(params.lat));
+    if (params?.lng != null) query.append('lng', String(params.lng));
+    if (params?.radius_km != null) query.append('radius_km', String(params.radius_km));
+    if (params?.limit) query.append('limit', String(params.limit));
+    const qs = query.toString();
+    return apiFetch(`/public-walks${qs ? `?${qs}` : ''}`);
+  },
+
+  get: (id: number): Promise<PublicWalk> => {
+    return apiFetch(`/public-walks/${id}`);
+  },
+
+  discover: (params: {
+    lat: number;
+    lng: number;
+    radius_km?: number;
+    limit?: number;
+  }): Promise<DiscoverPublicWalksResponse> => {
+    return apiFetch('/public-walks/discover', {
+      method: 'POST',
+      body: JSON.stringify(params),
     });
   },
 };

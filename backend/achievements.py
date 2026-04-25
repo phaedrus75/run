@@ -658,6 +658,83 @@ ACHIEVEMENTS = {
         "emoji": "🌙", "category": "mood",
         "check": lambda s: s.get("runs_with_mood", 0) >= 25,
     },
+
+    # ---- WALKING ----
+    # Walking badges complement the runner badges. They're driven by the
+    # walk-stats payload (total_walks, total_walk_km, longest_walk_km,
+    # public_walks_done) injected from get_walk_stats below.
+    "first_walk": {
+        "id": "first_walk", "name": "First Stroll",
+        "description": "Complete your first tracked walk",
+        "emoji": "🚶", "category": "walking",
+        "check": lambda s: s.get("total_walks", 0) >= 1,
+    },
+    "walks_10": {
+        "id": "walks_10", "name": "Habitual Walker",
+        "description": "Complete 10 walks",
+        "emoji": "👟", "category": "walking",
+        "check": lambda s: s.get("total_walks", 0) >= 10,
+    },
+    "walks_25": {
+        "id": "walks_25", "name": "Quarter Hundred",
+        "description": "Complete 25 walks",
+        "emoji": "🌳", "category": "walking",
+        "check": lambda s: s.get("total_walks", 0) >= 25,
+    },
+    "walks_50": {
+        "id": "walks_50", "name": "Footloose",
+        "description": "Complete 50 walks",
+        "emoji": "🍂", "category": "walking",
+        "check": lambda s: s.get("total_walks", 0) >= 50,
+    },
+    "walks_100": {
+        "id": "walks_100", "name": "Centurion Walker",
+        "description": "Complete 100 walks",
+        "emoji": "🥾", "category": "walking",
+        "check": lambda s: s.get("total_walks", 0) >= 100,
+    },
+    "walk_km_10": {
+        "id": "walk_km_10", "name": "10 km Walked",
+        "description": "Walk 10 km in total",
+        "emoji": "🌤️", "category": "walking",
+        "check": lambda s: s.get("total_walk_km", 0) >= 10,
+    },
+    "walk_km_50": {
+        "id": "walk_km_50", "name": "50 km Walked",
+        "description": "Walk 50 km in total",
+        "emoji": "🌄", "category": "walking",
+        "check": lambda s: s.get("total_walk_km", 0) >= 50,
+    },
+    "walk_km_100": {
+        "id": "walk_km_100", "name": "100 km Walked",
+        "description": "Walk 100 km in total",
+        "emoji": "🏞️", "category": "walking",
+        "check": lambda s: s.get("total_walk_km", 0) >= 100,
+    },
+    "walk_long_5": {
+        "id": "walk_long_5", "name": "5 km Stretch",
+        "description": "Complete a single walk of 5 km or more",
+        "emoji": "🛤️", "category": "walking",
+        "check": lambda s: s.get("longest_walk_km", 0) >= 5,
+    },
+    "walk_long_10": {
+        "id": "walk_long_10", "name": "10 km Stretch",
+        "description": "Complete a single walk of 10 km or more",
+        "emoji": "🏔️", "category": "walking",
+        "check": lambda s: s.get("longest_walk_km", 0) >= 10,
+    },
+    "walk_public_first": {
+        "id": "walk_public_first", "name": "Trail Tried",
+        "description": "Complete a walk linked to a public route",
+        "emoji": "🧭", "category": "walking",
+        "check": lambda s: s.get("public_walks_done", 0) >= 1,
+    },
+    "walk_photo_first": {
+        "id": "walk_photo_first", "name": "Walking with a Camera",
+        "description": "Capture a photo on a walk",
+        "emoji": "📸", "category": "walking",
+        "check": lambda s: s.get("walks_with_photos", 0) >= 1,
+    },
 }
 
 
@@ -822,7 +899,7 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
 
 def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal: float = None, monthly_goal: float = None) -> dict:
     """Get all achievements and their unlock status."""
-    from models import StepEntry, RunPhoto, User
+    from models import StepEntry, RunPhoto, User, Walk, WalkPhoto
     from collections import defaultdict
     
     min_date = datetime(2026, 1, 1)
@@ -902,9 +979,38 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
             runner_level = getattr(user, 'runner_level', '') or ''
     
     goals = get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id)
-    
+
+    # Walk-stats roll-up — kept here (rather than in walk crud) so badge
+    # checks stay self-contained inside achievements.py.
+    total_walks = 0
+    total_walk_km = 0.0
+    longest_walk_km = 0.0
+    public_walks_done = 0
+    walks_with_photos = 0
+    if user_id is not None:
+        walk_q = db.query(Walk).filter(Walk.user_id == user_id)
+        for w in walk_q:
+            total_walks += 1
+            total_walk_km += float(w.distance_km or 0)
+            if (w.distance_km or 0) > longest_walk_km:
+                longest_walk_km = float(w.distance_km or 0)
+            if w.public_walk_id:
+                public_walks_done += 1
+        from sqlalchemy import func as sqlfunc
+        walks_with_photos = (
+            db.query(sqlfunc.count(sqlfunc.distinct(WalkPhoto.walk_id)))
+            .filter(WalkPhoto.user_id == user_id)
+            .scalar()
+            or 0
+        )
+
     extended_stats = {
         **stats,
+        "total_walks": total_walks,
+        "total_walk_km": round(total_walk_km, 2),
+        "longest_walk_km": round(longest_walk_km, 2),
+        "public_walks_done": public_walks_done,
+        "walks_with_photos": walks_with_photos,
         "runs_by_type": runs_by_type,
         "monthly_goals_hit": goals["monthly_goals_hit"],
         "yearly_goal_percent": goals["yearly"]["percent"],

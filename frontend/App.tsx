@@ -31,6 +31,16 @@ import { CircleSpaceScreen } from './screens/CircleSpaceScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import AuthScreen from './screens/AuthScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
+import { WalkScreen } from './screens/WalkScreen';
+import { ActiveWalkScreen } from './screens/ActiveWalkScreen';
+import { WalkSummaryScreen } from './screens/WalkSummaryScreen';
+import { WalkDetailScreen } from './screens/WalkDetailScreen';
+import { DiscoverWalksScreen } from './screens/DiscoverWalksScreen';
+import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
+
+// Side-effect import: registers the background-location TaskManager task at
+// app start so iOS/Android can revive it after the app is force-quit.
+import './services/walkBackgroundTask';
 
 // 🔐 Import auth context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -92,6 +102,48 @@ function CirclesStack() {
 }
 
 /**
+ * 🚶 WalkStack - Hub + active tracking + summary + detail + discover
+ */
+function WalkStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="WalkHome" component={WalkScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="ActiveWalk"
+        component={ActiveWalkScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="WalkSummary"
+        component={WalkSummaryScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen name="WalkDetail" component={WalkDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="PublicWalkDetail"
+        component={PublicWalkDetailScreen}
+        options={{
+          headerShown: true,
+          title: 'Walk preview',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+        }}
+      />
+      <Stack.Screen
+        name="DiscoverWalks"
+        component={DiscoverWalksScreen}
+        options={{
+          headerShown: true,
+          title: 'Discover walks',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+/**
  * 🏠 Main Tabs - Shown when user is authenticated
  */
 function MainTabs() {
@@ -137,6 +189,9 @@ function MainTabs() {
             case 'Run':
               iconName = focused ? 'play-circle' : 'play-circle-outline';
               break;
+            case 'Walk':
+              iconName = focused ? 'walk' : 'walk-outline';
+              break;
             case 'Circles':
               iconName = focused ? 'people' : 'people-outline';
               break;
@@ -165,7 +220,14 @@ function MainTabs() {
         component={RunScreen}
         options={{ tabBarLabel: 'Run' }}
       />
-      
+
+      {/* 🚶 Walk Tab */}
+      <Tab.Screen
+        name="Walk"
+        component={WalkStack}
+        options={{ tabBarLabel: 'Walk' }}
+      />
+
       {/* 👥 Circles Tab */}
       <Tab.Screen 
         name="Circles" 

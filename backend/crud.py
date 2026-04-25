@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import json
 
-from models import Run, GymWorkout, Exercise, User, Weight, StepEntry, CircleMembership
+from models import Run, GymWorkout, Exercise, User, Weight, StepEntry, CircleMembership, Walk, WalkPhoto, PublicWalk
 from schemas import RunCreate, RUN_DISTANCES
 
 
@@ -1325,3 +1325,293 @@ def get_admin_stats(db: Session) -> dict:
         "wau": wau,
         "top_users": top_users,
     }
+
+
+# ==========================================
+# 🚶 WALK OPERATIONS
+# ==========================================
+
+def create_walk(
+    db: Session,
+    user_id: int,
+    duration_seconds: int,
+    distance_km: float,
+    started_at: Optional[datetime] = None,
+    ended_at: Optional[datetime] = None,
+    route_polyline: Optional[str] = None,
+    start_lat: Optional[float] = None,
+    start_lng: Optional[float] = None,
+    end_lat: Optional[float] = None,
+    end_lng: Optional[float] = None,
+    elevation_gain_m: Optional[float] = None,
+    notes: Optional[str] = None,
+    mood: Optional[str] = None,
+    category: Optional[str] = "outdoor",
+    public_walk_id: Optional[int] = None,
+) -> Walk:
+    """Create a new walk record from a completed walk session."""
+    avg_pace = None
+    if distance_km and distance_km > 0:
+        avg_pace = duration_seconds / distance_km
+
+    walk = Walk(
+        user_id=user_id,
+        duration_seconds=duration_seconds,
+        distance_km=distance_km,
+        ended_at=ended_at or datetime.utcnow(),
+        route_polyline=route_polyline,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        end_lat=end_lat,
+        end_lng=end_lng,
+        elevation_gain_m=elevation_gain_m,
+        avg_pace_seconds_per_km=avg_pace,
+        notes=notes,
+        mood=mood,
+        category=category or "outdoor",
+        public_walk_id=public_walk_id,
+    )
+    if started_at:
+        walk.started_at = started_at
+
+    db.add(walk)
+    db.commit()
+    db.refresh(walk)
+    return walk
+
+
+def get_walks(db: Session, user_id: int, limit: int = 50, offset: int = 0) -> List[Walk]:
+    """List a user's walks newest first."""
+    return (
+        db.query(Walk)
+        .filter(Walk.user_id == user_id)
+        .order_by(Walk.started_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
+def get_walk(db: Session, walk_id: int, user_id: int) -> Optional[Walk]:
+    """Fetch a single walk owned by user_id."""
+    return (
+        db.query(Walk)
+        .filter(Walk.id == walk_id, Walk.user_id == user_id)
+        .first()
+    )
+
+
+def update_walk(
+    db: Session,
+    walk_id: int,
+    user_id: int,
+    notes: Optional[str] = None,
+    mood: Optional[str] = None,
+    category: Optional[str] = None,
+) -> Optional[Walk]:
+    """Update editable metadata on a walk."""
+    walk = get_walk(db, walk_id, user_id)
+    if not walk:
+        return None
+    if notes is not None:
+        walk.notes = notes
+    if mood is not None:
+        walk.mood = mood
+    if category is not None:
+        walk.category = category
+    db.commit()
+    db.refresh(walk)
+    return walk
+
+
+def delete_walk(db: Session, walk_id: int, user_id: int) -> bool:
+    """Delete a walk and its photos."""
+    walk = get_walk(db, walk_id, user_id)
+    if not walk:
+        return False
+    db.query(WalkPhoto).filter(WalkPhoto.walk_id == walk_id).delete()
+    db.delete(walk)
+    db.commit()
+    return True
+
+
+def get_walk_stats(db: Session, user_id: int) -> dict:
+    """Aggregate walk stats for the user (lifetime + recent)."""
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    base = db.query(Walk).filter(Walk.user_id == user_id)
+    total_walks = base.count()
+    total_km = db.query(func.coalesce(func.sum(Walk.distance_km), 0.0)).filter(Walk.user_id == user_id).scalar() or 0.0
+    total_seconds = db.query(func.coalesce(func.sum(Walk.duration_seconds), 0)).filter(Walk.user_id == user_id).scalar() or 0
+
+    walks_this_week = base.filter(Walk.started_at >= week_ago).count()
+    km_this_week = db.query(func.coalesce(func.sum(Walk.distance_km), 0.0)).filter(
+        Walk.user_id == user_id, Walk.started_at >= week_ago
+    ).scalar() or 0.0
+
+    walks_this_month = base.filter(Walk.started_at >= month_ago).count()
+    km_this_month = db.query(func.coalesce(func.sum(Walk.distance_km), 0.0)).filter(
+        Walk.user_id == user_id, Walk.started_at >= month_ago
+    ).scalar() or 0.0
+
+    longest_km = db.query(func.coalesce(func.max(Walk.distance_km), 0.0)).filter(Walk.user_id == user_id).scalar() or 0.0
+    longest_seconds = db.query(func.coalesce(func.max(Walk.duration_seconds), 0)).filter(Walk.user_id == user_id).scalar() or 0
+
+    avg_pace = None
+    if total_km > 0:
+        avg_pace = float(total_seconds) / float(total_km)
+
+    return {
+        "total_walks": total_walks,
+        "total_km": round(float(total_km), 2),
+        "total_minutes": round(total_seconds / 60.0, 1),
+        "walks_this_week": walks_this_week,
+        "km_this_week": round(float(km_this_week), 2),
+        "walks_this_month": walks_this_month,
+        "km_this_month": round(float(km_this_month), 2),
+        "longest_walk_km": round(float(longest_km), 2),
+        "longest_walk_minutes": round(longest_seconds / 60.0, 1),
+        "avg_pace_seconds_per_km": round(avg_pace, 1) if avg_pace else None,
+    }
+
+
+# ==========================================
+# 📸 WALK PHOTO OPERATIONS
+# ==========================================
+
+def create_walk_photo(
+    db: Session,
+    walk_id: int,
+    user_id: int,
+    photo_data: str,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    distance_marker_km: Optional[float] = None,
+    caption: Optional[str] = None,
+) -> WalkPhoto:
+    photo = WalkPhoto(
+        walk_id=walk_id,
+        user_id=user_id,
+        photo_data=photo_data,
+        lat=lat,
+        lng=lng,
+        distance_marker_km=distance_marker_km,
+        caption=caption,
+    )
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return photo
+
+
+def get_walk_photos(db: Session, walk_id: int) -> List[WalkPhoto]:
+    return (
+        db.query(WalkPhoto)
+        .filter(WalkPhoto.walk_id == walk_id)
+        .order_by(WalkPhoto.created_at.asc())
+        .all()
+    )
+
+
+def delete_walk_photo(db: Session, photo_id: int, walk_id: int, user_id: int) -> bool:
+    photo = (
+        db.query(WalkPhoto)
+        .filter(
+            WalkPhoto.id == photo_id,
+            WalkPhoto.walk_id == walk_id,
+            WalkPhoto.user_id == user_id,
+        )
+        .first()
+    )
+    if not photo:
+        return False
+    db.delete(photo)
+    db.commit()
+    return True
+
+
+# ==========================================
+# 🌍 PUBLIC WALK OPERATIONS
+# ==========================================
+
+def get_public_walks(
+    db: Session,
+    region: Optional[str] = None,
+    country: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    limit: int = 50,
+) -> List[PublicWalk]:
+    q = db.query(PublicWalk)
+    if region:
+        q = q.filter(PublicWalk.region == region)
+    if country:
+        q = q.filter(PublicWalk.country == country)
+    if difficulty:
+        q = q.filter(PublicWalk.difficulty == difficulty)
+    return q.order_by(PublicWalk.distance_km.asc()).limit(limit).all()
+
+
+def get_public_walk(db: Session, walk_id: int) -> Optional[PublicWalk]:
+    return db.query(PublicWalk).filter(PublicWalk.id == walk_id).first()
+
+
+def upsert_public_walk(
+    db: Session,
+    osm_id: Optional[str],
+    name: str,
+    distance_km: float,
+    route_polyline: str,
+    start_lat: float,
+    start_lng: float,
+    description: Optional[str] = None,
+    estimated_duration_min: Optional[int] = None,
+    difficulty: Optional[str] = None,
+    region: Optional[str] = None,
+    country: Optional[str] = None,
+    tags: Optional[str] = None,
+    source: str = "osm",
+) -> PublicWalk:
+    """Create or update a public walk by osm_id."""
+    existing = None
+    if osm_id:
+        existing = db.query(PublicWalk).filter(PublicWalk.osm_id == osm_id).first()
+
+    if existing:
+        existing.name = name
+        existing.distance_km = distance_km
+        existing.route_polyline = route_polyline
+        existing.start_lat = start_lat
+        existing.start_lng = start_lng
+        existing.description = description
+        existing.estimated_duration_min = estimated_duration_min
+        existing.difficulty = difficulty
+        existing.region = region
+        existing.country = country
+        existing.tags = tags
+        existing.source = source
+        existing.cached_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    walk = PublicWalk(
+        osm_id=osm_id,
+        name=name,
+        distance_km=distance_km,
+        route_polyline=route_polyline,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        description=description,
+        estimated_duration_min=estimated_duration_min,
+        difficulty=difficulty,
+        region=region,
+        country=country,
+        tags=tags,
+        source=source,
+    )
+    db.add(walk)
+    db.commit()
+    db.refresh(walk)
+    return walk

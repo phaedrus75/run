@@ -2,7 +2,7 @@
   "expo": {
     "name": "ZenRun",
     "slug": "runtracker",
-    "version": "1.5.1",
+    "version": "1.6.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,9 +17,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.phaedrus75.runzen",
-      "buildNumber": "5",
+      "buildNumber": "7",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "ZenRun uses your location to track your walk on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "ZenRun tracks your walk in the background so you can lock your phone while walking.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": []
@@ -30,8 +36,15 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E3A5F"
       },
-      "package": "com.phaedrus75.runzen",
-      "versionCode": 1
+      "package": "com.rhea.runzen",
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -41,6 +54,20 @@
       "eas": {
         "projectId": "281b02e7-43f9-419b-bff1-a92e99faba5a"
       }
-    }
+    },
+    "plugins": [
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      "expo-maps",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ZenRun uses your location to track your walk on the map.",
+          "locationAlwaysAndWhenInUsePermission": "ZenRun tracks your walk in the background so you can lock your phone while walking.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
   }
 }

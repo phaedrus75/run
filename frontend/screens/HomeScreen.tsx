@@ -47,6 +47,7 @@ import {
   statsApi,
   levelApi,
   reflectionsApi,
+  walkApi,
   type Stats, 
   type MotivationalMessage, 
   type WeeklyStreakProgress, 
@@ -57,6 +58,7 @@ import {
   type DailyWisdom,
   type SeasonalMarker,
   type StreakPeriod,
+  type WalkStats,
 } from '../services/api';
 
 interface HomeScreenProps {
@@ -83,6 +85,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
+  const [walkStats, setWalkStats] = useState<WalkStats | null>(null);
 
   const [motivation, setMotivation] = useState<MotivationalMessage | null>(null);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
@@ -132,6 +135,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       setGoals(goalsData);
       setRecords(recordsData);
       setAchievements(achievementsData);
+
+      // Walk stats are non-critical — fail quietly so the home screen always
+      // renders even if the walk endpoints aren't reachable.
+      walkApi.getStats().then(setWalkStats).catch(() => setWalkStats(null));
       
       // Fetch secondary data (graceful failure)
       try {
@@ -444,6 +451,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.lifetimeLabel}>hours</Text>
             </View>
           </View>
+
+          {walkStats && walkStats.total_walks > 0 && (
+            <View style={styles.combinedRow}>
+              <Text style={styles.combinedLabel}>Plus walking</Text>
+              <Text style={styles.combinedValue}>
+                {walkStats.total_walks} walks · {walkStats.total_km.toFixed(1)} km
+              </Text>
+            </View>
+          )}
           
           {/* Motivation Banner */}
           {motivation && (
@@ -692,6 +708,25 @@ const styles = StyleSheet.create({
     width: 1,
     height: 30,
     backgroundColor: colors.background,
+  },
+  combinedRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.background,
+  },
+  combinedLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+  },
+  combinedValue: {
+    fontSize: typography.sizes.xs,
+    color: colors.text,
+    fontWeight: typography.weights.semibold,
   },
   motivationBanner: {
     flexDirection: 'row',
