@@ -763,8 +763,9 @@ export const photoApi = {
     });
   },
 
-  getForRun: (runId: number): Promise<RunPhoto[]> => {
-    return apiFetch(`/runs/${runId}/photos`);
+  getForRun: (runId: number, thumbnailsOnly = false): Promise<RunPhoto[]> => {
+    const qs = thumbnailsOnly ? '?thumbnails_only=true' : '';
+    return apiFetch(`/runs/${runId}/photos${qs}`);
   },
 
   delete: (runId: number, photoId: number): Promise<void> => {

@@ -889,7 +889,7 @@ def create_run(
 
 @app.get("/runs", response_model=List[RunResponse])
 def get_runs(
-    skip: int = 0, 
+    skip: int = 0,
     limit: int = 100,
     run_type: str = None,
     category: str = None,
@@ -898,7 +898,17 @@ def get_runs(
 ):
     """📖 Get all runs for the current authenticated user."""
     runs = crud.get_runs(db, skip=skip, limit=limit, run_type=run_type, user_id=current_user.id, category=category)
-    return [format_run_response(run, db=db) for run in runs]
+    if not runs:
+        return []
+    # Batch photo counts in a single query instead of N+1
+    run_ids = [r.id for r in runs]
+    photo_counts = dict(
+        db.query(RunPhoto.run_id, func.count(RunPhoto.id))
+        .filter(RunPhoto.run_id.in_(run_ids))
+        .group_by(RunPhoto.run_id)
+        .all()
+    )
+    return [format_run_response(run, photo_count_override=photo_counts.get(run.id, 0)) for run in runs]
 
 
 @app.get("/runs/{run_id}", response_model=RunResponse)
@@ -1565,11 +1575,12 @@ def get_steps_summary(
 # 🛠️ HELPER FUNCTIONS
 # ==========================================
 
-def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None, celebrations: list = None, db: Session = None) -> dict:
+def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None, celebrations: list = None, db: Session = None, photo_count_override: int = None) -> dict:
     """
     Format a Run object for the API response.
-    
+
     Adds calculated fields like pace and formatted duration.
+    Pass photo_count_override to avoid an extra DB query when you already have the count.
     """
     if run.distance_km > 0:
         seconds_per_km = run.duration_seconds / run.distance_km
@@ -1583,9 +1594,12 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
     secs = run.duration_seconds % 60
     formatted = f"{mins}:{secs:02d}"
     
-    photo_count = 0
-    if db:
+    if photo_count_override is not None:
+        photo_count = photo_count_override
+    elif db:
         photo_count = db.query(RunPhoto).filter(RunPhoto.run_id == run.id).count()
+    else:
+        photo_count = 0
     
     return {
         "id": run.id,
@@ -2819,31 +2833,18 @@ def upload_run_photo(
 @app.get("/runs/{run_id}/photos")
 def get_run_photos(
     run_id: int,
+    thumbnails_only: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth)
 ):
-    """Get all photos for a run, ordered by distance marker."""
+    """Get photos for a run. Pass ?thumbnails_only=true to skip base64 data (faster for thumbnail grids)."""
     run = db.query(Run).filter(Run.id == run_id).first()
-    if not run:
+    if not run or run.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not your run")
-    
-    photos = db.query(RunPhoto).filter(
-        RunPhoto.run_id == run_id
-    ).order_by(RunPhoto.distance_marker_km.asc()).all()
-    
-    return [
-        {
-            "id": p.id,
-            "run_id": p.run_id,
-            "photo_data": p.photo_data,
-            "distance_marker_km": p.distance_marker_km,
-            "caption": p.caption,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-        }
-        for p in photos
-    ]
+    photos = db.query(RunPhoto).filter(RunPhoto.run_id == run_id).order_by(RunPhoto.distance_marker_km.asc()).all()
+    if thumbnails_only:
+        return [{"id": p.id, "run_id": p.run_id, "distance_marker_km": p.distance_marker_km, "caption": p.caption, "created_at": p.created_at.isoformat() if p.created_at else None} for p in photos]
+    return [{"id": p.id, "run_id": p.run_id, "photo_data": p.photo_data, "distance_marker_km": p.distance_marker_km, "caption": p.caption, "created_at": p.created_at.isoformat() if p.created_at else None} for p in photos]
 
 
 @app.delete("/runs/{run_id}/photos/{photo_id}")

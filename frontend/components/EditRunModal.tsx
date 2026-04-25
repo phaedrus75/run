@@ -85,7 +85,8 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
     if (!run) return;
     setLoadingPhotos(true);
     try {
-      const data = await photoApi.getForRun(run.id);
+      // Load metadata only (no base64) for the thumbnail strip — much faster for runs with many photos
+      const data = await photoApi.getForRun(run.id, true);
       setPhotos(data);
     } catch {
       setPhotos([]);
@@ -330,23 +331,17 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                     <View style={styles.photosGrid}>
                       {photos.map(photo => (
                         <View key={photo.id} style={styles.photoThumbWrap}>
-                          <Image
-                            source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
-                            style={styles.photoThumb}
-                          />
-                          <View style={styles.photoThumbOverlay}>
-                            <Text style={styles.photoThumbMarker}>{photo.distance_marker_km}K</Text>
-                            <TouchableOpacity
-                              style={styles.photoDeleteBtn}
-                              onPress={() => handleDeletePhoto(photo.id)}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Text style={styles.photoDeleteText}>✕</Text>
-                            </TouchableOpacity>
+                          <View style={[styles.photoThumb, styles.photoThumbPlaceholder]}>
+                            <Text style={styles.photoThumbPlaceholderText}>📍{photo.distance_marker_km}K</Text>
+                            {photo.caption ? <Text style={styles.photoThumbPlaceholderCaption} numberOfLines={2}>{photo.caption}</Text> : null}
                           </View>
-                          {photo.caption ? (
-                            <Text style={styles.photoThumbCaption} numberOfLines={1}>{photo.caption}</Text>
-                          ) : null}
+                          <TouchableOpacity
+                            style={styles.photoDeleteBtn}
+                            onPress={() => handleDeletePhoto(photo.id)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text style={styles.photoDeleteText}>✕</Text>
+                          </TouchableOpacity>
                         </View>
                       ))}
                     </View>
@@ -574,32 +569,37 @@ const styles = StyleSheet.create({
   },
   photoThumbWrap: {
     width: 100,
+    position: 'relative',
   },
   photoThumb: {
     width: 100,
     height: 100,
     borderRadius: radius.md,
   },
-  photoThumbOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 4,
+  photoThumbPlaceholder: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.textLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 6,
   },
-  photoThumbMarker: {
-    backgroundColor: colors.primary,
-    color: colors.textOnPrimary,
-    fontSize: 10,
-    fontWeight: '700',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: 'hidden',
+  photoThumbPlaceholderText: {
+    fontSize: 13,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  photoThumbPlaceholderCaption: {
+    fontSize: 9,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
   },
   photoDeleteBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
     backgroundColor: 'rgba(0,0,0,0.6)',
     width: 20,
     height: 20,

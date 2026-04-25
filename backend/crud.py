@@ -156,7 +156,10 @@ def update_run(db: Session, run_id: int, run_type: str = None, duration_seconds:
     
     if run_type is not None:
         run.run_type = run_type
-        run.distance_km = RUN_DISTANCES.get(run_type, run.distance_km)
+        # Only reset distance to lookup value if this is NOT a GPS-tracked run
+        # (GPS runs have a precise distance_km from tracking; don't clobber it)
+        if not getattr(run, 'route_polyline', None):
+            run.distance_km = RUN_DISTANCES.get(run_type, run.distance_km)
     
     if duration_seconds is not None:
         run.duration_seconds = duration_seconds
