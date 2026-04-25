@@ -704,13 +704,13 @@ const styles = StyleSheet.create({
   detailStats: { flexDirection: 'row', gap: spacing.lg },
   detailStat: { fontSize: typography.sizes.sm, color: colors.textSecondary },
   detailVal: { fontWeight: typography.weights.bold, color: colors.text },
-  typeGrid: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   typeCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.sm,
     alignItems: 'center',
-    minWidth: 52,
+    width: '31%',
   },
   typeIcon: {
     width: 36,
