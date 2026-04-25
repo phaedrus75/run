@@ -1,8 +1,10 @@
 /**
- * 🚶 ACTIVE WALK SCREEN
- * =====================
+ * 🏃 ACTIVE RUN SCREEN
+ * ====================
  *
- * Live walk tracking screen with in-walk photo capture.
+ * Live GPS-tracked outdoor run. Mirrors ActiveWalkScreen but uses the
+ * runTracker singleton (higher speed ceiling, longer auto-pause window)
+ * and an orange accent colour.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -22,12 +24,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useActivityPhotoCapture, PendingPhoto } from '../services/useActivityPhotoCapture';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { WalkMap } from '../components/WalkMap';
 import {
-  walkTracker,
+  runTracker,
   WalkSnapshot,
   formatDistanceKm,
   formatDurationHms,
@@ -38,26 +39,25 @@ import {
   requestAlwaysLocationPermission,
   setBackgroundTrackingEnabled,
 } from '../services/walkBackgroundTask';
+import { useActivityPhotoCapture, PendingPhoto } from '../services/useActivityPhotoCapture';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+
+const RUN_ACCENT = '#F97316'; // orange
 
 interface Props {
   navigation: any;
   route: any;
 }
 
-// PendingPhoto type imported from useActivityPhotoCapture
-
-export function ActiveWalkScreen({ navigation, route }: Props) {
-  const publicWalk = route?.params?.publicWalk;
-  const [snapshot, setSnapshot] = useState<WalkSnapshot>(walkTracker.getSnapshot());
+export function ActiveRunScreen({ navigation, route }: Props) {
+  const [snapshot, setSnapshot] = useState<WalkSnapshot>(runTracker.getSnapshot());
   const [starting, setStarting] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [backgroundEnabled, setBackgroundEnabled] = useState(false);
-  const { pendingPhotos, capturing, capturePhoto } = useActivityPhotoCapture(walkTracker);
+  const { pendingPhotos, capturing, capturePhoto } = useActivityPhotoCapture(runTracker);
   const startedOnceRef = useRef(false);
 
   useEffect(() => {
-    const unsub = walkTracker.subscribe(setSnapshot);
+    const unsub = runTracker.subscribe(setSnapshot);
     return () => unsub();
   }, []);
 
@@ -66,24 +66,24 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
     startedOnceRef.current = true;
     if (snapshot.isTracking) return;
     void startTracking();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useFocusEffect(
     React.useCallback(() => {
       const sub = navigation.addListener('beforeRemove', (e: any) => {
-        if (!walkTracker.getSnapshot().isTracking) return;
+        if (!runTracker.getSnapshot().isTracking) return;
         e.preventDefault();
         Alert.alert(
-          'Discard walk?',
-          'You are still tracking. Leaving will discard this walk.',
+          'Discard run?',
+          'You are still tracking. Leaving will discard this run.',
           [
             { text: 'Keep tracking', style: 'cancel' },
             {
               text: 'Discard',
               style: 'destructive',
               onPress: async () => {
-                await walkTracker.discard();
+                await runTracker.discard();
                 navigation.dispatch(e.data.action);
               },
             },
@@ -97,7 +97,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'active') {
-        void walkTracker.drainBackgroundQueue();
+        void runTracker.drainBackgroundQueue();
       }
     });
     return () => sub.remove();
@@ -115,12 +115,11 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
           await setBackgroundTrackingEnabled(false);
         }
       }
-      await walkTracker.start({ background: useBackground });
-      setBackgroundEnabled(useBackground && walkTracker.isBackgroundEnabled());
+      await runTracker.start({ background: useBackground });
     } catch (e: any) {
       setPermissionError(
         e?.message === 'Location permission denied'
-          ? 'ZenRun needs location access to track your walk on the map.'
+          ? 'ZenRun needs location access to track your run on the map.'
           : 'Could not start tracking. Try again.',
       );
     } finally {
@@ -130,36 +129,35 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
 
   const handlePauseResume = () => {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
-    if (snapshot.isPaused) walkTracker.resume();
-    else walkTracker.pause();
+    if (snapshot.isPaused) runTracker.resume();
+    else runTracker.pause();
   };
 
   const handleFinish = () => {
     try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
     if (snapshot.distanceKm < 0.05) {
-      Alert.alert('Walk too short', 'You need to move a little before saving. Keep walking and try again.');
+      Alert.alert('Run too short', 'Move a little further before saving.');
       return;
     }
     const photoNote = pendingPhotos.length > 0
-      ? `\n\n${pendingPhotos.length} photo${pendingPhotos.length > 1 ? 's' : ''} will be saved with the walk.`
+      ? `\n\n${pendingPhotos.length} photo${pendingPhotos.length > 1 ? 's' : ''} will be saved with the run.`
       : '';
-    Alert.alert('Finish walk?', `Save this walk?${photoNote}`, [
+    Alert.alert('Finish run?', `Save this run?${photoNote}`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Discard',
         style: 'destructive',
         onPress: async () => {
-          await walkTracker.discard();
+          await runTracker.discard();
           navigation.goBack();
         },
       },
       {
         text: 'Save',
         onPress: async () => {
-          const final = await walkTracker.stop();
-          navigation.replace('WalkSummary', {
+          const final = await runTracker.stop();
+          navigation.replace('RunSummary', {
             snapshot: serialiseSnapshot(final),
-            publicWalkId: publicWalk?.id,
             pendingPhotos,
           });
         },
@@ -178,27 +176,18 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
           route={snapshot.points.map((p) => ({ lat: p.lat, lng: p.lng }))}
           centerOn={center}
           showUserLocation
-          routeColor={colors.primary}
+          routeColor={RUN_ACCENT}
         />
         <Pressable onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={8}>
           <Ionicons name="close" size={22} color={colors.text} />
         </Pressable>
-        {publicWalk && (
-          <View style={styles.publicBadge}>
-            <Ionicons name="map" size={14} color={colors.textOnPrimary} />
-            <Text style={styles.publicBadgeText} numberOfLines={1}>Following: {publicWalk.name}</Text>
-          </View>
-        )}
-        {backgroundEnabled && snapshot.isTracking && (
-          <View style={[styles.publicBadge, styles.bgBadge, publicWalk && { top: 56 }]}>
-            <Ionicons name="moon" size={12} color={colors.textOnPrimary} />
-            <Text style={styles.publicBadgeText} numberOfLines={1}>Background tracking on</Text>
-          </View>
-        )}
+        <View style={styles.typeBadge}>
+          <Ionicons name="walk" size={14} color="#fff" />
+          <Text style={styles.typeBadgeText}>Outdoor Run</Text>
+        </View>
       </View>
 
       <View style={styles.statsCard}>
-        {/* Photo strip — visible while tracking */}
         {pendingPhotos.length > 0 && (
           <ScrollView
             horizontal
@@ -206,7 +195,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
             style={styles.photoStrip}
             contentContainerStyle={styles.photoStripContent}
           >
-            {pendingPhotos.map((p, i) => (
+            {pendingPhotos.map((p) => (
               <View key={p.capturedAt} style={styles.thumbWrap}>
                 <Image source={{ uri: p.uri }} style={styles.thumb} />
                 <Text style={styles.thumbDist}>{p.distanceKm.toFixed(1)} km</Text>
@@ -229,7 +218,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
               starting ? 'Starting…'
                 : !snapshot.isTracking ? (permissionError ? 'Blocked' : 'Idle')
                 : snapshot.isPaused ? 'Paused'
-                : 'Tracking'
+                : 'Running'
             }
             color={
               !snapshot.isTracking ? colors.textSecondary
@@ -249,11 +238,11 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
               disabled={starting}
             >
               {starting ? (
-                <ActivityIndicator color={colors.textOnPrimary} />
+                <ActivityIndicator color="#fff" />
               ) : (
                 <>
-                  <Ionicons name="play" size={20} color={colors.textOnPrimary} />
-                  <Text style={styles.primaryBtnText}>Start walk</Text>
+                  <Ionicons name="play" size={20} color="#fff" />
+                  <Text style={styles.primaryBtnText}>Start run</Text>
                 </>
               )}
             </Pressable>
@@ -267,7 +256,6 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
                 <Text style={styles.secondaryBtnText}>{snapshot.isPaused ? 'Resume' : 'Pause'}</Text>
               </Pressable>
 
-              {/* 📸 Camera button */}
               <Pressable
                 onPress={capturePhoto}
                 disabled={capturing}
@@ -278,10 +266,10 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
                 ]}
               >
                 {capturing ? (
-                  <ActivityIndicator color={colors.secondary} size="small" />
+                  <ActivityIndicator color={RUN_ACCENT} size="small" />
                 ) : (
                   <>
-                    <Ionicons name="camera" size={20} color={colors.secondary} />
+                    <Ionicons name="camera" size={20} color={RUN_ACCENT} />
                     {pendingPhotos.length > 0 && (
                       <View style={styles.photoBadge}>
                         <Text style={styles.photoBadgeText}>{pendingPhotos.length}</Text>
@@ -295,7 +283,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
                 onPress={handleFinish}
                 style={({ pressed }) => [styles.primaryBtn, styles.finishBtn, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
               >
-                <Ionicons name="checkmark" size={20} color={colors.textOnPrimary} />
+                <Ionicons name="checkmark" size={20} color="#fff" />
                 <Text style={styles.primaryBtnText}>Finish</Text>
               </Pressable>
             </>
@@ -303,7 +291,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
         </View>
 
         {Platform.OS !== 'ios' && Platform.OS !== 'android' && (
-          <Text style={styles.webHint}>Live walk tracking requires the iOS or Android app.</Text>
+          <Text style={styles.webHint}>Live run tracking requires the iOS or Android app.</Text>
         )}
       </View>
     </SafeAreaView>
@@ -350,27 +338,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.small,
   },
-  publicBadge: {
+  typeBadge: {
     position: 'absolute',
     top: spacing.md,
     left: 64,
-    right: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.secondary,
+    backgroundColor: RUN_ACCENT,
     borderRadius: radius.full,
     paddingHorizontal: 12,
     paddingVertical: 6,
     ...shadows.small,
   },
-  publicBadgeText: {
-    color: colors.textOnPrimary,
+  typeBadgeText: {
+    color: '#fff',
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.semibold,
-    flexShrink: 1,
   },
-  bgBadge: { backgroundColor: colors.text },
   statsCard: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
@@ -379,7 +364,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     ...shadows.large,
   },
-  // Photo strip
   photoStrip: {
     marginBottom: spacing.sm,
     marginHorizontal: -spacing.lg,
@@ -389,21 +373,14 @@ const styles = StyleSheet.create({
     gap: 8,
     flexDirection: 'row',
   },
-  thumbWrap: {
-    alignItems: 'center',
-    gap: 3,
-  },
+  thumbWrap: { alignItems: 'center', gap: 3 },
   thumb: {
     width: 60,
     height: 60,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceAlt,
   },
-  thumbDist: {
-    fontSize: 10,
-    color: colors.textSecondary,
-  },
-  // Stats
+  thumbDist: { fontSize: 10, color: colors.textSecondary },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -422,7 +399,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   divider: { width: 1, height: 40, backgroundColor: colors.border },
-  // Controls
   controls: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -435,16 +411,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: RUN_ACCENT,
     borderRadius: radius.lg,
     paddingVertical: 14,
     ...shadows.small,
   },
-  finishBtn: {
-    flex: 1,
-  },
+  finishBtn: { flex: 1 },
   primaryBtnText: {
-    color: colors.textOnPrimary,
+    color: '#fff',
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
   },
@@ -467,11 +441,11 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: radius.lg,
-    backgroundColor: colors.secondary + '18',
+    backgroundColor: RUN_ACCENT + '18',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: colors.secondary + '40',
+    borderColor: RUN_ACCENT + '40',
     position: 'relative',
   },
   photoBadge: {
@@ -481,16 +455,12 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.primary,
+    backgroundColor: RUN_ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
   },
-  photoBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-  },
+  photoBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   permissionError: {
     fontSize: typography.sizes.xs,
     color: colors.error,

@@ -84,6 +84,14 @@ export interface Run {
   pr_type?: string | null;
   celebrations?: Celebration[];
   photo_count?: number;
+  // GPS fields (outdoor GPS-tracked runs only)
+  route_polyline?: string | null;
+  start_lat?: number | null;
+  start_lng?: number | null;
+  end_lat?: number | null;
+  end_lng?: number | null;
+  elevation_gain_m?: number | null;
+  started_at?: string | null;
 }
 
 export interface RunPhoto {
@@ -316,6 +324,16 @@ export const runApi = {
     notes?: string;
     completed_at?: string;
     mood?: string;
+    category?: string;
+    // GPS fields for outdoor tracked runs
+    route_polyline?: string;
+    start_lat?: number;
+    start_lng?: number;
+    end_lat?: number;
+    end_lng?: number;
+    elevation_gain_m?: number;
+    started_at?: string;
+    distance_km?: number;
   }): Promise<Run> => {
     return apiFetch('/runs', {
       method: 'POST',

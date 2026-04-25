@@ -1,15 +1,14 @@
 /**
- * 🟢 GoButton
- * ===========
+ * GoButton
+ * ========
  *
- * Beautiful centre tab-bar button that pops an action sheet with
- * "Start a Walk" and "Log Run" options. Rendered as a custom tabBarButton
- * so it floats above the tab bar with a shadow halo.
+ * Central tab bar button. Pressing it opens a bottom sheet with three
+ * activity options:
+ *   🚶  Start Walk   → ActiveWalkScreen
+ *   🏃  Start Run    → ActiveRunScreen
+ *   ✏️  Log Run      → RunScreen (manual entry)
  *
- * Usage in Tab.Navigator:
- *   <Tab.Screen name="Go" component={GoPlaceholder}
- *     options={{ tabBarButton: (props) => <GoButton {...props} navigation={nav} /> }}
- *   />
+ * Used as tabBarButton for the centre tab slot in MainTabs.
  */
 
 import React, { useRef, useState } from 'react';
@@ -19,135 +18,142 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 
-interface GoButtonProps {
-  navigation: any;
-  // passed through from tabBarButton props (we forward them to keep RN nav happy)
-  [key: string]: any;
-}
+const ACCENT = '#F97316'; // orange accent for run options
+const WALK_COLOR = '#10B981'; // green for walk
 
-interface Action {
-  key: string;
+interface Option {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  sublabel: string;
+  sub: string;
   color: string;
-  bg: string;
-  onPress: () => void;
+  onPress: (nav: any) => void;
 }
 
-export function GoButton({ navigation, ...rest }: GoButtonProps) {
-  const [open, setOpen] = useState(false);
-  const scale = useRef(new Animated.Value(1)).current;
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const sheetY = useRef(new Animated.Value(200)).current;
+const OPTIONS: Option[] = [
+  {
+    icon: 'walk',
+    label: 'Start a Walk',
+    sub: 'GPS map · distance · photos',
+    color: WALK_COLOR,
+    onPress: (nav) => nav.navigate('Walks', { screen: 'ActiveWalk' }),
+  },
+  {
+    icon: 'fitness',
+    label: 'Start a Run',
+    sub: 'GPS tracked outdoor run',
+    color: ACCENT,
+    onPress: (nav) => nav.navigate('Runs', { screen: 'ActiveRun' }),
+  },
+  {
+    icon: 'pencil',
+    label: 'Log a Run',
+    sub: 'Manual entry · time · distance type',
+    color: colors.primary,
+    onPress: (nav) => nav.navigate('Runs', { screen: 'RunScreen' }),
+  },
+];
 
-  const pulse = () => {
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1, duration: 160, useNativeDriver: true }),
-    ]).start();
-  };
+export function GoButton() {
+  const navigation = useNavigation<any>();
+  const [visible, setVisible] = useState(false);
+  const slideAnim = useRef(new Animated.Value(200)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const overlayAnim = useRef(new Animated.Value(0)).current;
 
-  const openSheet = () => {
+  // Gentle idle pulse on the button
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.06, duration: 1600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,    duration: 1600, useNativeDriver: true }),
+      ]),
+    ).start();
+  }, [pulseAnim]);
+
+  const open = () => {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
-    pulse();
-    setOpen(true);
+    setVisible(true);
     Animated.parallel([
-      Animated.timing(overlayOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.spring(sheetY, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 260 }),
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 70, friction: 12 }),
+      Animated.timing(overlayAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
   };
 
-  const closeSheet = (cb?: () => void) => {
+  const close = (cb?: () => void) => {
     Animated.parallel([
-      Animated.timing(overlayOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
-      Animated.timing(sheetY, { toValue: 200, duration: 160, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 200, duration: 220, useNativeDriver: true }),
+      Animated.timing(overlayAnim, { toValue: 0,   duration: 220, useNativeDriver: true }),
     ]).start(() => {
-      setOpen(false);
+      setVisible(false);
+      slideAnim.setValue(200);
       cb?.();
     });
   };
 
-  const navigate = (screen: string, params?: object) => {
-    closeSheet(() => {
-      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-      navigation.navigate(screen, params);
-    });
+  const pick = (opt: Option) => {
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+    close(() => opt.onPress(navigation));
   };
-
-  const actions: Action[] = [
-    {
-      key: 'walk',
-      icon: 'walk',
-      label: 'Start a Walk',
-      sublabel: 'GPS route · distance · photos',
-      color: colors.secondary,
-      bg: colors.secondary + '18',
-      onPress: () => navigate('Walk', { screen: 'ActiveWalk' }),
-    },
-    {
-      key: 'run',
-      icon: 'fitness',
-      label: 'Log a Run',
-      sublabel: 'Time a distance or add past run',
-      color: colors.primary,
-      bg: colors.primary + '18',
-      onPress: () => navigate('Run'),
-    },
-  ];
 
   return (
     <>
-      {/* ── Centre tab button ── */}
-      <Pressable
-        {...rest}
-        onPress={openSheet}
-        style={styles.buttonWrap}
-        accessibilityLabel="Go"
-        accessibilityRole="button"
-      >
-        <Animated.View style={[styles.button, { transform: [{ scale }] }]}>
-          <Text style={styles.buttonLabel}>GO</Text>
+      {/* The tab bar button itself */}
+      <View style={styles.wrapper}>
+        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+          <Pressable
+            onPress={open}
+            style={({ pressed }) => [
+              styles.btn,
+              { transform: [{ scale: pressed ? 0.93 : 1 }] },
+            ]}
+          >
+            <Ionicons name="add" size={32} color="#fff" />
+          </Pressable>
         </Animated.View>
-      </Pressable>
+      </View>
 
-      {/* ── Action sheet modal ── */}
-      <Modal visible={open} transparent animationType="none" onRequestClose={() => closeSheet()}>
-        <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => closeSheet()} />
+      {/* Bottom sheet modal */}
+      <Modal visible={visible} transparent animationType="none" onRequestClose={() => close()}>
+        <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => close()} activeOpacity={1} />
         </Animated.View>
 
-        <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetY }] }]}>
+        <Animated.View
+          style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
+          pointerEvents="box-none"
+        >
           <View style={styles.handle} />
-          <Text style={styles.sheetTitle}>What's the move?</Text>
+          <Text style={styles.sheetTitle}>What would you like to do?</Text>
 
-          {actions.map((a) => (
+          {OPTIONS.map((opt) => (
             <Pressable
-              key={a.key}
-              onPress={a.onPress}
+              key={opt.label}
+              onPress={() => pick(opt)}
               style={({ pressed }) => [
-                styles.actionRow,
-                { backgroundColor: pressed ? a.bg : colors.surface },
+                styles.option,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
               ]}
             >
-              <View style={[styles.actionIcon, { backgroundColor: a.bg }]}>
-                <Ionicons name={a.icon} size={26} color={a.color} />
+              <View style={[styles.optIcon, { backgroundColor: opt.color + '18', borderColor: opt.color + '40' }]}>
+                <Ionicons name={opt.icon} size={24} color={opt.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.actionLabel}>{a.label}</Text>
-                <Text style={styles.actionSub}>{a.sublabel}</Text>
+                <Text style={styles.optLabel}>{opt.label}</Text>
+                <Text style={styles.optSub}>{opt.sub}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
             </Pressable>
           ))}
 
-          <Pressable style={styles.cancelBtn} onPress={() => closeSheet()}>
+          <Pressable onPress={() => close()} style={styles.cancelBtn}>
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
         </Animated.View>
@@ -157,102 +163,89 @@ export function GoButton({ navigation, ...rest }: GoButtonProps) {
 }
 
 const styles = StyleSheet.create({
-  buttonWrap: {
+  wrapper: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 16,
+    justifyContent: 'center',
+    top: -20,
   },
-  button: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  btn: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 10,
-    // crisp white ring
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  buttonLabel: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 1.5,
+    ...shadows.large,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   sheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.lg,
-    paddingBottom: 40,
-    paddingTop: 12,
-    ...shadows.medium,
+    paddingBottom: spacing.xxl,
+    paddingTop: spacing.sm,
+    ...shadows.large,
   },
   handle: {
-    width: 40,
+    width: 36,
     height: 4,
-    backgroundColor: colors.border,
     borderRadius: 2,
+    backgroundColor: colors.border,
     alignSelf: 'center',
     marginBottom: spacing.md,
   },
   sheetTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    marginBottom: spacing.md,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
     textAlign: 'center',
+    marginBottom: spacing.md,
   },
-  actionRow: {
+  option: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    backgroundColor: colors.background,
     borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
+    padding: spacing.md,
     marginBottom: spacing.sm,
     ...shadows.small,
   },
-  actionIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+  optIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
   },
-  actionLabel: {
+  optLabel: {
     fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
+    fontWeight: typography.weights.semibold,
     color: colors.text,
   },
-  actionSub: {
+  optSub: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,
   },
   cancelBtn: {
+    marginTop: spacing.sm,
     alignItems: 'center',
-    paddingVertical: 14,
-    marginTop: 4,
+    paddingVertical: spacing.md,
   },
   cancelText: {
     fontSize: typography.sizes.md,
-    color: colors.textSecondary,
     fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
   },
 });

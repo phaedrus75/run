@@ -49,27 +49,42 @@ export interface WalkSnapshot {
 export type WalkSnapshotListener = (snapshot: WalkSnapshot) => void;
 
 // ----- Tunables -----
-// Reject points worse than this (metres). Phones occasionally report 50m+
-// accuracy when GPS first locks; those make the route jump wildly.
 const MIN_ACCEPTABLE_ACCURACY_M = 30;
-// Ignore points closer than this to the previous point (jitter).
 const MIN_DISTANCE_BETWEEN_POINTS_M = 3;
-// Sanity check: walking speeds rarely exceed this (m/s). Above this we drop
-// the point as a likely GPS jump.
-const MAX_PLAUSIBLE_SPEED_MPS = 6.0; // ~21.6 km/h
-// Auto-pause if avg speed over the last 30s drops below this.
-const AUTO_PAUSE_SPEED_MPS = 0.4; // ~1.4 km/h
-const AUTO_PAUSE_WINDOW_MS = 30_000;
-// Tick interval for the duration timer.
 const TICK_MS = 1000;
+
+export interface ActivityTrackerConfig {
+  /** Max plausible speed in m/s — points above this are treated as GPS jumps. */
+  maxSpeedMps: number;
+  /** Auto-pause when avg speed drops below this (m/s). */
+  autoPauseSpeedMps: number;
+  autoPauseWindowMs: number;
+}
+
+const WALK_CONFIG: ActivityTrackerConfig = {
+  maxSpeedMps: 6.0,      // ~21.6 km/h
+  autoPauseSpeedMps: 0.4, // ~1.4 km/h
+  autoPauseWindowMs: 30_000,
+};
+
+const RUN_CONFIG: ActivityTrackerConfig = {
+  maxSpeedMps: 9.5,       // ~34 km/h — covers sprints
+  autoPauseSpeedMps: 0.5,
+  autoPauseWindowMs: 45_000, // slower to auto-pause during a run
+};
 
 class WalkLocationTracker {
   private subscription: Location.LocationSubscription | null = null;
   private listeners = new Set<WalkSnapshotListener>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private backgroundActive = false;
+  private readonly cfg: ActivityTrackerConfig;
 
   private snapshot: WalkSnapshot = this.makeEmptySnapshot();
+
+  constructor(cfg: ActivityTrackerConfig = WALK_CONFIG) {
+    this.cfg = cfg;
+  }
 
   private makeEmptySnapshot(): WalkSnapshot {
     return {
@@ -324,7 +339,7 @@ class WalkLocationTracker {
       const speedMps = distM / dtSec;
 
       if (distM < MIN_DISTANCE_BETWEEN_POINTS_M) return;
-      if (speedMps > MAX_PLAUSIBLE_SPEED_MPS) return;
+      if (speedMps > this.cfg.maxSpeedMps) return;
 
       addedDistanceKm = distM / 1000;
 
@@ -375,7 +390,7 @@ class WalkLocationTracker {
     const points = this.snapshot.points;
     if (points.length < 2) return;
 
-    const cutoff = now - AUTO_PAUSE_WINDOW_MS;
+    const cutoff = now - this.cfg.autoPauseWindowMs;
     const recent = points.filter((p) => p.timestamp >= cutoff);
     if (recent.length < 2) return;
 
@@ -386,7 +401,7 @@ class WalkLocationTracker {
     const dtSec = (recent[recent.length - 1].timestamp - recent[0].timestamp) / 1000;
     if (dtSec <= 0) return;
     const avgSpeed = dist / dtSec;
-    if (avgSpeed < AUTO_PAUSE_SPEED_MPS) {
+    if (avgSpeed < this.cfg.autoPauseSpeedMps) {
       // Soft pause - duration stops accruing but tracking continues so the
       // user doesn't have to manually resume when they start moving again.
       // We only flag isPaused; the watcher keeps adding points.
@@ -395,8 +410,9 @@ class WalkLocationTracker {
   }
 }
 
-// Singleton.
-export const walkTracker = new WalkLocationTracker();
+// Singletons — one per activity type. Only one should be active at a time.
+export const walkTracker = new WalkLocationTracker(WALK_CONFIG);
+export const runTracker  = new WalkLocationTracker(RUN_CONFIG);
 
 // ----- Helpers -----
 

@@ -1,14 +1,12 @@
 /**
- * 🚶 WALK SUMMARY SCREEN
- * ======================
+ * 🏃 RUN SUMMARY SCREEN
+ * =====================
  *
- * Shown right after a walk finishes. Lets the user:
- * - Review distance / time / pace / map
- * - Pick a mood
- * - Add a short note
- * - Save (POST /walks)
- *
- * Photos can be added on the WalkDetailScreen after save.
+ * Shown after a GPS-tracked outdoor run finishes.
+ * - Shows route map replay, distance, time, pace, elevation
+ * - Pick mood + add a note
+ * - Save via runApi (includes GPS fields)
+ * - Uploads any in-run photos via photoApi
  */
 
 import React, { useMemo, useState } from 'react';
@@ -36,9 +34,11 @@ import {
   encodePolyline,
   TrackedPoint,
 } from '../services/walkLocationTracker';
-import { walkApi, walkPhotoApi } from '../services/api';
+import { runApi, photoApi } from '../services/api';
 import { PendingPhoto } from '../services/useActivityPhotoCapture';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+
+const RUN_ACCENT = '#F97316';
 
 interface SerialisedSnapshot {
   durationSeconds: number;
@@ -53,32 +53,36 @@ interface Props {
   route: {
     params?: {
       snapshot?: SerialisedSnapshot;
-      publicWalkId?: number;
       pendingPhotos?: PendingPhoto[];
     };
   };
 }
 
 const MOODS = [
-  { id: 'peaceful', emoji: '🌿', label: 'Peaceful' },
-  { id: 'energising', emoji: '⚡', label: 'Energising' },
-  { id: 'scenic', emoji: '🌄', label: 'Scenic' },
-  { id: 'tough', emoji: '😤', label: 'Tough' },
+  { id: 'strong',     emoji: '💪', label: 'Strong'   },
+  { id: 'easy',       emoji: '😌', label: 'Easy'     },
+  { id: 'tough',      emoji: '😤', label: 'Tough'    },
+  { id: 'zen',        emoji: '🌿', label: 'Zen'      },
 ];
 
-export function WalkSummaryScreen({ navigation, route }: Props) {
+// GPS-tracked runs have a synthetic run_type derived from actual distance.
+function distanceToRunType(km: number): string {
+  const buckets = [1, 2, 3, 5, 8, 10, 15, 18, 21];
+  for (const b of buckets) {
+    if (km <= b + 0.5) return `${b}k`;
+  }
+  return '21k';
+}
+
+export function RunSummaryScreen({ navigation, route }: Props) {
   const snapshot = route?.params?.snapshot;
-  const publicWalkId = route?.params?.publicWalkId;
   const pendingPhotos = route?.params?.pendingPhotos ?? [];
   const [mood, setMood] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
   const pace = useMemo(
-    () =>
-      snapshot
-        ? paceFromDistance(snapshot.durationSeconds, snapshot.distanceKm)
-        : '--:--',
+    () => snapshot ? paceFromDistance(snapshot.durationSeconds, snapshot.distanceKm) : '--:--',
     [snapshot],
   );
 
@@ -91,16 +95,17 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
       const points = snapshot.points;
       const start = points[0];
       const end = points[points.length - 1];
-      const polyline = encodePolyline(points as TrackedPoint[]);
+      const polylineStr = encodePolyline(points as TrackedPoint[]);
+      const runType = distanceToRunType(snapshot.distanceKm);
 
-      const walk = await walkApi.create({
+      const run = await runApi.create({
+        run_type: runType,
         duration_seconds: Math.max(1, Math.round(snapshot.durationSeconds)),
         distance_km: Number(snapshot.distanceKm.toFixed(3)),
-        started_at: snapshot.startedAt
-          ? new Date(snapshot.startedAt).toISOString()
-          : undefined,
-        ended_at: new Date().toISOString(),
-        route_polyline: polyline || undefined,
+        category: 'outdoor',
+        started_at: snapshot.startedAt ? new Date(snapshot.startedAt).toISOString() : undefined,
+        completed_at: new Date().toISOString(),
+        route_polyline: polylineStr || undefined,
         start_lat: start?.lat,
         start_lng: start?.lng,
         end_lat: end?.lat,
@@ -110,60 +115,44 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
           : undefined,
         notes: note.trim() || undefined,
         mood: mood || undefined,
-        category: 'outdoor',
-        public_walk_id: publicWalkId,
       });
 
-      // Upload any photos captured during the walk
+      // Upload any photos taken during the run
       if (pendingPhotos.length > 0) {
         await Promise.allSettled(
           pendingPhotos.map((p) =>
-            walkPhotoApi.upload(walk.id, {
+            photoApi.upload(run.id, {
               photo_data: p.base64,
-              lat: p.lat ?? undefined,
-              lng: p.lng ?? undefined,
               distance_marker_km: p.distanceKm,
             }),
           ),
         );
       }
 
-      try {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch {}
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
 
-      navigation.replace('WalkDetail', { walkId: walk.id, justSaved: true });
+      // Pop back to the Runs tab root
+      navigation.replace('RunHistory');
     } catch (e: any) {
-      Alert.alert('Could not save walk', e?.message ?? 'Please try again.');
+      Alert.alert('Could not save run', e?.message ?? 'Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDiscard = () => {
-    Alert.alert(
-      'Discard walk?',
-      'You will lose this recorded walk.',
-      [
-        { text: 'Keep', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () => navigation.popToTop(),
-        },
-      ],
-    );
+    Alert.alert('Discard run?', 'You will lose this recorded run.', [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => navigation.popToTop() },
+    ]);
   };
 
   if (!snapshot) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No walk to summarise.</Text>
-          <Pressable
-            onPress={() => navigation.popToTop()}
-            style={styles.primaryBtn}
-          >
+          <Text style={styles.emptyText}>No run to summarise.</Text>
+          <Pressable onPress={() => navigation.popToTop()} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>Go back</Text>
           </Pressable>
         </View>
@@ -178,7 +167,7 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.title}>Nice walk.</Text>
+          <Text style={styles.title}>Great run.</Text>
           <Text style={styles.subtitle}>
             {formatDistanceKm(snapshot.distanceKm)} ·{' '}
             {formatDurationHms(snapshot.durationSeconds)} · {pace} /km
@@ -189,23 +178,17 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
             <WalkMap
               style={styles.map}
               route={routePoints.map((p) => ({ lat: p.lat, lng: p.lng }))}
-              centerOn={
-                routePoints.length > 0
-                  ? { lat: routePoints[0].lat, lng: routePoints[0].lng }
-                  : undefined
-              }
+              centerOn={routePoints.length > 0 ? { lat: routePoints[0].lat, lng: routePoints[0].lng } : undefined}
               showUserLocation={false}
+              routeColor={RUN_ACCENT}
             />
           </View>
 
           <View style={styles.statsRow}>
             <Stat label="Distance" value={formatDistanceKm(snapshot.distanceKm)} />
-            <Stat label="Time" value={formatDurationHms(snapshot.durationSeconds)} />
-            <Stat label="Pace" value={`${pace}`} />
-            <Stat
-              label="Elevation"
-              value={`${Math.round(snapshot.elevationGainM || 0)} m`}
-            />
+            <Stat label="Time"     value={formatDurationHms(snapshot.durationSeconds)} />
+            <Stat label="Pace"     value={pace} />
+            <Stat label="Elevation" value={`${Math.round(snapshot.elevationGainM || 0)} m`} />
           </View>
 
           <Text style={styles.section}>How did it feel?</Text>
@@ -214,9 +197,7 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
               <Pressable
                 key={m.id}
                 onPress={() => {
-                  try {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  } catch {}
+                  try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
                   setMood(mood === m.id ? null : m.id);
                 }}
                 style={({ pressed }) => [
@@ -226,12 +207,7 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
                 ]}
               >
                 <Text style={styles.moodEmoji}>{m.emoji}</Text>
-                <Text
-                  style={[
-                    styles.moodLabel,
-                    mood === m.id && styles.moodLabelActive,
-                  ]}
-                >
+                <Text style={[styles.moodLabel, mood === m.id && styles.moodLabelActive]}>
                   {m.label}
                 </Text>
               </Pressable>
@@ -242,7 +218,7 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
           <TextInput
             value={note}
             onChangeText={setNote}
-            placeholder="A line about the walk…"
+            placeholder="A line about the run…"
             placeholderTextColor={colors.textLight}
             style={styles.noteInput}
             maxLength={300}
@@ -264,11 +240,11 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
             ]}
           >
             {saving ? (
-              <ActivityIndicator color={colors.textOnPrimary} />
+              <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Ionicons name="checkmark" size={18} color={colors.textOnPrimary} />
-                <Text style={styles.primaryBtnText}>Save walk</Text>
+                <Ionicons name="checkmark" size={18} color="#fff" />
+                <Text style={styles.primaryBtnText}>Save run</Text>
               </>
             )}
           </Pressable>
@@ -289,10 +265,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
-  },
+  scroll: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
@@ -338,10 +311,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  moodRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
+  moodRow: { flexDirection: 'row', gap: spacing.sm },
   moodChip: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -353,8 +323,8 @@ const styles = StyleSheet.create({
     ...shadows.small,
   },
   moodChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + '15',
+    borderColor: RUN_ACCENT,
+    backgroundColor: RUN_ACCENT + '15',
   },
   moodEmoji: { fontSize: 22, marginBottom: 2 },
   moodLabel: {
@@ -362,7 +332,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: typography.weights.medium,
   },
-  moodLabelActive: { color: colors.primary, fontWeight: typography.weights.bold },
+  moodLabelActive: { color: RUN_ACCENT, fontWeight: typography.weights.bold },
   noteInput: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
@@ -387,13 +357,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: colors.primary,
+    backgroundColor: RUN_ACCENT,
     borderRadius: radius.lg,
     paddingVertical: 14,
     ...shadows.small,
   },
   primaryBtnText: {
-    color: colors.textOnPrimary,
+    color: '#fff',
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
   },
@@ -417,8 +387,5 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.lg,
   },
-  emptyText: {
-    color: colors.textSecondary,
-    fontSize: typography.sizes.md,
-  },
+  emptyText: { color: colors.textSecondary, fontSize: typography.sizes.md },
 });

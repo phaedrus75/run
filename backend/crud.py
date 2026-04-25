@@ -55,8 +55,8 @@ def create_run(db: Session, run: RunCreate, user_id: int = None) -> Run:
     - db.commit() saves it to the database
     - db.refresh() reloads it with auto-generated fields (like id)
     """
-    # Get distance from run type
-    distance = RUN_DISTANCES.get(run.run_type, 0.0)
+    # Get distance from run type (GPS distance overrides if provided)
+    distance = run.distance_km if run.distance_km else RUN_DISTANCES.get(run.run_type, 0.0)
     
     db_run = Run(
         run_type=run.run_type,
@@ -65,7 +65,14 @@ def create_run(db: Session, run: RunCreate, user_id: int = None) -> Run:
         notes=run.notes,
         category=run.category or "outdoor",
         mood=run.mood,
-        user_id=user_id
+        user_id=user_id,
+        route_polyline=run.route_polyline,
+        start_lat=run.start_lat,
+        start_lng=run.start_lng,
+        end_lat=run.end_lat,
+        end_lng=run.end_lng,
+        elevation_gain_m=run.elevation_gain_m,
+        started_at=run.started_at,
     )
     
     # Set completed_at if provided (for backdating)

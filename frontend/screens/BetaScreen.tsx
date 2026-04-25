@@ -55,7 +55,7 @@ const FEATURES: FeatureRow[] = [
     iconColor: '#C9907A',
     label: 'Gym',
     description: 'Log strength sessions, track volume progression and PRs.',
-    screen: 'GymHistory',
+    screen: 'GymTab',
     betaKey: 'beta_gym_enabled',
   },
   {
@@ -72,7 +72,7 @@ const FEATURES: FeatureRow[] = [
     iconColor: '#D4BF85',
     label: 'High Step Days',
     description: 'Log 15k, 20k or 25k+ step days and build the habit.',
-    screen: 'StepsHistory',
+    screen: 'StepsTab',
     betaKey: 'beta_steps_enabled',
   },
 ];

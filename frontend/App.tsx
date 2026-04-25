@@ -14,9 +14,10 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 // 📱 Screens
 import { HomeScreen } from './screens/HomeScreen';
 import { RunScreen } from './screens/RunScreen';
-import { HistoryScreen } from './screens/HistoryScreen';
+import { RunsTabScreen } from './screens/RunsTabScreen';
 import { AddRunScreen } from './screens/AddRunScreen';
-import { StatsScreen } from './screens/StatsScreen';
+import { ActiveRunScreen } from './screens/ActiveRunScreen';
+import { RunSummaryScreen } from './screens/RunSummaryScreen';
 import { CirclesScreen } from './screens/CirclesScreen';
 import { CircleSpaceScreen } from './screens/CircleSpaceScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
@@ -29,6 +30,10 @@ import { WalkDetailScreen } from './screens/WalkDetailScreen';
 import { DiscoverWalksScreen } from './screens/DiscoverWalksScreen';
 import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
 import { BetaScreen } from './screens/BetaScreen';
+import { GymTabScreen } from './screens/GymTabScreen';
+import { StepsTabScreen } from './screens/StepsTabScreen';
+import { HistoryScreen } from './screens/HistoryScreen';
+import { GoButton } from './components/GoButton';
 
 // Registers background-location TaskManager task at app start
 import './services/walkBackgroundTask';
@@ -50,20 +55,29 @@ function HomeStack() {
 }
 
 // ─── Runs stack ───────────────────────────────────────────────────────────────
-// Root = run history (runs only). "Log Run" header button → RunScreen.
+// Root = RunsTabScreen (history + stats). Go button routes to ActiveRun or RunScreen.
 function RunsStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen
         name="RunHistory"
-        component={HistoryScreen}
-        initialParams={{ mode: 'runs' }}
+        component={RunsTabScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="RunScreen"
         component={RunScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ActiveRun"
+        component={ActiveRunScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="RunSummary"
+        component={RunSummaryScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
       />
       <Stack.Screen
         name="AddRun"
@@ -102,31 +116,29 @@ function WalkStack() {
 }
 
 // ─── Labs stack ───────────────────────────────────────────────────────────────
-// Hub + Circles + Gym history + Steps history
+// Hub + Circles + Gym (with stats) + Steps (with stats)
 function LabsStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="BetaHome" component={BetaScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CirclesList" component={CirclesScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
-      <Stack.Screen
-        name="GymHistory"
-        component={HistoryScreen}
-        initialParams={{ mode: 'gym' }}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="StepsHistory"
-        component={HistoryScreen}
-        initialParams={{ mode: 'steps' }}
-        options={{ headerShown: false }}
-      />
+      <Stack.Screen name="GymTab" component={GymTabScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StepsTab" component={StepsTabScreen} options={{ headerShown: false }} />
+      {/* Keep legacy history routes for any deep-links still using them */}
+      <Stack.Screen name="GymHistory" component={HistoryScreen} initialParams={{ mode: 'gym' }} options={{ headerShown: false }} />
+      <Stack.Screen name="StepsHistory" component={HistoryScreen} initialParams={{ mode: 'steps' }} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
 
+// ─── Go placeholder ───────────────────────────────────────────────────────────
+// The Tab.Screen for the centre slot needs a component; GoButton renders the
+// actual UI as a tabBarButton overlay so this is never displayed.
+function GoPlaceholder() { return null; }
+
 // ─── Main Tabs ────────────────────────────────────────────────────────────────
-// Layout: Home | Runs | Walks | Stats | Labs
+// Layout: Home | Runs | [GO] | Walks | Labs
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -150,21 +162,27 @@ function MainTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let icon: keyof typeof Ionicons.glyphMap = 'home';
           switch (route.name) {
-            case 'Home':  icon = focused ? 'home'      : 'home-outline';      break;
-            case 'Runs':  icon = focused ? 'fitness'   : 'fitness-outline';   break;
-            case 'Walks': icon = focused ? 'walk'      : 'walk-outline';      break;
-            case 'Stats': icon = focused ? 'bar-chart' : 'bar-chart-outline'; break;
-            case 'Labs':  icon = focused ? 'flask'     : 'flask-outline';     break;
+            case 'Home':  icon = focused ? 'home'    : 'home-outline';    break;
+            case 'Runs':  icon = focused ? 'fitness' : 'fitness-outline'; break;
+            case 'Walks': icon = focused ? 'walk'    : 'walk-outline';    break;
+            case 'Labs':  icon = focused ? 'flask'   : 'flask-outline';   break;
           }
           return <Ionicons name={icon} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="Home"  component={HomeStack}   options={{ tabBarLabel: 'Home'  }} />
-      <Tab.Screen name="Runs"  component={RunsStack}   options={{ tabBarLabel: 'Runs'  }} />
-      <Tab.Screen name="Walks" component={WalkStack}   options={{ tabBarLabel: 'Walks' }} />
-      <Tab.Screen name="Stats" component={StatsScreen} options={{ tabBarLabel: 'Stats' }} />
-      <Tab.Screen name="Labs"  component={LabsStack}   options={{ tabBarLabel: 'Labs'  }} />
+      <Tab.Screen name="Home"  component={HomeStack}    options={{ tabBarLabel: 'Home'  }} />
+      <Tab.Screen name="Runs"  component={RunsStack}    options={{ tabBarLabel: 'Runs'  }} />
+      <Tab.Screen
+        name="Go"
+        component={GoPlaceholder}
+        options={{
+          tabBarLabel: '',
+          tabBarButton: () => <GoButton />,
+        }}
+      />
+      <Tab.Screen name="Walks" component={WalkStack}    options={{ tabBarLabel: 'Walks' }} />
+      <Tab.Screen name="Labs"  component={LabsStack}    options={{ tabBarLabel: 'Labs'  }} />
     </Tab.Navigator>
   );
 }
