@@ -116,16 +116,29 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
 
       // Upload any photos captured during the walk
       if (pendingPhotos.length > 0) {
-        await Promise.allSettled(
-          pendingPhotos.map((p) =>
-            walkPhotoApi.upload(walk.id, {
-              photo_data: p.base64,
-              lat: p.lat ?? undefined,
-              lng: p.lng ?? undefined,
-              distance_marker_km: p.distanceKm,
-            }),
-          ),
+        const uploadResults = await Promise.allSettled(
+          pendingPhotos
+            .filter((p) => p.base64 && p.base64.length > 0)
+            .map((p) =>
+              walkPhotoApi.upload(walk.id, {
+                photo_data: p.base64,
+                lat: p.lat ?? undefined,
+                lng: p.lng ?? undefined,
+                distance_marker_km: p.distanceKm,
+              }),
+            ),
         );
+        const failCount = uploadResults.filter((r) => r.status === 'rejected').length;
+        if (failCount > 0) {
+          console.warn(`${failCount} walk photo(s) failed to upload`);
+          Alert.alert(
+            'Some photos not saved',
+            `${failCount} photo${failCount > 1 ? 's' : ''} could not be uploaded. The walk itself was saved. You can try adding photos from the walk detail page.`,
+          );
+          // Still navigate — the walk is saved even if photos failed
+          navigation.replace('WalkDetail', { walkId: walk.id, justSaved: true });
+          return;
+        }
       }
 
       try {

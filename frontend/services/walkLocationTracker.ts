@@ -49,7 +49,7 @@ export interface WalkSnapshot {
 export type WalkSnapshotListener = (snapshot: WalkSnapshot) => void;
 
 // ----- Tunables -----
-const MIN_ACCEPTABLE_ACCURACY_M = 30;
+const MIN_ACCEPTABLE_ACCURACY_M = 60;
 const MIN_DISTANCE_BETWEEN_POINTS_M = 3;
 const TICK_MS = 1000;
 

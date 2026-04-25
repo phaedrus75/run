@@ -181,7 +181,16 @@ function MainTabs() {
           tabBarButton: () => <GoButton />,
         }}
       />
-      <Tab.Screen name="Walks" component={WalkStack}    options={{ tabBarLabel: 'Walks' }} />
+      <Tab.Screen
+        name="Walks"
+        component={WalkStack}
+        options={{ tabBarLabel: 'Walks' }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            navigation.navigate('Walks', { screen: 'WalkHome' });
+          },
+        })}
+      />
       <Tab.Screen name="Labs"  component={LabsStack}    options={{ tabBarLabel: 'Labs'  }} />
     </Tab.Navigator>
   );
