@@ -240,6 +240,7 @@ export interface PersonalRecord {
   pace: string;
   date: string;
   run_id: number;
+  run_count: number;
 }
 
 export interface PersonalRecords {

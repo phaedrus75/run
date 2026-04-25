@@ -91,6 +91,9 @@ export function PersonalRecords({ records: initialRecords }: PersonalRecordsProp
                   <Text style={styles.time}>{record.time}</Text>
                   <Text style={styles.pace}>{record.pace}/km</Text>
                   <Text style={styles.date}>{record.date}</Text>
+                  <View style={styles.countChip}>
+                    <Text style={styles.countText}>{record.run_count} run{record.run_count !== 1 ? 's' : ''}</Text>
+                  </View>
                 </>
               ) : (
                 <Text style={styles.noRecord}>No runs yet</Text>
@@ -188,5 +191,19 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     textAlign: 'center',
     marginTop: spacing.xs,
+  },
+  countChip: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.primary + '18',
+    borderRadius: radius.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.primary + '35',
+  },
+  countText: {
+    fontSize: 9,
+    fontWeight: typography.weights.semibold,
+    color: colors.primary,
   },
 });
