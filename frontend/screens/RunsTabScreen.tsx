@@ -26,9 +26,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { StatsChart, PaceTrendChart, StreakProgress } from '../components';
-import { runApi, statsApi, type Run, type WeeklyStreakProgress } from '../services/api';
+import { runApi, statsApi, type Run, type WeeklyStreakProgress, type MonthInReview as MonthInReviewType } from '../services/api';
 import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
+import { MonthInReview } from '../components/MonthInReview';
+import { QuarterInReview } from '../components/QuarterInReview';
 
 type InnerTab = 'history' | 'stats';
 type RunViewMode = 'week' | 'month' | 'all';
@@ -41,6 +43,37 @@ interface Props {
   route?: any;
 }
 
+const getAvailableMonths = () => {
+  const months: { month: number; year: number; label: string }[] = [];
+  const now = new Date();
+  for (let year = 2026; year <= now.getFullYear(); year++) {
+    const endMonth = year === now.getFullYear() ? now.getMonth() : 12;
+    const start = year === 2026 ? 1 : 1;
+    if (endMonth < start) continue;
+    for (let month = start; month <= endMonth; month++) {
+      months.push({
+        month,
+        year,
+        label: new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      });
+    }
+  }
+  return months.reverse();
+};
+
+const getAvailableQuarters = () => {
+  const now = new Date();
+  const quarters: { q: number; year: number; label: string }[] = [];
+  const currentQ = Math.ceil((now.getMonth() + 1) / 3);
+  for (let year = 2026; year <= now.getFullYear(); year++) {
+    const maxQ = year === now.getFullYear() ? currentQ - 1 : 4;
+    for (let q = 1; q <= maxQ; q++) {
+      quarters.push({ q, year, label: `Q${q} ${year}` });
+    }
+  }
+  return quarters.reverse();
+};
+
 export function RunsTabScreen({ navigation }: Props) {
   const [tab, setTab] = useState<InnerTab>('history');
   const [allRuns, setAllRuns] = useState<Run[]>([]);
@@ -50,6 +83,27 @@ export function RunsTabScreen({ navigation }: Props) {
   const [viewMode, setViewMode] = useState<RunViewMode>('week');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [editRun, setEditRun] = useState<Run | null>(null);
+
+  // Month / Quarter in Review
+  const [monthReviewData, setMonthReviewData] = useState<MonthInReviewType | null>(null);
+  const [showMonthReview, setShowMonthReview] = useState(false);
+  const [showQuarterReview, setShowQuarterReview] = useState(false);
+  const [selectedQuarter, setSelectedQuarter] = useState(1);
+  const [selectedQuarterYear, setSelectedQuarterYear] = useState(2026);
+  const availableMonths = getAvailableMonths();
+  const availableQuarters = getAvailableQuarters();
+
+  const fetchMonthReview = async (month: number, year: number) => {
+    try {
+      const data = await statsApi.getMonthReview(month, year);
+      if (data) {
+        setMonthReviewData({ ...data, should_show: true });
+        setShowMonthReview(true);
+      }
+    } catch (e) {
+      console.error('Month review fetch error', e);
+    }
+  };
 
   const runs = useMemo(() => {
     const base = allRuns.filter(r => new Date(r.completed_at).getFullYear() >= MIN_YEAR);
@@ -319,6 +373,44 @@ export function RunsTabScreen({ navigation }: Props) {
 
   // ---- Render: History section ----
 
+  const historyHeader = (
+    <View>
+      {/* Month in Review */}
+      <View style={styles.reviewSection}>
+        <Text style={styles.reviewTitle}>📅 Month in Review</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {availableMonths.map(({ month, year, label }) => (
+            <TouchableOpacity
+              key={`${year}-${month}`}
+              style={[styles.chip, shadows.small]}
+              onPress={() => fetchMonthReview(month, year)}
+            >
+              <Text style={styles.chipText}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Quarter in Review */}
+      {availableQuarters.length > 0 && (
+        <View style={styles.reviewSection}>
+          <Text style={styles.reviewTitle}>📊 Quarter in Review</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {availableQuarters.map(({ q, year, label }) => (
+              <TouchableOpacity
+                key={`${year}-Q${q}`}
+                style={[styles.chip, shadows.small]}
+                onPress={() => { setSelectedQuarter(q); setSelectedQuarterYear(year); setShowQuarterReview(true); }}
+              >
+                <Text style={styles.chipText}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+
   const renderHistory = () => (
     <SectionList
       sections={[{ title: '', data: runs }]}
@@ -326,6 +418,7 @@ export function RunsTabScreen({ navigation }: Props) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       contentContainerStyle={styles.historyContent}
       renderSectionHeader={() => null}
+      ListHeaderComponent={historyHeader}
       renderItem={({ item }) => (
         <RunHistoryCard
           run={item}
@@ -387,6 +480,20 @@ export function RunsTabScreen({ navigation }: Props) {
           onUpdate={() => { setEditRun(null); fetchData(); }}
         />
       )}
+
+      {monthReviewData && showMonthReview && (
+        <MonthInReview
+          data={monthReviewData}
+          onDismiss={() => setShowMonthReview(false)}
+        />
+      )}
+
+      <QuarterInReview
+        visible={showQuarterReview}
+        quarter={selectedQuarter}
+        year={selectedQuarterYear}
+        onClose={() => setShowQuarterReview(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -441,6 +548,31 @@ const styles = StyleSheet.create({
   },
   // History
   historyContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  reviewSection: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  reviewTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  chipRow: {
+    gap: spacing.sm,
+    paddingRight: spacing.lg,
+  },
+  chip: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  chipText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.text,
+  },
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
