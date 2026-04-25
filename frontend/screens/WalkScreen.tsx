@@ -21,7 +21,9 @@ import {
   Switch,
   Alert,
   Linking,
+  Platform,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +40,10 @@ import {
   setBackgroundTrackingEnabled,
 } from '../services/walkBackgroundTask';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+
+// Background location tasks are not supported in Expo Go — they require a
+// standalone build with the UIBackgroundModes entitlement baked in.
+const IS_EXPO_GO = Constants.appOwnership === 'expo';
 
 interface Props {
   navigation: any;
@@ -174,22 +180,24 @@ export function WalkScreen({ navigation }: Props) {
           <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
         </Pressable>
 
-        <View style={styles.bgRow}>
-          <Ionicons name="moon-outline" size={20} color={colors.secondary} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.bgTitle}>Track when locked</Text>
-            <Text style={styles.bgSub}>
-              Keep recording when the screen is off. Uses more battery.
-            </Text>
+        {!IS_EXPO_GO && (
+          <View style={styles.bgRow}>
+            <Ionicons name="moon-outline" size={20} color={colors.secondary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bgTitle}>Track when locked</Text>
+              <Text style={styles.bgSub}>
+                Keep recording when the screen is off. Uses more battery.
+              </Text>
+            </View>
+            <Switch
+              value={bgEnabled}
+              onValueChange={toggleBackground}
+              disabled={bgUpdating}
+              trackColor={{ false: colors.border, true: colors.secondary }}
+              thumbColor={colors.surface}
+            />
           </View>
-          <Switch
-            value={bgEnabled}
-            onValueChange={toggleBackground}
-            disabled={bgUpdating}
-            trackColor={{ false: colors.border, true: colors.secondary }}
-            thumbColor={colors.surface}
-          />
-        </View>
+        )}
 
         {stats && stats.total_walks > 0 && (
           <View style={styles.statsRow}>
