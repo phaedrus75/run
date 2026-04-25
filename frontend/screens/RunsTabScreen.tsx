@@ -208,6 +208,41 @@ export function RunsTabScreen({ navigation }: Props) {
 
   // ---- Render: Stats section ----
 
+  const reviewChips = (
+    <View>
+      <View style={styles.reviewSection}>
+        <Text style={styles.reviewTitle}>📅 Month in Review</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {availableMonths.map(({ month, year, label }) => (
+            <TouchableOpacity
+              key={`${year}-${month}`}
+              style={[styles.chip, shadows.small]}
+              onPress={() => fetchMonthReview(month, year)}
+            >
+              <Text style={styles.chipText}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+      {availableQuarters.length > 0 && (
+        <View style={styles.reviewSection}>
+          <Text style={styles.reviewTitle}>📊 Quarter in Review</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {availableQuarters.map(({ q, year, label }) => (
+              <TouchableOpacity
+                key={`${year}-Q${q}`}
+                style={[styles.chip, shadows.small]}
+                onPress={() => { setSelectedQuarter(q); setSelectedQuarterYear(year); setShowQuarterReview(true); }}
+              >
+                <Text style={styles.chipText}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+
   const renderStats = () => (
     <ScrollView contentContainerStyle={styles.statsScroll} showsVerticalScrollIndicator={false}>
       {/* View mode picker */}
@@ -290,6 +325,7 @@ export function RunsTabScreen({ navigation }: Props) {
                 </View>
               </View>
             ))}
+            {reviewChips}
           </View>
         );
       })()}
@@ -324,6 +360,7 @@ export function RunsTabScreen({ navigation }: Props) {
                 </View>
               </View>
             ))}
+            {reviewChips}
           </View>
         );
       })()}
@@ -375,39 +412,7 @@ export function RunsTabScreen({ navigation }: Props) {
 
   const historyHeader = (
     <View>
-      {/* Month in Review */}
-      <View style={styles.reviewSection}>
-        <Text style={styles.reviewTitle}>📅 Month in Review</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {availableMonths.map(({ month, year, label }) => (
-            <TouchableOpacity
-              key={`${year}-${month}`}
-              style={[styles.chip, shadows.small]}
-              onPress={() => fetchMonthReview(month, year)}
-            >
-              <Text style={styles.chipText}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Quarter in Review */}
-      {availableQuarters.length > 0 && (
-        <View style={styles.reviewSection}>
-          <Text style={styles.reviewTitle}>📊 Quarter in Review</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {availableQuarters.map(({ q, year, label }) => (
-              <TouchableOpacity
-                key={`${year}-Q${q}`}
-                style={[styles.chip, shadows.small]}
-                onPress={() => { setSelectedQuarter(q); setSelectedQuarterYear(year); setShowQuarterReview(true); }}
-              >
-                <Text style={styles.chipText}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      {reviewChips}
     </View>
   );
 
