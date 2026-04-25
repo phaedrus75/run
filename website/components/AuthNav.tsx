@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 interface UserInfo {
   handle: string | null;
   name: string | null;
+  is_admin: boolean;
 }
 
 export default function AuthNav({ variant = 'header' }: { variant?: 'header' | 'footer' }) {
@@ -19,7 +20,7 @@ export default function AuthNav({ variant = 'header' }: { variant?: 'header' | '
       .then((r) => r.json())
       .then((data) => {
         if (data.authenticated && data.handle) {
-          setUser({ handle: data.handle, name: data.name });
+          setUser({ handle: data.handle, name: data.name, is_admin: data.is_admin ?? false });
         }
       })
       .catch(() => {})
@@ -43,6 +44,11 @@ export default function AuthNav({ variant = 'header' }: { variant?: 'header' | '
   if (user) {
     return (
       <>
+        {user.is_admin && variant === 'header' && (
+          <Link href="/admin" className={linkClass}>
+            Admin
+          </Link>
+        )}
         <Link href={`/runner/${user.handle}`} className={linkClass}>
           My Profile
         </Link>

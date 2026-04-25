@@ -69,6 +69,7 @@ class UserResponse(BaseModel):
     beta_weight_enabled: bool = False
     beta_gym_enabled: bool = False
     email_verified: bool = False
+    is_admin: bool = False
     created_at: datetime
 
     class Config:

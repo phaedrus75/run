@@ -41,3 +41,6 @@ yarn-error.log*
 *.aab
 *.ipa
 .vercel
+
+# Secrets
+google-service-account.json
