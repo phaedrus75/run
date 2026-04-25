@@ -1,14 +1,5 @@
 /**
  * 🏃 ZENRUN APP
- * ==================
- * 
- * Welcome to the main entry point of our React Native app!
- * 
- * 🎓 LEARNING NOTES:
- * - This file sets up navigation (moving between screens)
- * - We use React Navigation for tab-based navigation
- * - SafeAreaProvider ensures content doesn't go under notches
- * - AuthProvider manages user authentication state
  */
 
 import React from 'react';
@@ -20,7 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
-// 📱 Import our screens
+// 📱 Screens
 import { HomeScreen } from './screens/HomeScreen';
 import { RunScreen } from './screens/RunScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
@@ -38,40 +29,46 @@ import { WalkDetailScreen } from './screens/WalkDetailScreen';
 import { DiscoverWalksScreen } from './screens/DiscoverWalksScreen';
 import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
 import { BetaScreen } from './screens/BetaScreen';
-import { GoButton } from './components/GoButton';
 
-// Side-effect import: registers the background-location TaskManager task at
-// app start so iOS/Android can revive it after the app is force-quit.
+// Registers background-location TaskManager task at app start
 import './services/walkBackgroundTask';
 
-// 🔐 Import auth context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-
-// 🎨 Import our theme
 import { colors } from './theme/colors';
 
-// 🧭 Create navigators
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// Placeholder component required by React Navigation for the centre Go tab
-function GoPlaceholder() { return <View />; }
-
-/**
- * 📜 History Stack - History tab with Add Run screen
- */
-function HistoryStack() {
+// ─── Home stack ───────────────────────────────────────────────────────────────
+function HomeStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen 
-        name="HistoryMain" 
+      <Stack.Screen name="HomeMain" component={HomeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+    </Stack.Navigator>
+  );
+}
+
+// ─── Runs stack ───────────────────────────────────────────────────────────────
+// Root = run history (runs only). "Log Run" header button → RunScreen.
+function RunsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="RunHistory"
         component={HistoryScreen}
+        initialParams={{ mode: 'runs' }}
         options={{ headerShown: false }}
       />
-      <Stack.Screen 
-        name="AddRun" 
+      <Stack.Screen
+        name="RunScreen"
+        component={RunScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="AddRun"
         component={AddRunScreen}
-        options={{ 
+        options={{
           headerShown: true,
           title: 'Add Past Run',
           headerStyle: { backgroundColor: colors.background },
@@ -82,89 +79,54 @@ function HistoryStack() {
   );
 }
 
-/**
- * HomeStack - Home + Profile
- */
-function HomeStack() {
+// ─── Walk stack ───────────────────────────────────────────────────────────────
+function WalkStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="HomeMain" component={HomeScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="WalkHome" component={WalkScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ActiveWalk" component={ActiveWalkScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="WalkSummary" component={WalkSummaryScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="WalkDetail" component={WalkDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="PublicWalkDetail"
+        component={PublicWalkDetailScreen}
+        options={{ headerShown: true, title: 'Walk preview', headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.primary }}
+      />
+      <Stack.Screen
+        name="DiscoverWalks"
+        component={DiscoverWalksScreen}
+        options={{ headerShown: true, title: 'Discover walks', headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.primary }}
+      />
     </Stack.Navigator>
   );
 }
 
-/**
- * CirclesStack - List + Space views (used inside BetaStack)
- */
-function CirclesStack() {
-  return (
-    <Stack.Navigator>
-      <Stack.Screen name="CirclesList" component={CirclesScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
-    </Stack.Navigator>
-  );
-}
-
-/**
- * BetaStack - Labs hub with Circles, Gym, Weight, Steps navigation
- */
-function BetaStack() {
+// ─── Labs stack ───────────────────────────────────────────────────────────────
+// Hub + Circles + Gym history + Steps history
+function LabsStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="BetaHome" component={BetaScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CirclesList" component={CirclesScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
-    </Stack.Navigator>
-  );
-}
-
-/**
- * 🚶 WalkStack - Hub + active tracking + summary + detail + discover
- */
-function WalkStack() {
-  return (
-    <Stack.Navigator>
-      <Stack.Screen name="WalkHome" component={WalkScreen} options={{ headerShown: false }} />
       <Stack.Screen
-        name="ActiveWalk"
-        component={ActiveWalkScreen}
-        options={{ headerShown: false, gestureEnabled: false }}
+        name="GymHistory"
+        component={HistoryScreen}
+        initialParams={{ mode: 'gym' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="WalkSummary"
-        component={WalkSummaryScreen}
-        options={{ headerShown: false, gestureEnabled: false }}
-      />
-      <Stack.Screen name="WalkDetail" component={WalkDetailScreen} options={{ headerShown: false }} />
-      <Stack.Screen
-        name="PublicWalkDetail"
-        component={PublicWalkDetailScreen}
-        options={{
-          headerShown: true,
-          title: 'Walk preview',
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.primary,
-        }}
-      />
-      <Stack.Screen
-        name="DiscoverWalks"
-        component={DiscoverWalksScreen}
-        options={{
-          headerShown: true,
-          title: 'Discover walks',
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.primary,
-        }}
+        name="StepsHistory"
+        component={HistoryScreen}
+        initialParams={{ mode: 'steps' }}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );
 }
 
-/**
- * 🏠 Main Tabs - Shown when user is authenticated
- * Layout: Home | History | Go (centre) | Stats | Beta
- */
+// ─── Main Tabs ────────────────────────────────────────────────────────────────
+// Layout: Home | Runs | Walks | Stats | Labs
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -184,68 +146,33 @@ function MainTabs() {
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = 'home';
+          let icon: keyof typeof Ionicons.glyphMap = 'home';
           switch (route.name) {
-            case 'Home':     iconName = focused ? 'home'      : 'home-outline';      break;
-            case 'History':  iconName = focused ? 'list'      : 'list-outline';      break;
-            case 'Stats':    iconName = focused ? 'bar-chart' : 'bar-chart-outline'; break;
-            case 'Beta':     iconName = focused ? 'flask'     : 'flask-outline';     break;
+            case 'Home':  icon = focused ? 'home'      : 'home-outline';      break;
+            case 'Runs':  icon = focused ? 'fitness'   : 'fitness-outline';   break;
+            case 'Walks': icon = focused ? 'walk'      : 'walk-outline';      break;
+            case 'Stats': icon = focused ? 'bar-chart' : 'bar-chart-outline'; break;
+            case 'Labs':  icon = focused ? 'flask'     : 'flask-outline';     break;
           }
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={icon} size={size} color={color} />;
         },
       })}
     >
-      {/* 🏠 Home */}
-      <Tab.Screen name="Home" component={HomeStack} options={{ tabBarLabel: 'Home' }} />
-
-      {/* 📜 Activities */}
-      <Tab.Screen name="History" component={HistoryStack} options={{ tabBarLabel: 'Activities' }} />
-
-      {/* 🟢 Go — centre floating button */}
-      <Tab.Screen
-        name="Go"
-        component={GoPlaceholder}
-        options={({ navigation }) => ({
-          tabBarLabel: '',
-          tabBarButton: (props) => <GoButton {...props} navigation={navigation} />,
-        })}
-      />
-
-      {/* 📊 Stats */}
+      <Tab.Screen name="Home"  component={HomeStack}   options={{ tabBarLabel: 'Home'  }} />
+      <Tab.Screen name="Runs"  component={RunsStack}   options={{ tabBarLabel: 'Runs'  }} />
+      <Tab.Screen name="Walks" component={WalkStack}   options={{ tabBarLabel: 'Walks' }} />
       <Tab.Screen name="Stats" component={StatsScreen} options={{ tabBarLabel: 'Stats' }} />
-
-      {/* 🧪 Beta / Labs */}
-      <Tab.Screen name="Beta" component={BetaStack} options={{ tabBarLabel: 'Labs' }} />
-
-      {/* 🚶 Walk (hidden tab — navigated to via Go button) */}
-      <Tab.Screen
-        name="Walk"
-        component={WalkStack}
-        options={{ tabBarButton: () => null, tabBarLabel: '' }}
-      />
-
-      {/* 🏃 Run (hidden tab — navigated to via Go button) */}
-      <Tab.Screen
-        name="Run"
-        component={RunScreen}
-        options={{ tabBarButton: () => null, tabBarLabel: '' }}
-      />
+      <Tab.Screen name="Labs"  component={LabsStack}   options={{ tabBarLabel: 'Labs'  }} />
     </Tab.Navigator>
   );
 }
 
-/**
- * 🔄 App Navigator - Chooses between Auth, Onboarding, and Main based on state
- */
+// ─── App Navigator ────────────────────────────────────────────────────────────
 function AppNavigator() {
   const { isLoading, isAuthenticated, needsOnboarding } = useAuth();
 
-  // Show loading spinner while checking auth
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -254,7 +181,6 @@ function AppNavigator() {
     );
   }
 
-  // Not logged in - show auth screen
   if (!isAuthenticated) {
     return (
       <NavigationContainer>
@@ -263,12 +189,10 @@ function AppNavigator() {
     );
   }
 
-  // Logged in but needs onboarding
   if (needsOnboarding) {
     return <OnboardingScreen navigation={null} />;
   }
 
-  // Fully authenticated and onboarded
   return (
     <NavigationContainer>
       <MainTabs />
@@ -276,18 +200,10 @@ function AppNavigator() {
   );
 }
 
-/**
- * 🏠 Main App Component
- * 
- * This wraps everything in necessary providers and sets up navigation.
- */
 export default function App() {
   return (
     <SafeAreaProvider>
-      {/* 📱 Status bar configuration */}
       <StatusBar style="dark" />
-      
-      {/* 🔐 Auth provider - manages authentication state */}
       <AuthProvider>
         <AppNavigator />
       </AuthProvider>

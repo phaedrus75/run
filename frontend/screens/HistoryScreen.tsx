@@ -41,8 +41,11 @@ import { EditGymWorkoutModal } from '../components/EditGymWorkoutModal';
 const RUN_TYPES = ['all', '3k', '5k', '10k', '15k', '18k', '21k'];
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
 
+type HistoryMode = 'runs' | 'steps' | 'gym' | undefined;
+
 interface HistoryScreenProps {
   navigation: any;
+  route?: { params?: { mode?: HistoryMode } };
 }
 
 // Generate available months (from Jan 2026 to current month)
@@ -72,9 +75,11 @@ const getAvailableMonths = () => {
 
 type ActiveTab = 'runs' | 'steps' | 'gym';
 
-export function HistoryScreen({ navigation }: HistoryScreenProps) {
+export function HistoryScreen({ navigation, route }: HistoryScreenProps) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<ActiveTab>('runs');
+  const mode: HistoryMode = route?.params?.mode;
+  // When a mode is forced via params, lock the tab to that mode
+  const [activeTab, setActiveTab] = useState<ActiveTab>(mode ?? 'runs');
   const [runs, setRuns] = useState<Run[]>([]);
   const [filter, setFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -344,7 +349,12 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
     </View>
   );
   
-  const showTabs = !!user?.beta_steps_enabled || !!user?.beta_gym_enabled;
+  const showTabs = !mode && (!!user?.beta_steps_enabled || !!user?.beta_gym_enabled);
+
+  const screenTitle = mode === 'runs' ? 'Runs'
+    : mode === 'steps' ? 'Step Days'
+    : mode === 'gym' ? 'Gym'
+    : 'Activities';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -352,18 +362,18 @@ export function HistoryScreen({ navigation }: HistoryScreenProps) {
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.title}>Activities</Text>
+            <Text style={styles.title}>{screenTitle}</Text>
             <Text style={styles.subtitle}>Tap to edit</Text>
           </View>
-          {activeTab === 'runs' && (
+          {(mode === 'runs' || activeTab === 'runs') && (
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => navigation.navigate('AddRun')}
+              onPress={() => navigation.navigate('RunScreen')}
             >
-              <Text style={styles.addButtonText}>+ Add Run</Text>
+              <Text style={styles.addButtonText}>+ Log Run</Text>
             </TouchableOpacity>
           )}
-          {activeTab === 'steps' && (
+          {(mode === 'steps' || activeTab === 'steps') && (
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => { setShowAddStep(true); setAddStepCount(null); setAddStepDate(new Date()); }}

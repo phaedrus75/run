@@ -55,7 +55,7 @@ const FEATURES: FeatureRow[] = [
     iconColor: '#C9907A',
     label: 'Gym',
     description: 'Log strength sessions, track volume progression and PRs.',
-    screen: 'HistoryMain',
+    screen: 'GymHistory',
     betaKey: 'beta_gym_enabled',
   },
   {
@@ -63,8 +63,7 @@ const FEATURES: FeatureRow[] = [
     icon: 'scale',
     iconColor: '#7BAFA6',
     label: 'Weight',
-    description: 'Track your weight journey toward your goal.',
-    screen: 'StatsMain',
+    description: 'Track your weight journey toward your goal. Enable in Profile → Beta features.',
     betaKey: 'beta_weight_enabled',
   },
   {
@@ -73,7 +72,7 @@ const FEATURES: FeatureRow[] = [
     iconColor: '#D4BF85',
     label: 'High Step Days',
     description: 'Log 15k, 20k or 25k+ step days and build the habit.',
-    screen: 'HistoryMain',
+    screen: 'StepsHistory',
     betaKey: 'beta_steps_enabled',
   },
 ];
@@ -82,11 +81,10 @@ export function BetaScreen({ navigation }: Props) {
   const { user } = useAuth();
 
   const go = useCallback(
-    (screen?: string) => {
-      if (!screen) return;
+    (feature: FeatureRow) => {
+      if (!feature.screen) return;
       try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-      // Navigate via the parent navigator to the right tab
-      navigation.navigate(screen);
+      navigation.navigate(feature.screen);
     },
     [navigation],
   );
@@ -111,7 +109,7 @@ export function BetaScreen({ navigation }: Props) {
           <>
             <Text style={styles.sectionLabel}>AVAILABLE</Text>
             {enabled.map((f) => (
-              <FeatureCard key={f.key} feature={f} onPress={() => go(f.screen)} />
+              <FeatureCard key={f.key} feature={f} onPress={() => go(f)} />
             ))}
           </>
         )}
