@@ -136,10 +136,6 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
 
   const handleFinish = () => {
     try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
-    if (snapshot.distanceKm < 0.05) {
-      Alert.alert('Walk too short', 'You need to move a little before saving. Keep walking and try again.');
-      return;
-    }
     const photoNote = pendingPhotos.length > 0
       ? `\n\n${pendingPhotos.length} photo${pendingPhotos.length > 1 ? 's' : ''} will be saved with the walk.`
       : '';
