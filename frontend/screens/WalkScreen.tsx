@@ -39,7 +39,10 @@ import {
   requestAlwaysLocationPermission,
   setBackgroundTrackingEnabled,
 } from '../services/walkBackgroundTask';
+import { WalkStatsSection } from '../components/WalkStatsSection';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+
+type InnerTab = 'history' | 'stats';
 
 // Background location tasks are not supported in Expo Go — they require a
 // standalone build with the UIBackgroundModes entitlement baked in.
@@ -50,6 +53,7 @@ interface Props {
 }
 
 export function WalkScreen({ navigation }: Props) {
+  const [tab, setTab] = useState<InnerTab>('history');
   const [walks, setWalks] = useState<Walk[]>([]);
   const [stats, setStats] = useState<WalkStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,6 +156,23 @@ export function WalkScreen({ navigation }: Props) {
           </Text>
         </View>
 
+        {/* Inner tab switcher */}
+        <View style={styles.innerTabRow}>
+          {(['history', 'stats'] as InnerTab[]).map(t => (
+            <Pressable
+              key={t}
+              style={[styles.innerTab, tab === t && styles.innerTabActive]}
+              onPress={() => setTab(t)}
+            >
+              <Text style={[styles.innerTabText, tab === t && styles.innerTabTextActive]}>
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {tab === 'history' && (
+          <>
         <Pressable
           onPress={startWalk}
           style={({ pressed }) => [
@@ -239,6 +260,12 @@ export function WalkScreen({ navigation }: Props) {
             ))
           )}
         </View>
+          </>
+        )}
+
+        {tab === 'stats' && (
+          <WalkStatsSection stats={stats} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -312,6 +339,29 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
+  },
+  innerTabRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    padding: 3,
+  },
+  innerTab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: radius.full,
+  },
+  innerTabActive: { backgroundColor: colors.text },
+  innerTabText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.textSecondary,
+  },
+  innerTabTextActive: {
+    color: colors.textOnPrimary,
+    fontWeight: typography.weights.semibold,
   },
   header: {
     paddingTop: spacing.md,

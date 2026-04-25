@@ -771,6 +771,7 @@ def get_personal_records(db: Session, user_id: int = None, category: str = None)
                 "pace": f"{pace_mins}:{pace_secs:02d}",
                 "date": fastest.completed_at.strftime("%Y-%m-%d"),
                 "run_id": fastest.id,
+                "run_count": query.count(),
             }
         else:
             records[run_type] = None

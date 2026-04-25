@@ -170,6 +170,17 @@ def run_migrations():
                 conn.execute(text("""
                     ALTER TABLE runs ADD COLUMN IF NOT EXISTS user_id INTEGER
                 """))
+                # GPS tracking columns for outdoor runs
+                for col in [
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS route_polyline TEXT",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS start_lat FLOAT",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS start_lng FLOAT",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS end_lat FLOAT",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS end_lng FLOAT",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS elevation_gain_m FLOAT",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMP",
+                ]:
+                    conn.execute(text(col))
                 # Beta feature opt-in columns
                 conn.execute(text("""
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_steps_enabled BOOLEAN DEFAULT false

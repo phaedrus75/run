@@ -62,6 +62,15 @@ class Run(Base):
     # 🎭 How the run felt (easy, good, tough, great)
     mood = Column(String, nullable=True)
 
+    # 🗺️ GPS tracking (populated for outdoor GPS-tracked runs; null for manual/treadmill)
+    route_polyline = Column(Text, nullable=True)
+    start_lat = Column(Float, nullable=True)
+    start_lng = Column(Float, nullable=True)
+    end_lat = Column(Float, nullable=True)
+    end_lng = Column(Float, nullable=True)
+    elevation_gain_m = Column(Float, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+
 
 
 

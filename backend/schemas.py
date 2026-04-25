@@ -90,6 +90,15 @@ class RunCreate(BaseModel):
     completed_at: Optional[datetime] = Field(None, description="When the run was completed (for backdating)")
     category: Optional[str] = Field("outdoor", description="Category: outdoor or treadmill")
     mood: Optional[str] = Field(None, description="How the run felt: easy, good, tough, great")
+    # GPS fields — populated for outdoor GPS-tracked runs
+    route_polyline: Optional[str] = Field(None)
+    start_lat: Optional[float] = Field(None)
+    start_lng: Optional[float] = Field(None)
+    end_lat: Optional[float] = Field(None)
+    end_lng: Optional[float] = Field(None)
+    elevation_gain_m: Optional[float] = Field(None)
+    started_at: Optional[datetime] = Field(None)
+    distance_km: Optional[float] = Field(None, description="Actual GPS distance; if omitted, derived from run_type")
 
 
 class RunUpdate(BaseModel):
@@ -128,6 +137,13 @@ class RunResponse(BaseModel):
     notes: Optional[str]
     mood: Optional[str] = None
     category: Optional[str] = None
+    route_polyline: Optional[str] = None
+    start_lat: Optional[float] = None
+    start_lng: Optional[float] = None
+    end_lat: Optional[float] = None
+    end_lng: Optional[float] = None
+    elevation_gain_m: Optional[float] = None
+    started_at: Optional[datetime] = None
     
     # 🎯 Calculated fields for the frontend
     pace_per_km: str = ""  # e.g., "6:30"

@@ -146,7 +146,7 @@ export function DiscoverWalksScreen({ navigation }: Props) {
             </Pressable>
           </View>
         ) : (
-          walks.map((w) => <PublicWalkRow key={w.id} walk={w} navigation={navigation} />)
+            walks.map((w) => <PublicWalkRow key={w.id} walk={w} navigation={navigation} />)
         )}
 
         <Text style={styles.attribution}>Route data © OpenStreetMap contributors</Text>
