@@ -63,22 +63,38 @@ export function WalkScreen({ navigation }: Props) {
         setBgEnabled(false);
         return;
       }
-      const { granted, reason } = await requestAlwaysLocationPermission();
-      if (granted) {
+      const result = await requestAlwaysLocationPermission();
+      if (result.granted) {
         await setBackgroundTrackingEnabled(true);
         setBgEnabled(true);
         return;
       }
       setBgEnabled(false);
       await setBackgroundTrackingEnabled(false);
-      const message =
-        reason === 'background-denied'
-          ? 'Open Settings → ZenRun → Location and choose "Always" to track walks while your phone is locked.'
-          : 'Location access is required to track walks.';
-      Alert.alert('Background tracking unavailable', message, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Open Settings', onPress: () => Linking.openSettings() },
-      ]);
+
+      let title = 'Background tracking unavailable';
+      let message = 'Location access is required to track walks.';
+      const buttons: { text: string; style?: 'cancel'; onPress?: () => void }[] = [
+        { text: 'OK', style: 'cancel' },
+      ];
+
+      if (result.reason === 'foreground-denied') {
+        title = 'Location access needed';
+        message =
+          'Open Settings → ZenRun → Location and choose "While Using the App" or "Always" so we can record your walk.';
+        buttons.push({ text: 'Open Settings', onPress: () => Linking.openSettings() });
+      } else if (result.reason === 'background-denied') {
+        title = 'Switch to "Always" in Settings';
+        message =
+          'iOS only allowed location "While Using the App". To keep recording when the screen is locked, open Settings → ZenRun → Location and choose "Always".\n\nForeground tracking still works — just keep ZenRun on screen.';
+        buttons.push({ text: 'Open Settings', onPress: () => Linking.openSettings() });
+      } else if (result.reason === 'background-unavailable') {
+        title = 'Background tracking not in this build';
+        message =
+          'This installed build of ZenRun was made before background-location was enabled. Foreground tracking (with the app open) still works.\n\nTo unlock locked-screen tracking, install a fresh build from EAS / TestFlight.';
+      }
+
+      Alert.alert(title, message, buttons);
     } finally {
       setBgUpdating(false);
     }

@@ -157,19 +157,75 @@ export async function setBackgroundTrackingEnabled(enabled: boolean): Promise<vo
 
 /**
  * Request the "Always" location permission, gating on the foreground
- * permission first as iOS requires. Returns true only if both are granted.
+ * permission first as iOS requires. Returns the granular result so the
+ * caller can show the right error message.
+ *
+ * Important quirks:
+ * - We use `getXxxPermissionsAsync` first to avoid re-prompting if iOS
+ *   has already made up its mind (it doesn't show the system sheet on
+ *   subsequent requests once denied).
+ * - `requestBackgroundPermissionsAsync` THROWS on iOS when the running
+ *   build is missing the "Always" plist key or the `location`
+ *   `UIBackgroundModes` entitlement. We surface that as
+ *   `background-unavailable` so we can tell the user to install a build
+ *   from EAS rather than blaming a Settings toggle they can't change.
  */
 export async function requestAlwaysLocationPermission(): Promise<{
   granted: boolean;
-  reason?: 'foreground-denied' | 'background-denied' | 'error';
+  foregroundStatus: Location.PermissionStatus;
+  backgroundStatus: Location.PermissionStatus | null;
+  reason?:
+    | 'foreground-denied'
+    | 'background-denied'
+    | 'background-unavailable';
 }> {
-  try {
-    const fg = await Location.requestForegroundPermissionsAsync();
-    if (fg.status !== 'granted') return { granted: false, reason: 'foreground-denied' };
-    const bg = await Location.requestBackgroundPermissionsAsync();
-    if (bg.status !== 'granted') return { granted: false, reason: 'background-denied' };
-    return { granted: true };
-  } catch {
-    return { granted: false, reason: 'error' };
+  let fg = await Location.getForegroundPermissionsAsync();
+  if (fg.status === 'undetermined') {
+    try {
+      fg = await Location.requestForegroundPermissionsAsync();
+    } catch (e) {
+      console.warn('[walkBackground] foreground request threw', e);
+    }
   }
+  if (fg.status !== 'granted') {
+    return {
+      granted: false,
+      foregroundStatus: fg.status,
+      backgroundStatus: null,
+      reason: 'foreground-denied',
+    };
+  }
+
+  let bgStatus: Location.PermissionStatus | null = null;
+  try {
+    const current = await Location.getBackgroundPermissionsAsync();
+    bgStatus = current.status;
+    if (current.status === 'undetermined') {
+      const requested = await Location.requestBackgroundPermissionsAsync();
+      bgStatus = requested.status;
+    }
+  } catch (e) {
+    console.warn('[walkBackground] background permission threw', e);
+    return {
+      granted: false,
+      foregroundStatus: fg.status,
+      backgroundStatus: null,
+      reason: 'background-unavailable',
+    };
+  }
+
+  if (bgStatus !== 'granted') {
+    return {
+      granted: false,
+      foregroundStatus: fg.status,
+      backgroundStatus: bgStatus,
+      reason: 'background-denied',
+    };
+  }
+
+  return {
+    granted: true,
+    foregroundStatus: fg.status,
+    backgroundStatus: bgStatus,
+  };
 }
