@@ -3313,3 +3313,61 @@ def admin_stats(
     admin: User = Depends(require_admin),
 ):
     return crud.get_admin_stats(db)
+
+
+@app.get("/admin/user-runs")
+def admin_user_runs(
+    email: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """List recent runs for a user by email (admin only)."""
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    runs = db.query(Run).filter(Run.user_id == user.id).order_by(Run.completed_at.desc()).limit(20).all()
+    return [{"id": r.id, "run_type": r.run_type, "distance_km": r.distance_km, "duration_seconds": r.duration_seconds, "completed_at": str(r.completed_at), "category": r.category} for r in runs]
+
+
+@app.delete("/admin/user-runs/{run_id}")
+def admin_delete_run(
+    run_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Delete any run by ID (admin only)."""
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    db.delete(run)
+    db.commit()
+    return {"deleted": run_id}
+
+
+@app.get("/admin/user-walks")
+def admin_user_walks(
+    email: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """List recent walks for a user by email (admin only)."""
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    walks = db.query(Walk).filter(Walk.user_id == user.id).order_by(Walk.completed_at.desc()).limit(20).all()
+    return [{"id": w.id, "distance_km": w.distance_km, "duration_seconds": w.duration_seconds, "completed_at": str(w.completed_at), "notes": w.notes} for w in walks]
+
+
+@app.delete("/admin/user-walks/{walk_id}")
+def admin_delete_walk(
+    walk_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Delete any walk by ID (admin only)."""
+    walk = db.query(Walk).filter(Walk.id == walk_id).first()
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    db.delete(walk)
+    db.commit()
+    return {"deleted": walk_id}
