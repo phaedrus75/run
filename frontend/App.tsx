@@ -37,6 +37,8 @@ import { WalkSummaryScreen } from './screens/WalkSummaryScreen';
 import { WalkDetailScreen } from './screens/WalkDetailScreen';
 import { DiscoverWalksScreen } from './screens/DiscoverWalksScreen';
 import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
+import { BetaScreen } from './screens/BetaScreen';
+import { GoButton } from './components/GoButton';
 
 // Side-effect import: registers the background-location TaskManager task at
 // app start so iOS/Android can revive it after the app is force-quit.
@@ -51,6 +53,9 @@ import { colors } from './theme/colors';
 // 🧭 Create navigators
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+// Placeholder component required by React Navigation for the centre Go tab
+function GoPlaceholder() { return <View />; }
 
 /**
  * 📜 History Stack - History tab with Add Run screen
@@ -90,11 +95,24 @@ function HomeStack() {
 }
 
 /**
- * CirclesStack - List + Space views
+ * CirclesStack - List + Space views (used inside BetaStack)
  */
 function CirclesStack() {
   return (
     <Stack.Navigator>
+      <Stack.Screen name="CirclesList" component={CirclesScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
+    </Stack.Navigator>
+  );
+}
+
+/**
+ * BetaStack - Labs hub with Circles, Gym, Weight, Steps navigation
+ */
+function BetaStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="BetaHome" component={BetaScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CirclesList" component={CirclesScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
@@ -145,15 +163,13 @@ function WalkStack() {
 
 /**
  * 🏠 Main Tabs - Shown when user is authenticated
+ * Layout: Home | History | Go (centre) | Stats | Beta
  */
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        // 🎨 Hide the default header (we have custom headers)
         headerShown: false,
-        
-        // 🎨 Tab bar styling
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopWidth: 0,
@@ -166,87 +182,58 @@ function MainTabs() {
           paddingBottom: 25,
           paddingTop: 10,
         },
-        
-        // 🎨 Active/inactive colors
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
-        
-        // 🎨 Label styling
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
         },
-        
-        // 🎨 Icon configuration
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
-          
-          // 📍 Set icon based on route name
           switch (route.name) {
-            case 'Home':
-              iconName = focused ? 'home' : 'home-outline';
-              break;
-            case 'Run':
-              iconName = focused ? 'play-circle' : 'play-circle-outline';
-              break;
-            case 'Walk':
-              iconName = focused ? 'walk' : 'walk-outline';
-              break;
-            case 'Circles':
-              iconName = focused ? 'people' : 'people-outline';
-              break;
-            case 'Stats':
-              iconName = focused ? 'bar-chart' : 'bar-chart-outline';
-              break;
-            case 'History':
-              iconName = focused ? 'list' : 'list-outline';
-              break;
+            case 'Home':     iconName = focused ? 'home'      : 'home-outline';      break;
+            case 'History':  iconName = focused ? 'list'      : 'list-outline';      break;
+            case 'Stats':    iconName = focused ? 'bar-chart' : 'bar-chart-outline'; break;
+            case 'Beta':     iconName = focused ? 'flask'     : 'flask-outline';     break;
           }
-          
           return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
     >
-      {/* 🏠 Home Tab */}
-      <Tab.Screen 
-        name="Home" 
-        component={HomeStack}
-        options={{ tabBarLabel: 'Home' }}
-      />
-      
-      {/* 🏃 Run Tab */}
-      <Tab.Screen 
-        name="Run" 
-        component={RunScreen}
-        options={{ tabBarLabel: 'Run' }}
+      {/* 🏠 Home */}
+      <Tab.Screen name="Home" component={HomeStack} options={{ tabBarLabel: 'Home' }} />
+
+      {/* 📜 Activities */}
+      <Tab.Screen name="History" component={HistoryStack} options={{ tabBarLabel: 'Activities' }} />
+
+      {/* 🟢 Go — centre floating button */}
+      <Tab.Screen
+        name="Go"
+        component={GoPlaceholder}
+        options={({ navigation }) => ({
+          tabBarLabel: '',
+          tabBarButton: (props) => <GoButton {...props} navigation={navigation} />,
+        })}
       />
 
-      {/* 🚶 Walk Tab */}
+      {/* 📊 Stats */}
+      <Tab.Screen name="Stats" component={StatsScreen} options={{ tabBarLabel: 'Stats' }} />
+
+      {/* 🧪 Beta / Labs */}
+      <Tab.Screen name="Beta" component={BetaStack} options={{ tabBarLabel: 'Labs' }} />
+
+      {/* 🚶 Walk (hidden tab — navigated to via Go button) */}
       <Tab.Screen
         name="Walk"
         component={WalkStack}
-        options={{ tabBarLabel: 'Walk' }}
+        options={{ tabBarButton: () => null, tabBarLabel: '' }}
       />
 
-      {/* 👥 Circles Tab */}
-      <Tab.Screen 
-        name="Circles" 
-        component={CirclesStack}
-        options={{ tabBarLabel: 'Circles' }}
-      />
-      
-      {/* 📊 Stats Tab */}
-      <Tab.Screen 
-        name="Stats" 
-        component={StatsScreen}
-        options={{ tabBarLabel: 'Stats' }}
-      />
-      
-      {/* 📜 Activities Tab */}
-      <Tab.Screen 
-        name="History" 
-        component={HistoryStack}
-        options={{ tabBarLabel: 'Activities' }}
+      {/* 🏃 Run (hidden tab — navigated to via Go button) */}
+      <Tab.Screen
+        name="Run"
+        component={RunScreen}
+        options={{ tabBarButton: () => null, tabBarLabel: '' }}
       />
     </Tab.Navigator>
   );
