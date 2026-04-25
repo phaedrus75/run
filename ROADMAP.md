@@ -21,6 +21,19 @@ This document tracks the product roadmap for ZenRun - a mobile app for tracking 
 - [x] **Motivation Banner** - Encouraging messages
 - [x] **Pace Trend Chart** - See pace improvement over time
 
+### v1.5 - Walks 🚶 (Done)
+- [x] **Map-based GPS walk tracking** with live route, distance, duration & pace (`expo-maps` + `expo-location`)
+- [x] **Walk model + endpoints** with Postgres migration, polyline storage, photos & metadata
+- [x] **Walk hub screen** — recent walks, quick stats, "Start a walk" CTA
+- [x] **Walk detail screen** — map, stats, mood, notes, photos with route pins
+- [x] **Walk summary flow** — mood + notes capture before save
+- [x] **Walk photos** — capture during/after walk, snapped to nearest route point
+- [x] **Walk stats section** on the Stats screen + walk roll-up on Home
+- [x] **Discover walks** screen — public walks from OpenStreetMap (Overpass API), location-aware
+- [x] **Public walk detail** screen with route preview & "Start this walk" CTA
+- [x] **Background tracking** opt-in (`expo-task-manager` + foreground service notification + battery-conscious sampling)
+- [x] **Walking achievements** category (12 new badges across walk count, distance, longest walk, public walks, photo walks)
+
 ---
 
 ## 🚧 In Progress
@@ -69,7 +82,6 @@ This document tracks the product roadmap for ZenRun - a mobile app for tracking 
 | Feature | Description |
 |---------|-------------|
 | **Weather Integration** | Log weather conditions |
-| **Route Mapping** | GPS tracking with maps |
 | **Audio Coaching** | Voice prompts during runs |
 | **Social Leaderboards** | Compete with friends |
 | **Strava Import** | Import past runs from Strava |

@@ -20,7 +20,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { StatCard, StatsChart, PaceTrendChart, WeightTracker, StreakProgress } from '../components';
-import { gymApi, type GymStats } from '../services/api';
+import { gymApi, type GymStats, walkApi, type WalkStats } from '../services/api';
+import { GymStatsSection } from '../components/GymStatsSection';
+import { WalkStatsSection } from '../components/WalkStatsSection';
 import { 
   runApi, 
   statsApi, 
@@ -34,7 +36,7 @@ import {
   type StepsSummary,
 } from '../services/api';
 
-type Section = 'runs' | 'steps' | 'weight' | 'gym';
+type Section = 'runs' | 'steps' | 'weight' | 'gym' | 'walks';
 type RunViewMode = 'week' | 'month' | 'all';
 type StepsViewMode = 'month' | 'all';
 type CategoryFilter = 'all' | 'outdoor' | 'treadmill';
@@ -56,6 +58,7 @@ export function StatsScreen() {
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
   const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
   const [gymStats, setGymStats] = useState<GymStats | null>(null);
+  const [walkStats, setWalkStats] = useState<WalkStats | null>(null);
 
   // Derived synchronously — no useEffect delay
   const runs = useMemo(() => {
@@ -83,6 +86,8 @@ export function StatsScreen() {
       if (user?.beta_gym_enabled) {
         try { setGymStats(await gymApi.getStats()); } catch {}
       }
+
+      try { setWalkStats(await walkApi.getStats()); } catch {}
 
       const filteredRuns = runsData.filter((run: Run) => {
         const runDate = new Date(run.completed_at);
@@ -245,6 +250,7 @@ export function StatsScreen() {
     const tabs: { key: Section; label: string }[] = [
       { key: 'runs', label: 'Runs' },
     ];
+    tabs.push({ key: 'walks', label: 'Walks' });
     if (user?.beta_steps_enabled) tabs.push({ key: 'steps', label: 'Steps' });
     if (user?.beta_weight_enabled) tabs.push({ key: 'weight', label: 'Weight' });
     if (user?.beta_gym_enabled) tabs.push({ key: 'gym', label: 'Gym' });
@@ -678,82 +684,10 @@ export function StatsScreen() {
   );
 
   const renderGymSection = () => {
-    if (!gymStats || gymStats.total_workouts === 0) {
+    if (!gymStats) {
       return <Text style={styles.emptyText}>No gym workouts logged yet. Log your first session from the Activities tab.</Text>;
     }
-
-    const progressionEntries = Object.entries(gymStats.progression);
-    const volumeEntries = Object.entries(gymStats.volume || {});
-
-    return (
-      <View>
-        <View style={styles.weekContainer}>
-          <View style={styles.dayCard}>
-            <Text style={styles.dayNumber}>{gymStats.total_workouts}</Text>
-            <Text style={styles.dayLabel}>Total</Text>
-          </View>
-          <View style={styles.dayCard}>
-            <Text style={styles.dayNumber}>{gymStats.this_week}/3</Text>
-            <Text style={styles.dayLabel}>This Week</Text>
-          </View>
-          <View style={styles.dayCard}>
-            <Text style={styles.dayNumber}>{gymStats.streak_weeks}</Text>
-            <Text style={styles.dayLabel}>Week Streak</Text>
-          </View>
-        </View>
-
-        {progressionEntries.length > 0 && (
-          <View style={[styles.summaryCard, shadows.small]}>
-            <Text style={styles.cardTitle}>Weight Progression</Text>
-            {progressionEntries.map(([name, data]) => {
-              const diff = data.current - data.first;
-              return (
-                <View key={name} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceAlt }}>
-                  <Text style={{ fontSize: 14, color: colors.text, flex: 1 }}>{name}</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: diff > 0 ? colors.success : diff < 0 ? colors.error : colors.text }}>
-                    {data.first}kg {'\u2192'} {data.current}kg
-                  </Text>
-                  {diff !== 0 && (
-                    <Text style={{ fontSize: 12, marginLeft: 6, color: diff > 0 ? colors.success : colors.error }}>
-                      {diff > 0 ? '+' : ''}{diff}kg
-                    </Text>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {volumeEntries.length > 0 && (
-          <View style={[styles.summaryCard, shadows.small, { marginTop: spacing.md }]}>
-            <Text style={styles.cardTitle}>Volume Trend</Text>
-            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm }}>
-              Total load (weight x reps) per session
-            </Text>
-            {volumeEntries.map(([name, entries]) => {
-              if (entries.length < 2) return null;
-              const firstVol = entries[0].volume;
-              const lastVol = entries[entries.length - 1].volume;
-              const diff = lastVol - firstVol;
-              const pct = firstVol > 0 ? Math.round((diff / firstVol) * 100) : 0;
-              return (
-                <View key={name} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceAlt }}>
-                  <Text style={{ fontSize: 14, color: colors.text, flex: 1 }}>{name}</Text>
-                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                    {firstVol.toLocaleString()} {'\u2192'} {lastVol.toLocaleString()} kg
-                  </Text>
-                  {pct !== 0 && (
-                    <Text style={{ fontSize: 12, marginLeft: 6, fontWeight: '600', color: pct > 0 ? colors.success : colors.error }}>
-                      {pct > 0 ? '+' : ''}{pct}%
-                    </Text>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
-      </View>
-    );
+    return <GymStatsSection stats={gymStats} />;
   };
 
   if (loading) {
@@ -810,6 +744,9 @@ export function StatsScreen() {
 
         {/* Gym Section */}
         {section === 'gym' && renderGymSection()}
+
+        {/* Walks Section */}
+        {section === 'walks' && <WalkStatsSection stats={walkStats} />}
       </ScrollView>
     </SafeAreaView>
   );

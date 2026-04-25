@@ -11,7 +11,7 @@ Think of them as blueprints for our data.
 - SQLAlchemy converts these Python classes to SQL automatically!
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, UniqueConstraint
 from sqlalchemy.sql import func
 from database import Base
 
@@ -134,6 +134,9 @@ class User(Base):
     verification_code_expires = Column(DateTime, nullable=True)
     verification_attempts = Column(Integer, default=0, server_default='0')
     
+    # 🛡️ Admin flag
+    is_admin = Column(Boolean, default=False, server_default='false')
+
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
 
@@ -359,3 +362,86 @@ class GymWorkout(Base):
     notes = Column(String, nullable=True)
     duration_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class Walk(Base):
+    """
+    🚶 Walk Model - Map-tracked walks
+
+    Each row represents one walk with a GPS-tracked route.
+    """
+    __tablename__ = "walks"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=True, index=True)
+
+    # Timing
+    started_at = Column(DateTime, server_default=func.now())
+    ended_at = Column(DateTime, nullable=True)
+    duration_seconds = Column(Integer, nullable=False)
+
+    # Distance and route
+    distance_km = Column(Float, nullable=False)
+    route_polyline = Column(Text, nullable=True)  # Google encoded polyline
+
+    # Bounding info (for quick map preview without decoding the polyline)
+    start_lat = Column(Float, nullable=True)
+    start_lng = Column(Float, nullable=True)
+    end_lat = Column(Float, nullable=True)
+    end_lng = Column(Float, nullable=True)
+
+    # Derived metrics
+    elevation_gain_m = Column(Float, nullable=True)
+    avg_pace_seconds_per_km = Column(Float, nullable=True)
+
+    # User input
+    notes = Column(String, nullable=True)
+    mood = Column(String, nullable=True)  # peaceful, energising, tough, scenic
+    category = Column(String, nullable=True, default="outdoor")  # outdoor, treadmill, indoor
+
+    # Linked public route (if the user followed one)
+    public_walk_id = Column(Integer, nullable=True, index=True)
+
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class WalkPhoto(Base):
+    """
+    📸 Walk Photo - Photos pinned along a walk's route
+    """
+    __tablename__ = "walk_photos"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    walk_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    photo_data = Column(String, nullable=False)  # base64-encoded JPEG
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    distance_marker_km = Column(Float, nullable=True)
+    caption = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class PublicWalk(Base):
+    """
+    🌍 Public Walk - Recommended/discoverable walking routes
+
+    Sourced from OpenStreetMap (via Overpass API) or curated.
+    """
+    __tablename__ = "public_walks"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    osm_id = Column(String, nullable=True, index=True)  # OSM relation/way id
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    distance_km = Column(Float, nullable=False)
+    estimated_duration_min = Column(Integer, nullable=True)
+    difficulty = Column(String, nullable=True)  # easy, moderate, hard
+    route_polyline = Column(Text, nullable=False)
+    start_lat = Column(Float, nullable=False)
+    start_lng = Column(Float, nullable=False)
+    region = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+    tags = Column(String, nullable=True)  # JSON array of tag strings
+    source = Column(String, nullable=True)  # 'osm' | 'curated'
+    cached_at = Column(DateTime, server_default=func.now())

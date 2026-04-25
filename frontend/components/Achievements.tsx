@@ -20,12 +20,13 @@ const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
   levels: { label: 'Your Path', emoji: '🌊' },
   dedication: { label: 'Showing Up', emoji: '🌤️' },
   mood: { label: 'Reflection', emoji: '🪞' },
+  walking: { label: 'Walking the Path', emoji: '🚶' },
 };
 
 const CATEGORY_ORDER = [
   'milestone', 'distance', 'distance_type', 'specialist',
   'streak', 'goals', 'category', 'steps',
-  'scenic', 'levels', 'dedication', 'mood',
+  'scenic', 'walking', 'levels', 'dedication', 'mood',
 ];
 
 function groupByCategory(achievements: Achievement[]): Record<string, Achievement[]> {

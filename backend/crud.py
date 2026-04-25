@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import json
 
-from models import Run, GymWorkout, Exercise
+from models import Run, GymWorkout, Exercise, User, Weight, StepEntry, CircleMembership, Walk, WalkPhoto, PublicWalk
 from schemas import RunCreate, RUN_DISTANCES
 
 
@@ -1032,30 +1032,58 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     this_week = len([w for w in workouts if w.completed_at >= week_start])
 
-    # Collect per-exercise data across all workouts
-    exercise_first: dict = {}   # name -> first weight seen
-    exercise_current: dict = {} # name -> latest weight seen
-    exercise_volume: dict = {}  # name -> [{date, volume}]
+    # ---- Aggregates ----
+    agg_total_sets = 0
+    agg_total_reps = 0
+    agg_total_volume = 0.0
+
+    # ---- Per-exercise collection ----
+    exercise_first: dict = {}
+    exercise_current: dict = {}
+    exercise_history: dict = {}     # name -> [{date, weight, volume, best_set_reps}]
+    personal_records: dict = {}     # name -> {weight, date}
     timed_exercises = {ex["name"] for ex in GYM_PROGRAM if ex.get("is_timed")}
+    exercise_names_seen: set = set()
 
     for w in workouts:
         w_date = w.completed_at.strftime("%Y-%m-%d") if w.completed_at else None
         for ex in _parse_exercises(w):
             name = ex.get("name")
-            if not name or name in timed_exercises:
+            if not name:
+                continue
+            exercise_names_seen.add(name)
+            if name in timed_exercises:
                 continue
             weight = ex.get("weight_kg", 0)
             sets = ex.get("sets", [])
-            vol = sum(weight * s.get("reps", 0) for s in sets if s.get("completed", True))
+            completed_sets = [s for s in sets if s.get("completed", True)]
+            num_sets = len(completed_sets)
+            num_reps = sum(s.get("reps", 0) for s in completed_sets)
+            vol = sum(weight * s.get("reps", 0) for s in completed_sets)
+            best_reps = max((s.get("reps", 0) for s in completed_sets), default=0)
+
+            agg_total_sets += num_sets
+            agg_total_reps += num_reps
+            agg_total_volume += vol
 
             if name not in exercise_first:
                 exercise_first[name] = weight
             exercise_current[name] = weight
 
+            if name not in personal_records or weight > personal_records[name]["weight"]:
+                personal_records[name] = {"weight": weight, "date": w_date or ""}
+
             if w_date:
-                if name not in exercise_volume:
-                    exercise_volume[name] = []
-                exercise_volume[name].append({"date": w_date, "volume": vol, "weight": weight})
+                if name not in exercise_history:
+                    exercise_history[name] = []
+                exercise_history[name].append({
+                    "date": w_date,
+                    "weight": weight,
+                    "volume": vol,
+                    "best_set_reps": best_reps,
+                    "sets": num_sets,
+                    "reps": num_reps,
+                })
 
     progression = {}
     for name in exercise_first:
@@ -1064,7 +1092,20 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
             "current": exercise_current[name],
         }
 
-    # Gym streak (consecutive weeks with at least 1 session)
+    # ---- Workout frequency: last 12 weeks ----
+    frequency = []
+    freq_week = week_start
+    for _ in range(12):
+        freq_end = freq_week + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        count = len([w for w in workouts if freq_week <= w.completed_at <= freq_end])
+        frequency.append({
+            "week_start": freq_week.strftime("%Y-%m-%d"),
+            "count": count,
+        })
+        freq_week -= timedelta(days=7)
+    frequency.reverse()
+
+    # ---- Gym streak (consecutive weeks with at least 1 session) ----
     streak = 0
     check_week = week_start
     for _ in range(52):
@@ -1083,8 +1124,15 @@ def get_gym_stats(db: Session, user_id: int) -> dict:
         "total_workouts": total,
         "this_week": this_week,
         "streak_weeks": streak,
+        "total_sets": agg_total_sets,
+        "total_reps": agg_total_reps,
+        "total_volume": round(agg_total_volume, 1),
+        "unique_exercises": len(exercise_names_seen),
         "progression": progression,
-        "volume": exercise_volume,
+        "volume": exercise_history,
+        "frequency": frequency,
+        "personal_records": personal_records,
+        "exercise_history": exercise_history,
     }
 
 
@@ -1093,3 +1141,477 @@ def _parse_exercises(workout: GymWorkout) -> list:
         return json.loads(workout.exercises)
     except (json.JSONDecodeError, TypeError):
         return []
+
+
+# ==========================================
+# 🛡️ ADMIN ANALYTICS
+# ==========================================
+
+def get_admin_stats(db: Session) -> dict:
+    """Aggregate analytics across all users for the admin dashboard."""
+    from collections import defaultdict
+
+    now = datetime.now()
+    thirty_days_ago = now - timedelta(days=30)
+    seven_days_ago = now - timedelta(days=7)
+
+    # --- Users ---
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    new_this_week = db.query(func.count(User.id)).filter(User.created_at >= seven_days_ago).scalar() or 0
+    new_this_month = db.query(func.count(User.id)).filter(User.created_at >= thirty_days_ago).scalar() or 0
+    onboarded = db.query(func.count(User.id)).filter(User.onboarding_complete == True).scalar() or 0
+    verified = db.query(func.count(User.id)).filter(User.email_verified == True).scalar() or 0
+
+    # --- Totals ---
+    total_runs = db.query(func.count(Run.id)).scalar() or 0
+    total_km = db.query(func.coalesce(func.sum(Run.distance_km), 0)).scalar()
+    total_gym = db.query(func.count(GymWorkout.id)).scalar() or 0
+    total_steps = db.query(func.count(StepEntry.id)).scalar() or 0
+    total_weights = db.query(func.count(Weight.id)).scalar() or 0
+
+    # --- Active users (last 7 days) ---
+    run_users_week = db.query(func.count(func.distinct(Run.user_id))).filter(Run.completed_at >= seven_days_ago).scalar() or 0
+    gym_users_week = db.query(func.count(func.distinct(GymWorkout.user_id))).filter(GymWorkout.completed_at >= seven_days_ago).scalar() or 0
+    active_user_ids = set()
+    for uid in db.query(Run.user_id).filter(Run.completed_at >= seven_days_ago).distinct():
+        if uid[0]:
+            active_user_ids.add(uid[0])
+    for uid in db.query(GymWorkout.user_id).filter(GymWorkout.completed_at >= seven_days_ago).distinct():
+        if uid[0]:
+            active_user_ids.add(uid[0])
+    for uid in db.query(StepEntry.user_id).filter(StepEntry.created_at >= seven_days_ago).distinct():
+        if uid[0]:
+            active_user_ids.add(uid[0])
+    active_this_week = len(active_user_ids)
+
+    # --- Feature adoption ---
+    users_with_runs = db.query(func.count(func.distinct(Run.user_id))).scalar() or 0
+    users_with_gym = db.query(func.count(func.distinct(GymWorkout.user_id))).scalar() or 0
+    users_with_steps = db.query(func.count(func.distinct(StepEntry.user_id))).scalar() or 0
+    users_with_weight = db.query(func.count(func.distinct(Weight.user_id))).scalar() or 0
+    users_in_circles = db.query(func.count(func.distinct(CircleMembership.user_id))).scalar() or 0
+
+    def pct(n):
+        return round((n / total_users) * 100, 1) if total_users > 0 else 0
+
+    # --- Signups over time (last 30 days) ---
+    signups_by_day = defaultdict(int)
+    users_30d = db.query(User.created_at).filter(User.created_at >= thirty_days_ago).all()
+    for (created,) in users_30d:
+        if created:
+            signups_by_day[created.strftime("%Y-%m-%d")] += 1
+
+    signups_over_time = []
+    for i in range(30):
+        day = (thirty_days_ago + timedelta(days=i)).strftime("%Y-%m-%d")
+        signups_over_time.append({"date": day, "count": signups_by_day.get(day, 0)})
+
+    # --- Activity over time (last 30 days) ---
+    runs_by_day = defaultdict(int)
+    gym_by_day = defaultdict(int)
+    steps_by_day = defaultdict(int)
+
+    for (completed,) in db.query(Run.completed_at).filter(Run.completed_at >= thirty_days_ago).all():
+        if completed:
+            runs_by_day[completed.strftime("%Y-%m-%d")] += 1
+    for (completed,) in db.query(GymWorkout.completed_at).filter(GymWorkout.completed_at >= thirty_days_ago).all():
+        if completed:
+            gym_by_day[completed.strftime("%Y-%m-%d")] += 1
+    for (recorded,) in db.query(StepEntry.recorded_date).filter(StepEntry.recorded_date >= thirty_days_ago).all():
+        if recorded:
+            steps_by_day[recorded.strftime("%Y-%m-%d")] += 1
+
+    activity_over_time = []
+    for i in range(30):
+        day = (thirty_days_ago + timedelta(days=i)).strftime("%Y-%m-%d")
+        activity_over_time.append({
+            "date": day,
+            "runs": runs_by_day.get(day, 0),
+            "gym": gym_by_day.get(day, 0),
+            "steps": steps_by_day.get(day, 0),
+        })
+
+    # --- DAU (last 30 days) ---
+    dau = []
+    for i in range(30):
+        day_start = (thirty_days_ago + timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        day_ids = set()
+        for (uid,) in db.query(Run.user_id).filter(Run.completed_at >= day_start, Run.completed_at < day_end).distinct():
+            if uid:
+                day_ids.add(uid)
+        for (uid,) in db.query(GymWorkout.user_id).filter(GymWorkout.completed_at >= day_start, GymWorkout.completed_at < day_end).distinct():
+            if uid:
+                day_ids.add(uid)
+        for (uid,) in db.query(StepEntry.user_id).filter(StepEntry.recorded_date >= day_start, StepEntry.recorded_date < day_end).distinct():
+            if uid:
+                day_ids.add(uid)
+        dau.append({"date": day_start.strftime("%Y-%m-%d"), "count": len(day_ids)})
+
+    # --- WAU (last 12 weeks) ---
+    wau = []
+    days_since_sunday = (now.weekday() + 1) % 7
+    current_week_start = now - timedelta(days=days_since_sunday)
+    current_week_start = current_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    for i in range(12):
+        ws = current_week_start - timedelta(weeks=i)
+        we = ws + timedelta(days=7)
+        week_ids = set()
+        for (uid,) in db.query(Run.user_id).filter(Run.completed_at >= ws, Run.completed_at < we).distinct():
+            if uid:
+                week_ids.add(uid)
+        for (uid,) in db.query(GymWorkout.user_id).filter(GymWorkout.completed_at >= ws, GymWorkout.completed_at < we).distinct():
+            if uid:
+                week_ids.add(uid)
+        wau.append({"week_start": ws.strftime("%Y-%m-%d"), "count": len(week_ids)})
+    wau.reverse()
+
+    # --- Top users by activity ---
+    from sqlalchemy import case
+    top_users_q = db.query(
+        User.id,
+        User.name,
+        User.handle,
+        User.email,
+        User.created_at,
+        func.count(func.distinct(Run.id)).label("run_count"),
+    ).outerjoin(Run, Run.user_id == User.id).group_by(
+        User.id, User.name, User.handle, User.email, User.created_at
+    ).order_by(func.count(func.distinct(Run.id)).desc()).limit(15).all()
+
+    top_users = []
+    for u in top_users_q:
+        gym_count = db.query(func.count(GymWorkout.id)).filter(GymWorkout.user_id == u.id).scalar() or 0
+        last_run = db.query(func.max(Run.completed_at)).filter(Run.user_id == u.id).scalar()
+        last_gym = db.query(func.max(GymWorkout.completed_at)).filter(GymWorkout.user_id == u.id).scalar()
+        last_active = max(filter(None, [last_run, last_gym]), default=None)
+        top_users.append({
+            "id": u.id,
+            "name": u.name or u.email.split("@")[0],
+            "handle": u.handle,
+            "runs": u.run_count,
+            "gym_workouts": gym_count,
+            "last_active": last_active.strftime("%Y-%m-%d") if last_active else None,
+        })
+
+    return {
+        "users": {
+            "total": total_users,
+            "new_this_week": new_this_week,
+            "new_this_month": new_this_month,
+            "onboarded": onboarded,
+            "onboarding_pct": pct(onboarded),
+            "verified": verified,
+            "verified_pct": pct(verified),
+            "active_this_week": active_this_week,
+        },
+        "activity": {
+            "total_runs": total_runs,
+            "total_km": round(total_km, 1),
+            "total_gym_workouts": total_gym,
+            "total_step_entries": total_steps,
+            "total_weight_entries": total_weights,
+        },
+        "feature_adoption": {
+            "runs": {"users": users_with_runs, "pct": pct(users_with_runs)},
+            "gym": {"users": users_with_gym, "pct": pct(users_with_gym)},
+            "steps": {"users": users_with_steps, "pct": pct(users_with_steps)},
+            "weight": {"users": users_with_weight, "pct": pct(users_with_weight)},
+            "circles": {"users": users_in_circles, "pct": pct(users_in_circles)},
+        },
+        "signups_over_time": signups_over_time,
+        "activity_over_time": activity_over_time,
+        "dau": dau,
+        "wau": wau,
+        "top_users": top_users,
+    }
+
+
+# ==========================================
+# 🚶 WALK OPERATIONS
+# ==========================================
+
+def create_walk(
+    db: Session,
+    user_id: int,
+    duration_seconds: int,
+    distance_km: float,
+    started_at: Optional[datetime] = None,
+    ended_at: Optional[datetime] = None,
+    route_polyline: Optional[str] = None,
+    start_lat: Optional[float] = None,
+    start_lng: Optional[float] = None,
+    end_lat: Optional[float] = None,
+    end_lng: Optional[float] = None,
+    elevation_gain_m: Optional[float] = None,
+    notes: Optional[str] = None,
+    mood: Optional[str] = None,
+    category: Optional[str] = "outdoor",
+    public_walk_id: Optional[int] = None,
+) -> Walk:
+    """Create a new walk record from a completed walk session."""
+    avg_pace = None
+    if distance_km and distance_km > 0:
+        avg_pace = duration_seconds / distance_km
+
+    walk = Walk(
+        user_id=user_id,
+        duration_seconds=duration_seconds,
+        distance_km=distance_km,
+        ended_at=ended_at or datetime.utcnow(),
+        route_polyline=route_polyline,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        end_lat=end_lat,
+        end_lng=end_lng,
+        elevation_gain_m=elevation_gain_m,
+        avg_pace_seconds_per_km=avg_pace,
+        notes=notes,
+        mood=mood,
+        category=category or "outdoor",
+        public_walk_id=public_walk_id,
+    )
+    if started_at:
+        walk.started_at = started_at
+
+    db.add(walk)
+    db.commit()
+    db.refresh(walk)
+    return walk
+
+
+def get_walks(db: Session, user_id: int, limit: int = 50, offset: int = 0) -> List[Walk]:
+    """List a user's walks newest first."""
+    return (
+        db.query(Walk)
+        .filter(Walk.user_id == user_id)
+        .order_by(Walk.started_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
+def get_walk(db: Session, walk_id: int, user_id: int) -> Optional[Walk]:
+    """Fetch a single walk owned by user_id."""
+    return (
+        db.query(Walk)
+        .filter(Walk.id == walk_id, Walk.user_id == user_id)
+        .first()
+    )
+
+
+def update_walk(
+    db: Session,
+    walk_id: int,
+    user_id: int,
+    notes: Optional[str] = None,
+    mood: Optional[str] = None,
+    category: Optional[str] = None,
+) -> Optional[Walk]:
+    """Update editable metadata on a walk."""
+    walk = get_walk(db, walk_id, user_id)
+    if not walk:
+        return None
+    if notes is not None:
+        walk.notes = notes
+    if mood is not None:
+        walk.mood = mood
+    if category is not None:
+        walk.category = category
+    db.commit()
+    db.refresh(walk)
+    return walk
+
+
+def delete_walk(db: Session, walk_id: int, user_id: int) -> bool:
+    """Delete a walk and its photos."""
+    walk = get_walk(db, walk_id, user_id)
+    if not walk:
+        return False
+    db.query(WalkPhoto).filter(WalkPhoto.walk_id == walk_id).delete()
+    db.delete(walk)
+    db.commit()
+    return True
+
+
+def get_walk_stats(db: Session, user_id: int) -> dict:
+    """Aggregate walk stats for the user (lifetime + recent)."""
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    base = db.query(Walk).filter(Walk.user_id == user_id)
+    total_walks = base.count()
+    total_km = db.query(func.coalesce(func.sum(Walk.distance_km), 0.0)).filter(Walk.user_id == user_id).scalar() or 0.0
+    total_seconds = db.query(func.coalesce(func.sum(Walk.duration_seconds), 0)).filter(Walk.user_id == user_id).scalar() or 0
+
+    walks_this_week = base.filter(Walk.started_at >= week_ago).count()
+    km_this_week = db.query(func.coalesce(func.sum(Walk.distance_km), 0.0)).filter(
+        Walk.user_id == user_id, Walk.started_at >= week_ago
+    ).scalar() or 0.0
+
+    walks_this_month = base.filter(Walk.started_at >= month_ago).count()
+    km_this_month = db.query(func.coalesce(func.sum(Walk.distance_km), 0.0)).filter(
+        Walk.user_id == user_id, Walk.started_at >= month_ago
+    ).scalar() or 0.0
+
+    longest_km = db.query(func.coalesce(func.max(Walk.distance_km), 0.0)).filter(Walk.user_id == user_id).scalar() or 0.0
+    longest_seconds = db.query(func.coalesce(func.max(Walk.duration_seconds), 0)).filter(Walk.user_id == user_id).scalar() or 0
+
+    avg_pace = None
+    if total_km > 0:
+        avg_pace = float(total_seconds) / float(total_km)
+
+    return {
+        "total_walks": total_walks,
+        "total_km": round(float(total_km), 2),
+        "total_minutes": round(total_seconds / 60.0, 1),
+        "walks_this_week": walks_this_week,
+        "km_this_week": round(float(km_this_week), 2),
+        "walks_this_month": walks_this_month,
+        "km_this_month": round(float(km_this_month), 2),
+        "longest_walk_km": round(float(longest_km), 2),
+        "longest_walk_minutes": round(longest_seconds / 60.0, 1),
+        "avg_pace_seconds_per_km": round(avg_pace, 1) if avg_pace else None,
+    }
+
+
+# ==========================================
+# 📸 WALK PHOTO OPERATIONS
+# ==========================================
+
+def create_walk_photo(
+    db: Session,
+    walk_id: int,
+    user_id: int,
+    photo_data: str,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    distance_marker_km: Optional[float] = None,
+    caption: Optional[str] = None,
+) -> WalkPhoto:
+    photo = WalkPhoto(
+        walk_id=walk_id,
+        user_id=user_id,
+        photo_data=photo_data,
+        lat=lat,
+        lng=lng,
+        distance_marker_km=distance_marker_km,
+        caption=caption,
+    )
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return photo
+
+
+def get_walk_photos(db: Session, walk_id: int) -> List[WalkPhoto]:
+    return (
+        db.query(WalkPhoto)
+        .filter(WalkPhoto.walk_id == walk_id)
+        .order_by(WalkPhoto.created_at.asc())
+        .all()
+    )
+
+
+def delete_walk_photo(db: Session, photo_id: int, walk_id: int, user_id: int) -> bool:
+    photo = (
+        db.query(WalkPhoto)
+        .filter(
+            WalkPhoto.id == photo_id,
+            WalkPhoto.walk_id == walk_id,
+            WalkPhoto.user_id == user_id,
+        )
+        .first()
+    )
+    if not photo:
+        return False
+    db.delete(photo)
+    db.commit()
+    return True
+
+
+# ==========================================
+# 🌍 PUBLIC WALK OPERATIONS
+# ==========================================
+
+def get_public_walks(
+    db: Session,
+    region: Optional[str] = None,
+    country: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    limit: int = 50,
+) -> List[PublicWalk]:
+    q = db.query(PublicWalk)
+    if region:
+        q = q.filter(PublicWalk.region == region)
+    if country:
+        q = q.filter(PublicWalk.country == country)
+    if difficulty:
+        q = q.filter(PublicWalk.difficulty == difficulty)
+    return q.order_by(PublicWalk.distance_km.asc()).limit(limit).all()
+
+
+def get_public_walk(db: Session, walk_id: int) -> Optional[PublicWalk]:
+    return db.query(PublicWalk).filter(PublicWalk.id == walk_id).first()
+
+
+def upsert_public_walk(
+    db: Session,
+    osm_id: Optional[str],
+    name: str,
+    distance_km: float,
+    route_polyline: str,
+    start_lat: float,
+    start_lng: float,
+    description: Optional[str] = None,
+    estimated_duration_min: Optional[int] = None,
+    difficulty: Optional[str] = None,
+    region: Optional[str] = None,
+    country: Optional[str] = None,
+    tags: Optional[str] = None,
+    source: str = "osm",
+) -> PublicWalk:
+    """Create or update a public walk by osm_id."""
+    existing = None
+    if osm_id:
+        existing = db.query(PublicWalk).filter(PublicWalk.osm_id == osm_id).first()
+
+    if existing:
+        existing.name = name
+        existing.distance_km = distance_km
+        existing.route_polyline = route_polyline
+        existing.start_lat = start_lat
+        existing.start_lng = start_lng
+        existing.description = description
+        existing.estimated_duration_min = estimated_duration_min
+        existing.difficulty = difficulty
+        existing.region = region
+        existing.country = country
+        existing.tags = tags
+        existing.source = source
+        existing.cached_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    walk = PublicWalk(
+        osm_id=osm_id,
+        name=name,
+        distance_km=distance_km,
+        route_polyline=route_polyline,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        description=description,
+        estimated_duration_min=estimated_duration_min,
+        difficulty=difficulty,
+        region=region,
+        country=country,
+        tags=tags,
+        source=source,
+    )
+    db.add(walk)
+    db.commit()
+    db.refresh(walk)
+    return walk
