@@ -69,6 +69,32 @@ export function WalkDetailScreen({ navigation, route }: Props) {
   // Lightbox
   const [lightbox, setLightbox] = useState<WalkPhoto | null>(null);
 
+  // Full-screen map
+  const [mapFullscreen, setMapFullscreen] = useState(false);
+
+  /** Compute center + zoom that fits all route points in one view. */
+  const routeCamera = useMemo(() => {
+    if (!routePoints.length) {
+      return center ? { center, zoom: 15 } : null;
+    }
+    const lats = routePoints.map((p) => p.lat);
+    const lngs = routePoints.map((p) => p.lng);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+    const span = Math.max(maxLat - minLat, maxLng - minLng);
+    let zoom = 15;
+    if (span > 0.008) zoom = 14;
+    if (span > 0.02) zoom = 13;
+    if (span > 0.05) zoom = 12;
+    if (span > 0.12) zoom = 11;
+    if (span > 0.3) zoom = 10;
+    return { center: { lat: centerLat, lng: centerLng }, zoom };
+  }, [routePoints, center]);
+
   const load = useCallback(async () => {
     if (!walkId) return;
     setLoading(true);
@@ -281,15 +307,40 @@ export function WalkDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        <View style={styles.mapWrap}>
+        <Pressable style={styles.mapWrap} onPress={() => setMapFullscreen(true)}>
           <WalkMap
             style={styles.map}
             route={routePoints}
             markers={photoMarkers}
-            centerOn={center}
+            centerOn={routeCamera?.center ?? center}
+            zoom={routeCamera?.zoom ?? 15}
             showUserLocation={false}
           />
-        </View>
+          <View style={styles.mapExpandHint}>
+            <Ionicons name="expand-outline" size={16} color="#fff" />
+          </View>
+        </Pressable>
+
+        {/* Full-screen map modal */}
+        <Modal visible={mapFullscreen} animationType="slide" onRequestClose={() => setMapFullscreen(false)}>
+          <View style={styles.mapFullContainer}>
+            <WalkMap
+              style={StyleSheet.absoluteFill}
+              route={routePoints}
+              markers={photoMarkers}
+              centerOn={routeCamera?.center ?? center}
+              zoom={routeCamera?.zoom ?? 15}
+              showUserLocation={false}
+            />
+            <Pressable
+              style={styles.mapFullClose}
+              onPress={() => setMapFullscreen(false)}
+              hitSlop={12}
+            >
+              <Ionicons name="close" size={22} color={colors.text} />
+            </Pressable>
+          </View>
+        </Modal>
 
         <View style={styles.statsRow}>
           <Stat label="Distance" value={formatDistanceKm(walk.distance_km)} />
@@ -528,12 +579,39 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
   },
   mapWrap: {
-    height: 220,
+    height: 300,
     borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.surfaceAlt,
   },
   map: { flex: 1 },
+  mapExpandHint: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    right: spacing.sm,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapFullContainer: {
+    flex: 1,
+    backgroundColor: colors.surfaceAlt,
+  },
+  mapFullClose: {
+    position: 'absolute',
+    top: 56,
+    right: spacing.lg,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.medium,
+  },
   statsRow: {
     flexDirection: 'row',
     backgroundColor: colors.surface,

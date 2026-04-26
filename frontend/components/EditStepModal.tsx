@@ -11,26 +11,28 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../theme/colors';
-import type { StepEntry } from '../services/api';
+import { stepsApi, type StepEntry } from '../services/api';
 
 const STEP_OPTIONS = [
-  { value: 15000, label: '15k', color: colors.runTypes['15k'] },
-  { value: 20000, label: '20k', color: colors.runTypes['20k'] },
-  { value: 25000, label: '25k', color: colors.success },
-  { value: 30000, label: '30k', color: '#3D3D3D' },
+  { value: 15000, label: '15k', color: colors.accent },
+  { value: 20000, label: '20k', color: colors.primary },
+  { value: 25000, label: '25k', color: colors.secondary },
+  { value: 30000, label: '30k', color: colors.success },
 ];
 
 interface EditStepModalProps {
-  visible: boolean;
-  entry: StepEntry | null;
+  /** undefined = add-new mode; defined = edit mode */
+  entry?: StepEntry;
   onClose: () => void;
-  onSave: (id: number, data: { step_count: number; recorded_date: string }) => Promise<void>;
-  onDelete: (id: number) => Promise<void>;
+  onUpdate: () => void;
 }
 
-export function EditStepModal({ visible, entry, onClose, onSave, onDelete }: EditStepModalProps) {
-  const [selectedSteps, setSelectedSteps] = useState<number | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+export function EditStepModal({ entry, onClose, onUpdate }: EditStepModalProps) {
+  const isAdd = !entry;
+  const [selectedSteps, setSelectedSteps] = useState<number | null>(entry?.step_count ?? null);
+  const [selectedDate, setSelectedDate] = useState(
+    entry?.recorded_date ? new Date(entry.recorded_date) : new Date(),
+  );
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -38,30 +40,31 @@ export function EditStepModal({ visible, entry, onClose, onSave, onDelete }: Edi
     if (entry) {
       setSelectedSteps(entry.step_count);
       setSelectedDate(new Date(entry.recorded_date));
+    } else {
+      setSelectedSteps(null);
+      setSelectedDate(new Date());
     }
   }, [entry]);
 
   function onDateChange(_event: any, date?: Date) {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (date) {
-      setSelectedDate(date);
-    }
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (date) setSelectedDate(date);
   }
 
   async function handleSave() {
-    if (!entry || !selectedSteps) return;
+    if (!selectedSteps) return;
     setSaving(true);
     try {
       const dateStr = selectedDate.toISOString().split('T')[0];
-      await onSave(entry.id, {
-        step_count: selectedSteps,
-        recorded_date: `${dateStr}T12:00:00`,
-      });
-      onClose();
+      const recorded_date = `${dateStr}T12:00:00`;
+      if (isAdd) {
+        await stepsApi.create({ step_count: selectedSteps, recorded_date });
+      } else {
+        await stepsApi.update(entry!.id, { step_count: selectedSteps, recorded_date });
+      }
+      onUpdate();
     } catch {
-      Alert.alert('Error', 'Failed to save changes');
+      Alert.alert('Error', 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -76,8 +79,8 @@ export function EditStepModal({ visible, entry, onClose, onSave, onDelete }: Edi
         style: 'destructive',
         onPress: async () => {
           try {
-            await onDelete(entry.id);
-            onClose();
+            await stepsApi.delete(entry.id);
+            onUpdate();
           } catch {
             Alert.alert('Error', 'Failed to delete entry');
           }
@@ -86,11 +89,9 @@ export function EditStepModal({ visible, entry, onClose, onSave, onDelete }: Edi
     ]);
   }
 
-  if (!entry) return null;
-
   return (
     <Modal
-      visible={visible}
+      visible
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
@@ -100,10 +101,10 @@ export function EditStepModal({ visible, entry, onClose, onSave, onDelete }: Edi
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.cancelButton}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Edit Step Day</Text>
+          <Text style={styles.title}>{isAdd ? 'Add Step Day' : 'Edit Step Day'}</Text>
           <TouchableOpacity onPress={handleSave} disabled={saving || !selectedSteps}>
             <Text style={[styles.saveButton, (saving || !selectedSteps) && styles.saveButtonDisabled]}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? 'Saving…' : isAdd ? 'Add' : 'Save'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -180,9 +181,11 @@ export function EditStepModal({ visible, entry, onClose, onSave, onDelete }: Edi
             ))}
           </View>
 
-          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-            <Text style={styles.deleteButtonText}>Delete Step Entry</Text>
-          </TouchableOpacity>
+          {!isAdd && (
+            <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+              <Text style={styles.deleteButtonText}>Delete Step Entry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
@@ -216,17 +219,9 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: typography.weights.semibold,
   },
-  saveButtonDisabled: {
-    opacity: 0.5,
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  emoji: {
-    fontSize: 64,
-    marginBottom: spacing.xl,
-  },
+  saveButtonDisabled: { opacity: 0.5 },
+  content: { flex: 1, alignItems: 'center' },
+  emoji: { fontSize: 64, marginBottom: spacing.xl },
   sectionLabel: {
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.semibold,
@@ -281,18 +276,13 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  optionLabelActive: {
-    color: colors.surface,
-  },
+  optionLabelActive: { color: colors.surface },
   optionSubtext: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
-  optionSubtextActive: {
-    color: colors.surface,
-    opacity: 0.8,
-  },
+  optionSubtextActive: { color: colors.surface, opacity: 0.8 },
   deleteButton: {
     marginTop: spacing.xxl,
     padding: spacing.lg,

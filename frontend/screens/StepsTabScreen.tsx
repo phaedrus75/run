@@ -27,10 +27,10 @@ import { stepsApi, type StepEntry, type StepsSummary } from '../services/api';
 type InnerTab = 'history' | 'stats';
 
 const STEP_COLORS: Record<string, string> = {
-  '15k': '#FCD34D',
-  '20k': '#F97316',
-  '25k': '#10B981',
-  '30k': '#3D3D3D',
+  '15k': colors.accent,       // warm gold — baseline achievement
+  '20k': colors.primary,      // coral — going further
+  '25k': colors.secondary,    // teal — getting strong
+  '30k': colors.success,      // green — elite tier
 };
 
 interface Props {
@@ -72,7 +72,7 @@ export function StepsTabScreen({ navigation }: Props) {
   const renderEntry = ({ item }: { item: StepEntry }) => {
     const date = new Date(item.date || item.created_at || Date.now());
     const dateLabel = date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-    const steps = item.steps?.toLocaleString() ?? '—';
+    const steps = item.step_count?.toLocaleString() ?? '—';
     return (
       <Pressable
         onPress={() => setEditEntry(item)}
@@ -183,6 +183,19 @@ export function StepsTabScreen({ navigation }: Props) {
                 </View>
               );
             })}
+            <View style={styles.chartLegend}>
+              {[
+                { label: '15K+', color: STEP_COLORS['15k'] },
+                { label: '20K+', color: STEP_COLORS['20k'] },
+                { label: '25K+', color: STEP_COLORS['25k'] },
+                { label: '30K+', color: STEP_COLORS['30k'] },
+              ].map(item => (
+                <View key={item.label} style={styles.chartLegendItem}>
+                  <View style={[styles.chartLegendDot, { backgroundColor: item.color }]} />
+                  <Text style={styles.chartLegendText}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
       </View>
@@ -365,6 +378,18 @@ const styles = StyleSheet.create({
   chartStackedBar: { height: '100%', borderRadius: 6, overflow: 'hidden', flexDirection: 'row' },
   seg: { height: '100%' },
   chartCount: { width: 24, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, color: colors.text, textAlign: 'right' },
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  chartLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  chartLegendDot: { width: 10, height: 10, borderRadius: 2 },
+  chartLegendText: { fontSize: 11, color: colors.textSecondary },
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
