@@ -9,6 +9,52 @@ const xcode = require('xcode');
 
 const EXT_NAME = 'ZenRunWatch WatchKit Extension';
 const APP_NAME = 'ZenRunWatch';
+/** PBXNativeTarget _comment values include quotes; pbxTargetByName matches these exactly. */
+const EXT_NATIVE_TARGET_COMMENT = '"ZenRunWatch WatchKit Extension"';
+const APP_NATIVE_TARGET_COMMENT = '"ZenRunWatch"';
+/** Values of `name` on PBXNativeTarget as stored by node-xcode / parser (includes embedded quotes). */
+const APP_TARGET_FIND_KEY = '"ZenRunWatch"';
+const EXT_TARGET_FIND_KEY = '"ZenRunWatch WatchKit Extension"';
+
+/**
+ * Expo's template pbxproj often has no PBXTargetDependency / PBXContainerItemProxy sections.
+ * node-xcode's addTargetDependency skips work when those sections are missing, so Watch never
+ * builds before the iOS "Embed Watch Content" phase (archive fails: Release-watchos/ZenRunWatch.app missing).
+ */
+function ensurePbxDependencySections(proj) {
+  const objs = proj.hash.project.objects;
+  if (!objs.PBXTargetDependency) objs.PBXTargetDependency = {};
+  if (!objs.PBXContainerItemProxy) objs.PBXContainerItemProxy = {};
+}
+
+function nativeTargetDependsOn(proj, fromUuid, toUuid) {
+  const nt = proj.pbxNativeTargetSection();
+  const from = nt[fromUuid];
+  if (!from || !Array.isArray(from.dependencies)) return false;
+  const depSection = proj.hash.project.objects.PBXTargetDependency;
+  if (!depSection) return false;
+  for (const ref of from.dependencies) {
+    const row = depSection[ref.value];
+    if (row && String(row.target).replace(/"/g, '') === String(toUuid).replace(/"/g, '')) return true;
+  }
+  return false;
+}
+
+/** ZenRun → ZenRunWatch → WatchKit Extension so archive builds watch products before embed. */
+function ensureWatchTargetDependencies(proj) {
+  ensurePbxDependencySections(proj);
+  const mainUuid = proj.getFirstTarget().uuid;
+  const watchUuid = proj.findTargetKey(APP_TARGET_FIND_KEY);
+  const extUuid = proj.findTargetKey(EXT_TARGET_FIND_KEY);
+  if (!watchUuid || !extUuid) return;
+
+  if (!nativeTargetDependsOn(proj, mainUuid, watchUuid)) {
+    proj.addTargetDependency(mainUuid, [watchUuid]);
+  }
+  if (!nativeTargetDependsOn(proj, watchUuid, extUuid)) {
+    proj.addTargetDependency(watchUuid, [extUuid]);
+  }
+}
 
 function rmrf(p) {
   if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
@@ -74,6 +120,58 @@ function watchTargetsAlreadyPresent(proj) {
   return false;
 }
 
+/**
+ * node-xcode addTarget leaves Watch targets inheriting iOS (TARGETED_DEVICE_FAMILY 1,2) with no SDKROOT,
+ * so Xcode builds them for iphoneos and fails on watchkit2-extension / watchapp2 product types.
+ * Inject watchOS settings on every XCBuildConfiguration that uses our Watch bundle IDs.
+ */
+function patchWatchOSInPbxproj(body) {
+  const tab = '\t\t\t\t';
+  const watchSdkBlock = `${tab}SDKROOT = watchos;
+${tab}SUPPORTED_PLATFORMS = "watchos watchsimulator";
+${tab}WATCHOS_DEPLOYMENT_TARGET = 10.0;
+${tab}SWIFT_VERSION = 5.0;
+`;
+
+  function injectBeforeTargeted(match, bundleLine, middle, tfPrefix) {
+    // node-xcode updateBuildProperty may already add SDKROOT/SWIFT; we must still fix TARGETED_DEVICE_FAMILY.
+    if (middle.includes('SDKROOT = watchos')) {
+      const platforms =
+        middle.includes('SUPPORTED_PLATFORMS') ? '' : `${tab}SUPPORTED_PLATFORMS = "watchos watchsimulator";\n`;
+      return `${bundleLine}${middle}${platforms}${tfPrefix}4;`;
+    }
+    return `${bundleLine}${middle}${watchSdkBlock}${tfPrefix}4;`;
+  }
+
+  let out = body;
+  // WatchKit extension
+  out = out.replace(
+    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp\.watchkitextension";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )"1,2";/g,
+    injectBeforeTargeted,
+  );
+  // Watch app container
+  out = out.replace(
+    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )"1,2";/g,
+    injectBeforeTargeted,
+  );
+  // If a prior run already set TARGETED_DEVICE_FAMILY = 4 but forgot SDKROOT
+  out = out.replace(
+    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp\.watchkitextension";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )4;/g,
+    (m, bundleLine, middle, tfPrefix) => {
+      if (middle.includes('SDKROOT = watchos')) return m;
+      return `${bundleLine}${middle}${watchSdkBlock}${tfPrefix}4;`;
+    },
+  );
+  out = out.replace(
+    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )4;/g,
+    (m, bundleLine, middle, tfPrefix) => {
+      if (middle.includes('SDKROOT = watchos')) return m;
+      return `${bundleLine}${middle}${watchSdkBlock}${tfPrefix}4;`;
+    },
+  );
+  return out;
+}
+
 /** node-xcode bug: pbxCreateGroup sets isa to quoted string; CocoaPods cannot parse it. */
 function sanitizePbxprojText(body) {
   let out = body;
@@ -86,6 +184,7 @@ function sanitizePbxprojText(body) {
     /INFOPLIST_FILE = "ZenRunWatch\/ZenRunWatch-Info\.plist";/g,
     'INFOPLIST_FILE = "ZenRunWatch/Info.plist";',
   );
+  out = patchWatchOSInPbxproj(out);
   return out;
 }
 
@@ -112,8 +211,10 @@ function embedZenRunWatchApp(projectRoot, iosRoot) {
   const pbxPath = findPbxproj(iosRoot);
   const proj = xcode.project(pbxPath);
   proj.parseSync();
+  ensurePbxDependencySections(proj);
 
   if (watchTargetsAlreadyPresent(proj)) {
+    ensureWatchTargetDependencies(proj);
     fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
     return;
   }
@@ -147,22 +248,36 @@ function embedZenRunWatchApp(projectRoot, iosRoot) {
 
   const plistExt = `"${EXT_NAME}/Info.plist"`;
   const plistApp = `"${APP_NAME}/Info.plist"`;
-  proj.updateBuildProperty('INFOPLIST_FILE', plistExt, undefined, EXT_NAME);
-  proj.updateBuildProperty('INFOPLIST_FILE', plistApp, undefined, APP_NAME);
-  proj.updateBuildProperty('SDKROOT', 'watchos', undefined, EXT_NAME);
-  proj.updateBuildProperty('SDKROOT', 'watchos', undefined, APP_NAME);
-  proj.updateBuildProperty('WATCHOS_DEPLOYMENT_TARGET', '10.0', undefined, EXT_NAME);
-  proj.updateBuildProperty('WATCHOS_DEPLOYMENT_TARGET', '10.0', undefined, APP_NAME);
-  proj.updateBuildProperty('TARGETED_DEVICE_FAMILY', '4', undefined, EXT_NAME);
-  proj.updateBuildProperty('TARGETED_DEVICE_FAMILY', '4', undefined, APP_NAME);
-  proj.updateBuildProperty('SKIP_INSTALL', 'YES', undefined, EXT_NAME);
-  proj.updateBuildProperty('SKIP_INSTALL', 'YES', undefined, APP_NAME);
-  proj.updateBuildProperty('SWIFT_VERSION', '5.0', undefined, EXT_NAME);
-  proj.updateBuildProperty('SWIFT_VERSION', '5.0', undefined, APP_NAME);
-  proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, EXT_NAME);
-  proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, APP_NAME);
+  proj.updateBuildProperty('INFOPLIST_FILE', plistExt, undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('INFOPLIST_FILE', plistApp, undefined, APP_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('SDKROOT', 'watchos', undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('SDKROOT', 'watchos', undefined, APP_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty(
+    'SUPPORTED_PLATFORMS',
+    '"watchos watchsimulator"',
+    undefined,
+    EXT_NATIVE_TARGET_COMMENT,
+  );
+  proj.updateBuildProperty(
+    'SUPPORTED_PLATFORMS',
+    '"watchos watchsimulator"',
+    undefined,
+    APP_NATIVE_TARGET_COMMENT,
+  );
+  proj.updateBuildProperty('WATCHOS_DEPLOYMENT_TARGET', '10.0', undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('WATCHOS_DEPLOYMENT_TARGET', '10.0', undefined, APP_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('TARGETED_DEVICE_FAMILY', '4', undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('TARGETED_DEVICE_FAMILY', '4', undefined, APP_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('SKIP_INSTALL', 'YES', undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('SKIP_INSTALL', 'YES', undefined, APP_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('SWIFT_VERSION', '5.0', undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('SWIFT_VERSION', '5.0', undefined, APP_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, APP_NATIVE_TARGET_COMMENT);
 
   proj.updateBuildProperty('WK_WATCHKIT_APP', 'YES', undefined, 'ZenRun');
+
+  ensureWatchTargetDependencies(proj);
 
   fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
 }
