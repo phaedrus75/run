@@ -1,3 +1,7 @@
 # Generated native projects (Expo CNG / EAS Build — do not commit)
 ios/
 android/
+
+# Local Expo modules ship their own ios/ source directories — keep these tracked.
+!modules/*/ios/
+!modules/*/ios/**
