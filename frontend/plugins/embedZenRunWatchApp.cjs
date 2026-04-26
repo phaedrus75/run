@@ -91,6 +91,34 @@ function findPbxproj(iosRoot) {
   return path.join(iosRoot, proj, 'project.pbxproj');
 }
 
+/**
+ * Apple requires the Watch app + extension Info.plists to share CFBundleShortVersionString and
+ * CFBundleVersion with the companion iOS app. Validation otherwise fails with:
+ *   "The value of CFBundleShortVersionString in your WatchKit app's Info.plist (X) does not match
+ *    the value in your companion app's Info.plist (Y)."
+ * Idempotent: regex covers any current value, including ours after a prior run.
+ */
+function syncWatchAppVersion(plistPaths, version, buildNumber) {
+  const escape = (v) => String(v).replace(/[<&>]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  for (const plistPath of plistPaths) {
+    if (!fs.existsSync(plistPath)) continue;
+    let body = fs.readFileSync(plistPath, 'utf8');
+    if (version) {
+      body = body.replace(
+        /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]*(<\/string>)/,
+        `$1${escape(version)}$2`,
+      );
+    }
+    if (buildNumber) {
+      body = body.replace(
+        /(<key>CFBundleVersion<\/key>\s*<string>)[^<]*(<\/string>)/,
+        `$1${escape(buildNumber)}$2`,
+      );
+    }
+    fs.writeFileSync(plistPath, body);
+  }
+}
+
 function ensureAppIcon(iosRoot, projectRoot) {
   const iconSrc = path.join(projectRoot, 'assets', 'icon.png');
   const appIconDir = path.join(iosRoot, APP_NAME, 'Assets.xcassets', 'AppIcon.appiconset');
@@ -203,10 +231,10 @@ function sanitizePbxprojText(body) {
 /**
  * @param {string} projectRoot — Expo project root (…/frontend)
  * @param {string} iosRoot — …/frontend/ios
- * @param {{ appleTeamId?: string }} [options]
+ * @param {{ appleTeamId?: string, version?: string, buildNumber?: string }} [options]
  */
 function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
-  const { appleTeamId } = options;
+  const { appleTeamId, version, buildNumber } = options;
   const watchRoot = path.join(projectRoot, '..', 'watch-app');
   if (!fs.existsSync(watchRoot)) {
     console.warn('[withWatchApp] watch-app folder not found at', watchRoot);
@@ -221,6 +249,11 @@ function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
   copyRecursive(extSrc, extDest);
   copyRecursive(appSrc, appDest);
   ensureAppIcon(iosRoot, projectRoot);
+  syncWatchAppVersion(
+    [path.join(extDest, 'Info.plist'), path.join(appDest, 'Info.plist')],
+    version,
+    buildNumber,
+  );
 
   const pbxPath = findPbxproj(iosRoot);
   const proj = xcode.project(pbxPath);
