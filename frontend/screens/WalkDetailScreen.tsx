@@ -72,29 +72,6 @@ export function WalkDetailScreen({ navigation, route }: Props) {
   // Full-screen map
   const [mapFullscreen, setMapFullscreen] = useState(false);
 
-  /** Compute center + zoom that fits all route points in one view. */
-  const routeCamera = useMemo(() => {
-    if (!routePoints.length) {
-      return center ? { center, zoom: 15 } : null;
-    }
-    const lats = routePoints.map((p) => p.lat);
-    const lngs = routePoints.map((p) => p.lng);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    const centerLat = (minLat + maxLat) / 2;
-    const centerLng = (minLng + maxLng) / 2;
-    const span = Math.max(maxLat - minLat, maxLng - minLng);
-    let zoom = 15;
-    if (span > 0.008) zoom = 14;
-    if (span > 0.02) zoom = 13;
-    if (span > 0.05) zoom = 12;
-    if (span > 0.12) zoom = 11;
-    if (span > 0.3) zoom = 10;
-    return { center: { lat: centerLat, lng: centerLng }, zoom };
-  }, [routePoints, center]);
-
   const load = useCallback(async () => {
     if (!walkId) return;
     setLoading(true);
@@ -135,6 +112,29 @@ export function WalkDetailScreen({ navigation, route }: Props) {
       title: p.caption ?? `Photo ${idx + 1}`,
       tintColor: colors.accent,
     }));
+
+  /** Compute center + zoom that fits all route points in one view. */
+  const routeCamera = useMemo(() => {
+    if (!routePoints.length) {
+      return center ? { center, zoom: 15 } : null;
+    }
+    const lats = routePoints.map((p) => p.lat);
+    const lngs = routePoints.map((p) => p.lng);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+    const span = Math.max(maxLat - minLat, maxLng - minLng);
+    let zoom = 15;
+    if (span > 0.008) zoom = 14;
+    if (span > 0.02) zoom = 13;
+    if (span > 0.05) zoom = 12;
+    if (span > 0.12) zoom = 11;
+    if (span > 0.3) zoom = 10;
+    return { center: { lat: centerLat, lng: centerLng }, zoom };
+  }, [routePoints, center]);
 
   /**
    * Snap an arbitrary lat/lng to the nearest point along the route, returning
