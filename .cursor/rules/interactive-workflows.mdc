@@ -1,0 +1,18 @@
+---
+description: Interactive-only workflows — EAS, Apple, credentials (no agent automation of prompts)
+alwaysApply: true
+---
+
+# Interactive mode only
+
+The user works in **interactive mode only** for operations that require prompts, secrets, or Apple / Expo account flows.
+
+## For the AI agent
+
+1. **Never** pass `--non-interactive` to `eas build`, `eas submit`, `eas credentials`, or similar CLI commands for this project.
+2. **Do not** assume CI or headless terminals can answer Apple login, 2FA, or credential prompts. If a command needs stdin, **tell the user to run it locally** in their own terminal (Cursor integrated terminal or Terminal.app) and give the exact command.
+3. Prefer the existing **EAS** conventions in `eas-builds.mdc` (interactive build + auto-submit, build number bump + commit before release builds).
+
+## Rationale
+
+Headless / agent shell sessions often have **stdin not readable**, which breaks `eas build` when Expo asks to log in to an Apple account. Interactive runs avoid that and match the user’s preference.

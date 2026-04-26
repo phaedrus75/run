@@ -1,0 +1,18 @@
+---
+description: EAS build conventions for this project
+alwaysApply: true
+---
+
+# EAS Builds
+
+This project uses **interactive-only** EAS / Apple flows (see `interactive-workflows.mdc`). The agent must not use `--non-interactive` for `eas build` or related commands.
+
+Always use interactive builds (never `--non-interactive`):
+
+```bash
+cd frontend && eas build --platform ios --profile production --auto-submit
+```
+
+- Never pass `--non-interactive` to `eas build`
+- Always use `--auto-submit` to submit to TestFlight automatically
+- Always bump `ios.buildNumber` in `frontend/app.json` before building and commit it
