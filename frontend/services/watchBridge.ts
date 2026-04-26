@@ -5,10 +5,13 @@
 
 import { Platform, Alert } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getToken } from './auth';
 import { walkApi, runApi } from './api';
 import { encodePolyline, TrackedPoint } from './walkLocationTracker';
+
+const PENDING_QUEUE_KEY = '@zenrun:pendingWatchPayloads';
 
 type WatchPayload = {
   zenRun?: boolean | number;
@@ -48,14 +51,44 @@ function parsePoints(pointsJSON: string | undefined): TrackedPoint[] {
   }
 }
 
-async function handleWatchPayload(raw: WatchPayload) {
+async function readPendingQueue(): Promise<WatchPayload[]> {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_QUEUE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as WatchPayload[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writePendingQueue(queue: WatchPayload[]): Promise<void> {
+  try {
+    if (queue.length === 0) await AsyncStorage.removeItem(PENDING_QUEUE_KEY);
+    else await AsyncStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue));
+  } catch {
+    /* swallow */
+  }
+}
+
+async function enqueuePayload(payload: WatchPayload): Promise<void> {
+  const queue = await readPendingQueue();
+  queue.push(payload);
+  await writePendingQueue(queue);
+}
+
+/** Returns true if the payload was successfully uploaded; false if it was re-queued or invalid. */
+async function uploadPayload(raw: WatchPayload, opts: { showAlerts: boolean }): Promise<boolean> {
   const isZen = raw.zenRun === true || raw.zenRun === 1;
-  if (!isZen) return;
+  if (!isZen) return false;
 
   const token = await getToken();
   if (!token) {
-    Alert.alert('Apple Watch', 'Sign in on this iPhone to save workouts from your Watch.');
-    return;
+    await enqueuePayload(raw);
+    if (opts.showAlerts) {
+      Alert.alert('Apple Watch', 'Sign in on this iPhone to save workouts from your Watch.');
+    }
+    return false;
   }
 
   const kind = raw.type === 'run' ? 'run' : 'walk';
@@ -63,8 +96,10 @@ async function handleWatchPayload(raw: WatchPayload) {
   const durationSeconds = Math.max(1, Math.round(Number(raw.duration_seconds ?? 1)));
   const points = parsePoints(raw.pointsJSON);
   if (points.length < 2 || distanceKm <= 0) {
-    Alert.alert('Apple Watch', 'Workout had too few GPS points to save.');
-    return;
+    if (opts.showAlerts) {
+      Alert.alert('Apple Watch', 'Workout had too few GPS points to save.');
+    }
+    return false;
   }
 
   const polylineStr = encodePolyline(points);
@@ -87,7 +122,9 @@ async function handleWatchPayload(raw: WatchPayload) {
         elevation_gain_m: elevationGainM,
         category: 'watch',
       });
-      Alert.alert('Walk saved', 'Your Apple Watch walk was uploaded to ZenRun.');
+      if (opts.showAlerts) {
+        Alert.alert('Walk saved', 'Your Apple Watch walk was uploaded to ZenRun.');
+      }
     } else {
       const runType = distanceToRunType(distanceKm);
       await runApi.create({
@@ -104,17 +141,48 @@ async function handleWatchPayload(raw: WatchPayload) {
         end_lng: end.lng,
         elevation_gain_m: elevationGainM,
       });
-      Alert.alert('Run saved', 'Your Apple Watch run was uploaded to ZenRun.');
+      if (opts.showAlerts) {
+        Alert.alert('Run saved', 'Your Apple Watch run was uploaded to ZenRun.');
+      }
     }
+    return true;
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Upload failed';
-    Alert.alert('Apple Watch sync', msg);
+    // Re-queue on transient failure so a later auth/network retry can pick it up.
+    await enqueuePayload(raw);
+    if (opts.showAlerts) {
+      const msg = e instanceof Error ? e.message : 'Upload failed';
+      Alert.alert('Apple Watch sync', `${msg}\nWill retry next time.`);
+    }
+    return false;
   }
+}
+
+async function handleWatchPayload(raw: WatchPayload) {
+  await uploadPayload(raw, { showAlerts: true });
+}
+
+/**
+ * Drain any payloads that were queued because auth wasn't ready or upload failed.
+ * Safe to call multiple times. Should be called after login and on app foreground.
+ */
+export async function drainPendingWatchPayloads(): Promise<number> {
+  if (Platform.OS !== 'ios') return 0;
+  const queue = await readPendingQueue();
+  if (queue.length === 0) return 0;
+  await writePendingQueue([]);
+
+  let succeeded = 0;
+  for (const payload of queue) {
+    const ok = await uploadPayload(payload, { showAlerts: false });
+    if (ok) succeeded += 1;
+  }
+  return succeeded;
 }
 
 let subscription: { remove: () => void } | null = null;
 
-/** Idempotent: call once after the user is authenticated (e.g. from AppNavigator). */
+/** Idempotent: call once at app boot. The native module buffers events delivered
+ *  before this listener attaches, so it's safe to mount before auth resolves. */
 export function registerWatchWorkoutSync(): { remove: () => void } {
   if (Platform.OS !== 'ios') {
     return { remove: () => {} };
@@ -138,6 +206,9 @@ export function registerWatchWorkoutSync(): { remove: () => void } {
     const payload = ev?.payload;
     if (payload) void handleWatchPayload(payload);
   });
+
+  // Drain anything we couldn't upload last time (e.g. signed-out, network down).
+  void drainPendingWatchPayloads();
 
   subscription = {
     remove: () => {

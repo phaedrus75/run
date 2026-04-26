@@ -41,7 +41,7 @@ import './services/walkBackgroundTask';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { colors } from './theme/colors';
-import { registerWatchWorkoutSync } from './services/watchBridge';
+import { registerWatchWorkoutSync, drainPendingWatchPayloads } from './services/watchBridge';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -224,20 +224,26 @@ function AppNavigator() {
   }
 
   return (
-    <>
-      <WatchWorkoutBridgeHost />
-      <NavigationContainer>
-        <MainTabs />
-      </NavigationContainer>
-    </>
+    <NavigationContainer>
+      <MainTabs />
+    </NavigationContainer>
   );
 }
 
 function WatchWorkoutBridgeHost() {
+  const { isAuthenticated } = useAuth();
+
   useEffect(() => {
     const sub = registerWatchWorkoutSync();
     return () => sub.remove();
   }, []);
+
+  // Drain any payloads queued while signed-out as soon as auth is ready.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void drainPendingWatchPayloads();
+  }, [isAuthenticated]);
+
   return null;
 }
 
@@ -246,6 +252,10 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <AuthProvider>
+        {/* Mounted at root so the native event listener is attached before
+            auth resolves; otherwise iOS can deliver queued WCSession user
+            infos during cold launch and the events get dropped. */}
+        <WatchWorkoutBridgeHost />
         <AppNavigator />
       </AuthProvider>
     </SafeAreaProvider>

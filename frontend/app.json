@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.phaedrus75.runzen",
-      "buildNumber": "23",
+      "buildNumber": "24",
       "appleTeamId": "45WAZFV76R",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
