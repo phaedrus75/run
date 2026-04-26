@@ -17,7 +17,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.phaedrus75.runzen",
-      "buildNumber": "19",
+      "buildNumber": "20",
+      "appleTeamId": "45WAZFV76R",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "ZenRun uses your location to track your walk on the map.",
@@ -52,7 +53,23 @@
     "owner": "phaedrus75",
     "extra": {
       "eas": {
-        "projectId": "281b02e7-43f9-419b-bff1-a92e99faba5a"
+        "projectId": "281b02e7-43f9-419b-bff1-a92e99faba5a",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "ZenRunWatch",
+                  "bundleIdentifier": "com.phaedrus75.runzen.watchkitapp"
+                },
+                {
+                  "targetName": "ZenRunWatch WatchKit Extension",
+                  "bundleIdentifier": "com.phaedrus75.runzen.watchkitapp.watchkitextension"
+                }
+              ]
+            }
+          }
+        }
       }
     },
     "plugins": [

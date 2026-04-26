@@ -40,6 +40,18 @@ function nativeTargetDependsOn(proj, fromUuid, toUuid) {
   return false;
 }
 
+/**
+ * Without DEVELOPMENT_TEAM on Watch targets Xcode 14+ archives fail with
+ * `Signing for "X" requires a development team`. EAS provisions credentials for these
+ * bundle IDs via `extra.eas.build.experimental.ios.appExtensions`, but Xcode still needs
+ * the team set on the target. Idempotent: the property setter is a no-op when unchanged.
+ */
+function ensureWatchTargetDevelopmentTeam(proj, appleTeamId) {
+  if (!appleTeamId) return;
+  proj.updateBuildProperty('DEVELOPMENT_TEAM', appleTeamId, undefined, EXT_NATIVE_TARGET_COMMENT);
+  proj.updateBuildProperty('DEVELOPMENT_TEAM', appleTeamId, undefined, APP_NATIVE_TARGET_COMMENT);
+}
+
 /** ZenRun → ZenRunWatch → WatchKit Extension so archive builds watch products before embed. */
 function ensureWatchTargetDependencies(proj) {
   ensurePbxDependencySections(proj);
@@ -191,8 +203,10 @@ function sanitizePbxprojText(body) {
 /**
  * @param {string} projectRoot — Expo project root (…/frontend)
  * @param {string} iosRoot — …/frontend/ios
+ * @param {{ appleTeamId?: string }} [options]
  */
-function embedZenRunWatchApp(projectRoot, iosRoot) {
+function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
+  const { appleTeamId } = options;
   const watchRoot = path.join(projectRoot, '..', 'watch-app');
   if (!fs.existsSync(watchRoot)) {
     console.warn('[withWatchApp] watch-app folder not found at', watchRoot);
@@ -215,6 +229,7 @@ function embedZenRunWatchApp(projectRoot, iosRoot) {
 
   if (watchTargetsAlreadyPresent(proj)) {
     ensureWatchTargetDependencies(proj);
+    ensureWatchTargetDevelopmentTeam(proj, appleTeamId);
     fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
     return;
   }
@@ -278,6 +293,7 @@ function embedZenRunWatchApp(projectRoot, iosRoot) {
   proj.updateBuildProperty('WK_WATCHKIT_APP', 'YES', undefined, 'ZenRun');
 
   ensureWatchTargetDependencies(proj);
+  ensureWatchTargetDevelopmentTeam(proj, appleTeamId);
 
   fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
 }

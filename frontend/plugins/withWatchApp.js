@@ -11,7 +11,10 @@ function withWatchApp(config) {
     'ios',
     async (cfg) => {
       try {
-        embedZenRunWatchApp(cfg.modRequest.projectRoot, cfg.modRequest.platformProjectRoot);
+        const appleTeamId = cfg.ios && cfg.ios.appleTeamId ? cfg.ios.appleTeamId : undefined;
+        embedZenRunWatchApp(cfg.modRequest.projectRoot, cfg.modRequest.platformProjectRoot, {
+          appleTeamId,
+        });
       } catch (e) {
         console.warn('[withWatchApp]', e && e.message ? e.message : e);
       }
