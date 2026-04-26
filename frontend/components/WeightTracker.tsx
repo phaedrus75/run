@@ -15,7 +15,12 @@ import {
   Modal,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import type { WeightProgress, WeightChartData } from '../services/api';
 import { weightApi } from '../services/api';
@@ -31,6 +36,8 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
   const [showModal, setShowModal] = useState(false);
   const [newWeight, setNewWeight] = useState('');
   const [notes, setNotes] = useState('');
+  const [recordedDate, setRecordedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleSaveWeight = async () => {
@@ -44,11 +51,13 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
     try {
       await weightApi.create({
         weight_lbs: weight,
+        recorded_at: recordedDate.toISOString(),
         notes: notes || undefined,
       });
       setShowModal(false);
       setNewWeight('');
       setNotes('');
+      setRecordedDate(new Date());
       onUpdate();
     } catch (error) {
       Alert.alert('Error', 'Failed to save weight entry');
@@ -198,47 +207,102 @@ export function WeightTracker({ progress, chartData, onUpdate, showChart = false
         animationType="slide"
         onRequestClose={() => setShowModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        >
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModal(false)} />
           <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>⚖️ Log Weight</Text>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Weight (lbs)"
-              placeholderTextColor={colors.textLight}
-              keyboardType="decimal-pad"
-              value={newWeight}
-              onChangeText={setNewWeight}
-              autoFocus
-            />
-            
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              placeholder="Notes (optional)"
-              placeholderTextColor={colors.textLight}
-              value={notes}
-              onChangeText={setNotes}
-            />
-            
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {/* Date */}
+              <Text style={styles.fieldLabel}>Date</Text>
+              {Platform.OS === 'ios' ? (
+                <View style={styles.dateRow}>
+                  <Ionicons name="calendar-outline" size={20} color={colors.secondary} />
+                  <DateTimePicker
+                    value={recordedDate}
+                    mode="date"
+                    display="compact"
+                    onChange={(_e, d) => { if (d) setRecordedDate(d); }}
+                    maximumDate={new Date()}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.dateRow}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <Ionicons name="calendar-outline" size={20} color={colors.secondary} />
+                    <Text style={styles.dateText}>
+                      {recordedDate.toLocaleDateString('en-US', {
+                        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                    </Text>
+                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={recordedDate}
+                      mode="date"
+                      display="default"
+                      onChange={(_e, d) => { setShowDatePicker(false); if (d) setRecordedDate(d); }}
+                      maximumDate={new Date()}
+                    />
+                  )}
+                </>
+              )}
+
+              {/* Weight */}
+              <Text style={styles.fieldLabel}>Weight (lbs)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 185.5"
+                placeholderTextColor={colors.textLight}
+                keyboardType="decimal-pad"
+                value={newWeight}
+                onChangeText={setNewWeight}
+                autoFocus
+                returnKeyType="next"
+              />
+
+              {/* Notes */}
+              <Text style={styles.fieldLabel}>Notes (optional)</Text>
+              <TextInput
+                style={[styles.input, styles.notesInput]}
+                placeholder="How are you feeling?"
+                placeholderTextColor={colors.textLight}
+                value={notes}
+                onChangeText={setNotes}
+                returnKeyType="done"
+                onSubmitEditing={handleSaveWeight}
+              />
+            </ScrollView>
+
             <View style={styles.modalButtons}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => setShowModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.saveButton, saving && styles.saveButtonDisabled]}
                 onPress={handleSaveWeight}
                 disabled={saving}
               >
                 <Text style={styles.saveButtonText}>
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'Saving…' : 'Save'}
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -399,15 +463,27 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modalContent: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    padding: spacing.xl,
+    padding: spacing.lg,
     paddingBottom: spacing.xxl,
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: spacing.md,
   },
   modalTitle: {
     fontSize: typography.sizes.xl,
@@ -415,6 +491,27 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.lg,
+  },
+  fieldLabel: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  dateText: {
+    flex: 1,
+    fontSize: typography.sizes.md,
+    color: colors.text,
   },
   input: {
     backgroundColor: colors.background,
