@@ -1,6 +1,6 @@
 /**
  * Copies watch-app sources into ios/ and adds WatchKit 2 app + extension targets via node-xcode.
- * Idempotent: skips if native target "ZenRunWatch" already exists.
+ * Idempotent: skips if a watchOS app target is already present.
  */
 
 const fs = require('fs');
@@ -63,6 +63,32 @@ function ensureAppIcon(iosRoot, projectRoot) {
   );
 }
 
+function watchTargetsAlreadyPresent(proj) {
+  const section = proj.pbxNativeTargetSection();
+  for (const key of Object.keys(section)) {
+    if (key.endsWith('_comment')) continue;
+    const t = section[key];
+    const pt = t && t.productType ? String(t.productType).replace(/"/g, '') : '';
+    if (pt === 'com.apple.product-type.application.watchapp2') return true;
+  }
+  return false;
+}
+
+/** node-xcode bug: pbxCreateGroup sets isa to quoted string; CocoaPods cannot parse it. */
+function sanitizePbxprojText(body) {
+  let out = body;
+  out = out.replace(/isa = "PBXGroup";/g, 'isa = PBXGroup;');
+  out = out.replace(
+    /INFOPLIST_FILE = "ZenRunWatch WatchKit Extension\/ZenRunWatch WatchKit Extension-Info\.plist";/g,
+    'INFOPLIST_FILE = "ZenRunWatch WatchKit Extension/Info.plist";',
+  );
+  out = out.replace(
+    /INFOPLIST_FILE = "ZenRunWatch\/ZenRunWatch-Info\.plist";/g,
+    'INFOPLIST_FILE = "ZenRunWatch/Info.plist";',
+  );
+  return out;
+}
+
 /**
  * @param {string} projectRoot — Expo project root (…/frontend)
  * @param {string} iosRoot — …/frontend/ios
@@ -87,15 +113,18 @@ function embedZenRunWatchApp(projectRoot, iosRoot) {
   const proj = xcode.project(pbxPath);
   proj.parseSync();
 
-  if (proj.pbxTargetByName(APP_NAME)) {
-    fs.writeFileSync(pbxPath, proj.writeSync());
+  if (watchTargetsAlreadyPresent(proj)) {
+    fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
     return;
   }
 
   proj.addTarget(APP_NAME, 'watch2_app', APP_NAME, 'com.phaedrus75.runzen.watchkitapp');
-  proj.addTarget(EXT_NAME, 'watch2_extension', EXT_NAME, 'com.phaedrus75.runzen.watchkitapp.watchkitextension');
+  const extRet = proj.addTarget(EXT_NAME, 'watch2_extension', EXT_NAME, 'com.phaedrus75.runzen.watchkitapp.watchkitextension');
+  const extKey = extRet && extRet.uuid;
+  if (!extKey) {
+    throw new Error('[withWatchApp] addTarget(watch2_extension) did not return a uuid — aborting to avoid corrupting the iOS target.');
+  }
 
-  const extKey = proj.findTargetKey(EXT_NAME);
   proj.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', extKey);
   proj.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', extKey);
   proj.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', extKey);
@@ -106,19 +135,15 @@ function embedZenRunWatchApp(projectRoot, iosRoot) {
   });
 
   const zenGroupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
-  const extGroupKey = proj.pbxCreateGroup(EXT_NAME, EXT_NAME);
-  if (zenGroupKey) {
-    proj.addToPbxGroup(extGroupKey, zenGroupKey);
+  if (!zenGroupKey) {
+    throw new Error('[withWatchApp] Could not find PBX group "ZenRun".');
   }
 
   const swiftFiles = fs.readdirSync(extDest).filter((f) => f.endsWith('.swift'));
   for (const f of swiftFiles) {
     const rel = `${EXT_NAME}/${f}`;
-    proj.addSourceFile(rel, { target: extKey }, extGroupKey);
+    proj.addSourceFile(rel, { target: extKey }, zenGroupKey);
   }
-
-  // App icon assets live under ios/ZenRunWatch/Assets.xcassets (copied above).
-  // Avoid xcode.addResourceFile here — it assumes a "Resources" PBX group path and crashes on Expo's template.
 
   const plistExt = `"${EXT_NAME}/Info.plist"`;
   const plistApp = `"${APP_NAME}/Info.plist"`;
@@ -137,10 +162,9 @@ function embedZenRunWatchApp(projectRoot, iosRoot) {
   proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, EXT_NAME);
   proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, APP_NAME);
 
-  // Host iOS app must advertise an embedded Watch app.
   proj.updateBuildProperty('WK_WATCHKIT_APP', 'YES', undefined, 'ZenRun');
 
-  fs.writeFileSync(pbxPath, proj.writeSync());
+  fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
 }
 
 module.exports = { embedZenRunWatchApp, default: embedZenRunWatchApp };
