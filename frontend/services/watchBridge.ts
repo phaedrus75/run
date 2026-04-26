@@ -51,6 +51,39 @@ function parsePoints(pointsJSON: string | undefined): TrackedPoint[] {
   }
 }
 
+export type WatchDiagnostics = {
+  supported?: boolean;
+  activationState?: string;
+  activationError?: string;
+  isPaired?: boolean;
+  isWatchAppInstalled?: boolean;
+  isReachable?: boolean;
+  isComplicationEnabled?: boolean;
+  outstandingUserInfoTransfers?: number;
+  hasContentPending?: boolean;
+  userInfoReceivedCount?: number;
+  appContextReceivedCount?: number;
+  zenPayloadCount?: number;
+  bufferedPayloads?: number;
+  hasJsListener?: boolean;
+  lastUserInfoAt?: string;
+  lastAppContextAt?: string;
+};
+
+export async function getWatchDiagnostics(): Promise<WatchDiagnostics & { pendingQueueSize: number }> {
+  const pending = await readPendingQueue();
+  if (Platform.OS !== 'ios') {
+    return { pendingQueueSize: pending.length };
+  }
+  try {
+    const WatchBridge = requireNativeModule('WatchBridge') as { getDiagnostics?: () => Promise<WatchDiagnostics> };
+    const native = WatchBridge.getDiagnostics ? await WatchBridge.getDiagnostics() : {};
+    return { ...(native ?? {}), pendingQueueSize: pending.length };
+  } catch {
+    return { pendingQueueSize: pending.length };
+  }
+}
+
 async function readPendingQueue(): Promise<WatchPayload[]> {
   try {
     const raw = await AsyncStorage.getItem(PENDING_QUEUE_KEY);

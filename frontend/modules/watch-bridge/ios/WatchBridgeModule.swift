@@ -20,6 +20,15 @@ public final class WatchBridgeModule: Module {
       WatchBridgeSession.shared.start()
     }
 
+    // Diagnostic accessor for the in-app Watch Sync screen.
+    AsyncFunction("getDiagnostics") { () -> [String: Any] in
+      var snap = WatchBridgeSession.shared.snapshotDiagnostics()
+      let buffered: Int = self.stateQueue.sync { self.pendingPayloads.count }
+      snap["bufferedPayloads"] = buffered
+      snap["hasJsListener"] = self.stateQueue.sync { self.hasJsListener }
+      return snap
+    }
+
     // WCSession can deliver queued user infos during cold launch before JS
     // finishes booting and attaches a listener. When the first JS listener
     // attaches, flush anything we received in the meantime.

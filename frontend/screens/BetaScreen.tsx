@@ -76,6 +76,15 @@ const FEATURES: FeatureRow[] = [
     screen: 'StepsTab',
     betaKey: 'beta_steps_enabled',
   },
+  {
+    key: 'watch_diag',
+    icon: 'watch',
+    iconColor: '#8C9EC9',
+    label: 'Apple Watch Sync',
+    description: 'Diagnose Watch → iPhone connectivity and replay queued workouts.',
+    screen: 'WatchDiagnostics',
+    alwaysVisible: true,
+  },
 ];
 
 export function BetaScreen({ navigation }: Props) {

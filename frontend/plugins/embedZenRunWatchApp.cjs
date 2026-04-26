@@ -95,6 +95,29 @@ function ensureWatchTargetDevelopmentTeam(proj, appleTeamId) {
   proj.updateBuildProperty('DEVELOPMENT_TEAM', appleTeamId, undefined, APP_NATIVE_TARGET_COMMENT);
 }
 
+/**
+ * Idempotently registers any new .swift files in the WatchKit Extension folder against the
+ * extension target's Sources phase. The initial-creation path already loops through every
+ * file once, but for local incremental rebuilds (or when adding files later) we need to
+ * pick up newcomers without re-running the whole add-target flow.
+ */
+function ensureWatchExtensionSources(proj, extDest) {
+  const extUuid = proj.findTargetKey(EXT_TARGET_FIND_KEY);
+  if (!extUuid) return;
+  const sourcesPhase = proj.pbxSourcesBuildPhaseObj(extUuid);
+  if (!sourcesPhase) return;
+  const present = new Set(
+    (sourcesPhase.files || []).map((f) => String(f.comment || '').replace(/ in Sources$/, '').trim()),
+  );
+  const zenGroupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
+  if (!zenGroupKey) return;
+  for (const fname of fs.readdirSync(extDest).filter((f) => f.endsWith('.swift'))) {
+    if (present.has(fname)) continue;
+    const rel = `${EXT_NAME}/${fname}`;
+    proj.addSourceFile(rel, { target: extUuid }, zenGroupKey);
+  }
+}
+
 /** ZenRun → ZenRunWatch → WatchKit Extension so archive builds watch products before embed. */
 function ensureWatchTargetDependencies(proj) {
   ensurePbxDependencySections(proj);
@@ -307,6 +330,7 @@ function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
     ensureWatchTargetDependencies(proj);
     ensureWatchTargetDevelopmentTeam(proj, appleTeamId);
     ensureWatchAppResources(proj);
+    ensureWatchExtensionSources(proj, extDest);
     fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
     return;
   }
