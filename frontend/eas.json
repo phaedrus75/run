@@ -8,13 +8,15 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "scheme": "ZenRun"
       }
     },
     "preview": {
       "distribution": "internal",
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "scheme": "ZenRun"
       },
       "android": {
         "buildType": "apk"
@@ -24,12 +26,15 @@
       "distribution": "store",
       "channel": "beta",
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "scheme": "ZenRun"
       }
     },
     "production": {
+      "distribution": "store",
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "scheme": "ZenRun"
       },
       "android": {
         "buildType": "app-bundle"

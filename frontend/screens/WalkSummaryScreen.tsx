@@ -9,6 +9,9 @@
  * - Save (POST /walks)
  *
  * Photos can be added on the WalkDetailScreen after save.
+ *
+ * Apple Watch saves use the same walkApi.create path via ../services/watchBridge
+ * (registered from App.tsx when the user is authenticated).
  */
 
 import React, { useMemo, useState } from 'react';

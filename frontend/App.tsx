@@ -2,7 +2,7 @@
  * 🏃 ZENRUN APP
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -41,6 +41,7 @@ import './services/walkBackgroundTask';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { colors } from './theme/colors';
+import { registerWatchWorkoutSync } from './services/watchBridge';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -223,10 +224,21 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <MainTabs />
-    </NavigationContainer>
+    <>
+      <WatchWorkoutBridgeHost />
+      <NavigationContainer>
+        <MainTabs />
+      </NavigationContainer>
+    </>
   );
+}
+
+function WatchWorkoutBridgeHost() {
+  useEffect(() => {
+    const sub = registerWatchWorkoutSync();
+    return () => sub.remove();
+  }, []);
+  return null;
 }
 
 export default function App() {
