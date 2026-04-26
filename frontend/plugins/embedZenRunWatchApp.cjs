@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const xcode = require('xcode');
+const pbxFile = require('xcode/lib/pbxFile');
 
 const EXT_NAME = 'ZenRunWatch WatchKit Extension';
 const APP_NAME = 'ZenRunWatch';
@@ -38,6 +39,48 @@ function nativeTargetDependsOn(proj, fromUuid, toUuid) {
     if (row && String(row.target).replace(/"/g, '') === String(toUuid).replace(/"/g, '')) return true;
   }
   return false;
+}
+
+/**
+ * App Store rejects the IPA with "Missing Icons" / "CFBundleIconName missing" if the Watch app's
+ * Assets.xcassets isn't compiled into the .app product. node-xcode's addTarget('watch2_app')
+ * doesn't create a Resources build phase, so we add one and wire the asset catalog into it.
+ *
+ * We bypass `proj.addResourceFile` because it calls `correctForResourcesPath` which throws on
+ * Expo templates (no "Resources" PBXGroup → null .path access). Lower-level helpers do the same
+ * work without that lookup.
+ *
+ * Idempotent: skips work when the catalog is already wired up.
+ */
+function ensureWatchAppResources(proj) {
+  const watchUuid = proj.findTargetKey(APP_TARGET_FIND_KEY);
+  if (!watchUuid) return;
+  const nt = proj.pbxNativeTargetSection()[watchUuid];
+  if (!nt) return;
+
+  const hasResources = (nt.buildPhases || []).some((bp) => bp.comment === 'Resources');
+  if (!hasResources) {
+    proj.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', watchUuid);
+  }
+
+  const assetsRel = `${APP_NAME}/Assets.xcassets`;
+  const phase = proj.pbxResourcesBuildPhaseObj(watchUuid);
+  const alreadyHasAssets =
+    phase && (phase.files || []).some((f) => String(f.comment || '').includes('Assets.xcassets'));
+
+  if (!alreadyHasAssets) {
+    const file = new pbxFile(assetsRel);
+    file.uuid = proj.generateUuid();
+    file.fileRef = proj.generateUuid();
+    file.target = watchUuid;
+    proj.addToPbxFileReferenceSection(file);
+    proj.addToPbxBuildFileSection(file);
+    proj.addToPbxResourcesBuildPhase(file);
+    const zenGroupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
+    if (zenGroupKey) proj.addToPbxGroup(file, zenGroupKey);
+  }
+
+  proj.updateBuildProperty('ASSETCATALOG_COMPILER_APPICON_NAME', 'AppIcon', undefined, APP_NATIVE_TARGET_COMMENT);
 }
 
 /**
@@ -263,6 +306,7 @@ function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
   if (watchTargetsAlreadyPresent(proj)) {
     ensureWatchTargetDependencies(proj);
     ensureWatchTargetDevelopmentTeam(proj, appleTeamId);
+    ensureWatchAppResources(proj);
     fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
     return;
   }
@@ -327,6 +371,7 @@ function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
 
   ensureWatchTargetDependencies(proj);
   ensureWatchTargetDevelopmentTeam(proj, appleTeamId);
+  ensureWatchAppResources(proj);
 
   fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
 }
