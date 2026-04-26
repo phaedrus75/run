@@ -478,13 +478,21 @@ export function RunsTabScreen({ navigation }: Props) {
 
       {tab === 'stats' ? renderStats() : renderHistory()}
 
-      {editRun && (
-        <EditRunModal
-          run={editRun}
-          onClose={() => setEditRun(null)}
-          onUpdate={() => { setEditRun(null); fetchData(); }}
-        />
-      )}
+      <EditRunModal
+        visible={!!editRun}
+        run={editRun}
+        onClose={() => setEditRun(null)}
+        onSave={async (id, data) => {
+          await runApi.update(id, data);
+          setEditRun(null);
+          fetchData();
+        }}
+        onDelete={async (id) => {
+          await runApi.delete(id);
+          setEditRun(null);
+          fetchData();
+        }}
+      />
 
       {monthReviewData && showMonthReview && (
         <MonthInReview

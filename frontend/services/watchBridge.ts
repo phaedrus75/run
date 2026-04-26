@@ -23,12 +23,25 @@ type WatchPayload = {
   pointsJSON?: string;
 };
 
+/**
+ * Map a real-world distance to the run_type bucket the user actually achieved.
+ *
+ * The previous version rounded *up* (4.0km → "5k"), which over-credited short
+ * runs. The display total_km on the iPhone uses the actual `distance_km` so the
+ * counter is correct either way; only the categorical label changes.
+ *
+ * Floors to the highest bucket the user actually completed, with a small
+ * forgiveness margin so a 1.95km run still counts as "2k". Anything under 1km
+ * is still tagged as "1k" since that's the smallest bucket the backend accepts.
+ */
 function distanceToRunType(km: number): string {
   const buckets = [1, 2, 3, 5, 8, 10, 15, 18, 21];
+  const TOLERANCE_KM = 0.05; // 50m of GPS noise is fine
+  let best = buckets[0];
   for (const b of buckets) {
-    if (km <= b + 0.5) return `${b}k`;
+    if (km + TOLERANCE_KM >= b) best = b;
   }
-  return '21k';
+  return `${best}k`;
 }
 
 function parsePoints(pointsJSON: string | undefined): TrackedPoint[] {
@@ -82,6 +95,41 @@ export async function getWatchDiagnostics(): Promise<WatchDiagnostics & { pendin
   } catch {
     return { pendingQueueSize: pending.length };
   }
+}
+
+/**
+ * Live two-way query against the watch's WCSession. Resolves with the watch's view of the channel
+ * (its activation state, last successful send, etc.) or rejects if the watch isn't reachable.
+ *
+ * `pingWatch` is read-only.  `resendLastWorkout` asks the watch to re-fire its most recent saved
+ * payload via `transferUserInfo` + `applicationContext` — useful when a save on the watch never
+ * reached the phone.
+ */
+export type WatchLiveReply = {
+  activationState?: string;
+  activationError?: string;
+  isReachable?: boolean;
+  lastSendAt?: string;
+  lastSendOk?: boolean;
+  lastSendError?: string;
+  hasStoredPayload?: boolean;
+  had_payload?: boolean;
+};
+
+export async function pingWatch(): Promise<WatchLiveReply> {
+  if (Platform.OS !== 'ios') throw new Error('Apple Watch ping is iOS-only');
+  const WatchBridge = requireNativeModule('WatchBridge') as { pingWatch?: () => Promise<WatchLiveReply> };
+  if (!WatchBridge.pingWatch) throw new Error('pingWatch not available on this build');
+  return WatchBridge.pingWatch();
+}
+
+export async function resendLastWatchWorkout(): Promise<WatchLiveReply> {
+  if (Platform.OS !== 'ios') throw new Error('Resend is iOS-only');
+  const WatchBridge = requireNativeModule('WatchBridge') as {
+    resendLastWorkout?: () => Promise<WatchLiveReply>;
+  };
+  if (!WatchBridge.resendLastWorkout) throw new Error('resendLastWorkout not available on this build');
+  return WatchBridge.resendLastWorkout();
 }
 
 async function readPendingQueue(): Promise<WatchPayload[]> {

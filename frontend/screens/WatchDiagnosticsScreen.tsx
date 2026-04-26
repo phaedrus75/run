@@ -24,6 +24,8 @@ import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import {
   drainPendingWatchPayloads,
   getWatchDiagnostics,
+  pingWatch,
+  resendLastWatchWorkout,
   WatchDiagnostics,
 } from '../services/watchBridge';
 
@@ -90,8 +92,65 @@ export function WatchDiagnosticsScreen({ navigation }: Props) {
 
   useEffect(() => {
     void refresh();
-    const id = setInterval(refresh, 3000);
+    // 10s is long enough to feel responsive without flickering values mid-read.
+    const id = setInterval(refresh, 10000);
     return () => clearInterval(id);
+  }, [refresh]);
+
+  const [pinging, setPinging] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  const onPingWatch = useCallback(async () => {
+    setPinging(true);
+    try {
+      const reply = await pingWatch();
+      const lines = [
+        `Watch session: ${reply?.activationState ?? 'unknown'}`,
+        `Reachable from watch side: ${reply?.isReachable ? 'yes' : 'no'}`,
+        `Last send attempt: ${reply?.lastSendAt ? new Date(reply.lastSendAt).toLocaleTimeString() : 'never'}`,
+        `Last send result: ${reply?.lastSendOk === true ? 'ok' : reply?.lastSendError ?? 'n/a'}`,
+        `Stored payload to resend: ${reply?.hasStoredPayload ? 'yes' : 'no'}`,
+      ];
+      Alert.alert('Watch reports', lines.join('\n'));
+      await refresh();
+    } catch (e) {
+      Alert.alert(
+        'Ping failed',
+        e instanceof Error
+          ? `${e.message}\n\nMake sure the ZenRun watch app is open and the watch is awake.`
+          : 'Watch is not reachable',
+      );
+    } finally {
+      setPinging(false);
+    }
+  }, [refresh]);
+
+  const onResendLast = useCallback(async () => {
+    setResending(true);
+    try {
+      const reply = await resendLastWatchWorkout();
+      if (reply?.had_payload) {
+        Alert.alert(
+          'Resend triggered',
+          'The watch fired its last saved workout again. The counters above should tick up within a few seconds.',
+        );
+      } else {
+        Alert.alert(
+          'Nothing to resend',
+          'The watch does not have a saved workout to resend. Save one on the watch first.',
+        );
+      }
+      await refresh();
+    } catch (e) {
+      Alert.alert(
+        'Resend failed',
+        e instanceof Error
+          ? `${e.message}\n\nOpen the ZenRun watch app, then try again.`
+          : 'Watch is not reachable',
+      );
+    } finally {
+      setResending(false);
+    }
   }, [refresh]);
 
   const onDrain = useCallback(async () => {
@@ -203,19 +262,51 @@ export function WatchDiagnosticsScreen({ navigation }: Props) {
 
         <Pressable
           style={({ pressed }) => [styles.button, pressed && { opacity: 0.7 }]}
+          onPress={onPingWatch}
+          disabled={pinging}
+        >
+          <Ionicons name="pulse" size={18} color="#fff" />
+          <Text style={styles.buttonText}>
+            {pinging ? 'Pinging…' : 'Ping watch (live)'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.buttonSecondary,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={onResendLast}
+          disabled={resending}
+        >
+          <Ionicons name="refresh" size={18} color={colors.primary} />
+          <Text style={styles.buttonSecondaryText}>
+            {resending ? 'Asking watch…' : 'Resend last workout from watch'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.buttonSecondary,
+            pressed && { opacity: 0.7 },
+          ]}
           onPress={onDrain}
           disabled={draining}
         >
-          <Ionicons name="cloud-upload" size={18} color="#fff" />
-          <Text style={styles.buttonText}>
-            {draining ? 'Uploading…' : 'Retry pending uploads'}
+          <Ionicons name="cloud-upload" size={18} color={colors.primary} />
+          <Text style={styles.buttonSecondaryText}>
+            {draining ? 'Uploading…' : 'Retry pending uploads on this iPhone'}
           </Text>
         </Pressable>
 
         <Text style={styles.helpText}>
-          On the watch: open ZenRun, start a walk or run, then tap Save. The
-          numbers above should tick up within a few seconds (faster if the watch
-          is right next to the iPhone with this screen open).
+          If the counters above stay at zero after saving on the watch:
+          {'\n\n'}1. Open the ZenRun watch app and tap "Ping watch (live)" — this proves
+          the channel works in real time.
+          {'\n'}2. If the ping succeeds but workouts still don't arrive, tap
+          "Resend last workout from watch" to re-fire the most recent payload.
+          {'\n'}3. If ping fails entirely, restart the watch (hold side button → Power Off → on)
+          and try again.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -301,6 +392,23 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   buttonText: { color: '#fff', fontSize: typography.sizes.md, fontWeight: typography.weights.bold },
+  buttonSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  buttonSecondaryText: {
+    color: colors.primary,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+  },
   helpText: {
     fontSize: 12,
     color: colors.textLight,

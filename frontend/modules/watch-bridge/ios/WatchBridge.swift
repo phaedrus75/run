@@ -75,6 +75,51 @@ public final class WatchBridgeSession: NSObject, WCSessionDelegate {
 
   public func sessionReachabilityDidChange(_ session: WCSession) {}
 
+  // MARK: - Live two-way query (used by the iPhone Watch Sync diagnostic screen)
+
+  /// Sends a `sendMessage` to the watch and routes the reply / error back. Requires the watch app
+  /// to be reachable (foregrounded with the iPhone awake). Use sparingly: this is for diagnostics,
+  /// not for workout delivery — workouts go via `transferUserInfo`.
+  public func sendLiveQuery(
+    _ message: [String: Any],
+    timeoutSeconds: TimeInterval = 8,
+    completion: @escaping (Result<[String: Any], Error>) -> Void
+  ) {
+    guard WCSession.isSupported() else {
+      completion(.failure(NSError(domain: "WatchBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "WCSession not supported on this device"])))
+      return
+    }
+    let session = WCSession.default
+    guard session.activationState == .activated else {
+      completion(.failure(NSError(domain: "WatchBridge", code: -2, userInfo: [NSLocalizedDescriptionKey: "WCSession not activated yet"])))
+      return
+    }
+    guard session.isReachable else {
+      completion(.failure(NSError(domain: "WatchBridge", code: -3, userInfo: [NSLocalizedDescriptionKey: "Watch is not reachable. Open the ZenRun watch app and try again."])))
+      return
+    }
+
+    var didFinish = false
+    let lock = NSLock()
+    let finish: (Result<[String: Any], Error>) -> Void = { result in
+      lock.lock()
+      defer { lock.unlock() }
+      guard !didFinish else { return }
+      didFinish = true
+      DispatchQueue.main.async { completion(result) }
+    }
+
+    DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeoutSeconds) {
+      finish(.failure(NSError(domain: "WatchBridge", code: -4, userInfo: [NSLocalizedDescriptionKey: "Watch did not reply in \(Int(timeoutSeconds))s"])))
+    }
+
+    session.sendMessage(message, replyHandler: { reply in
+      finish(.success(reply))
+    }, errorHandler: { error in
+      finish(.failure(error))
+    })
+  }
+
   public func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
     stateQueue.sync {
       _userInfoCount += 1
