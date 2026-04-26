@@ -32,6 +32,7 @@ import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
 import { BetaScreen } from './screens/BetaScreen';
 import { GymTabScreen } from './screens/GymTabScreen';
 import { StepsTabScreen } from './screens/StepsTabScreen';
+import { WeightTabScreen } from './screens/WeightTabScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { GoButton } from './components/GoButton';
 
@@ -125,6 +126,7 @@ function LabsStack() {
       <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
       <Stack.Screen name="GymTab" component={GymTabScreen} options={{ headerShown: false }} />
       <Stack.Screen name="StepsTab" component={StepsTabScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="WeightTab" component={WeightTabScreen} options={{ headerShown: false }} />
       {/* Keep legacy history routes for any deep-links still using them */}
       <Stack.Screen name="GymHistory" component={HistoryScreen} initialParams={{ mode: 'gym' }} options={{ headerShown: false }} />
       <Stack.Screen name="StepsHistory" component={HistoryScreen} initialParams={{ mode: 'steps' }} options={{ headerShown: false }} />

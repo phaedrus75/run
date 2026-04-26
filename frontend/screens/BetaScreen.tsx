@@ -64,6 +64,7 @@ const FEATURES: FeatureRow[] = [
     iconColor: '#7BAFA6',
     label: 'Weight',
     description: 'Track your weight journey toward your goal. Enable in Profile → Beta features.',
+    screen: 'WeightTab',
     betaKey: 'beta_weight_enabled',
   },
   {
