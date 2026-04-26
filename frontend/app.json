@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.phaedrus75.runzen",
-      "buildNumber": "18",
+      "buildNumber": "19",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "ZenRun uses your location to track your walk on the map.",
@@ -57,6 +57,7 @@
     },
     "plugins": [
       "./plugins/withWatchApp.js",
+      "./plugins/withPodfileResourceBundleFix.js",
       "expo-font",
       "@react-native-community/datetimepicker",
       "expo-maps",
