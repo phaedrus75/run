@@ -127,6 +127,28 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
   const renderJourneyView = () => {
     if (!selectedRun) return null;
     const maxDistance = selectedRun.distance_km;
+    const ceilDistance = Math.max(1, Math.ceil(maxDistance));
+
+    /**
+     * Photos are stored with fractional `distance_marker_km` (e.g. 2.347 from a GPS
+     * reading at 2.347 km). The previous filter `=== km` only matched photos uploaded
+     * at *exact* integer km, so anything captured during a GPS-tracked run silently
+     * disappeared from the timeline. We now bucket each photo to its nearest
+     * integer marker, clamped to [1, ceilDistance].
+     */
+    const bucketForKm = (markerKm: number): number => {
+      const rounded = Math.round(markerKm);
+      if (rounded < 1) return 1;
+      if (rounded > ceilDistance) return ceilDistance;
+      return rounded;
+    };
+    const photosByBucket = new Map<number, RunPhoto[]>();
+    runPhotos.forEach((p) => {
+      const bucket = bucketForKm(p.distance_marker_km);
+      const arr = photosByBucket.get(bucket) ?? [];
+      arr.push(p);
+      photosByBucket.set(bucket, arr);
+    });
 
     return (
       <View style={styles.journeyContainer}>
@@ -162,8 +184,8 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
               <View style={styles.timelineLine} />
 
               {/* Km markers */}
-              {Array.from({ length: Math.floor(maxDistance) }, (_, i) => i + 1).map(km => {
-                const photosAtMarker = runPhotos.filter(p => p.distance_marker_km === km);
+              {Array.from({ length: ceilDistance }, (_, i) => i + 1).map(km => {
+                const photosAtMarker = photosByBucket.get(km) ?? [];
                 const hasPhotos = photosAtMarker.length > 0;
                 return (
                   <React.Fragment key={km}>

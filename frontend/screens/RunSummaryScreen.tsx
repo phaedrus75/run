@@ -98,10 +98,12 @@ export function RunSummaryScreen({ navigation, route }: Props) {
       const polylineStr = encodePolyline(points as TrackedPoint[]);
       const runType = distanceToRunType(snapshot.distanceKm);
 
+      const savedDistanceKm = Number(snapshot.distanceKm.toFixed(3));
+
       const run = await runApi.create({
         run_type: runType,
         duration_seconds: Math.max(1, Math.round(snapshot.durationSeconds)),
-        distance_km: Number(snapshot.distanceKm.toFixed(3)),
+        distance_km: savedDistanceKm,
         category: 'outdoor',
         started_at: snapshot.startedAt ? new Date(snapshot.startedAt).toISOString() : undefined,
         completed_at: new Date().toISOString(),
@@ -117,16 +119,43 @@ export function RunSummaryScreen({ navigation, route }: Props) {
         mood: mood || undefined,
       });
 
-      // Upload any photos taken during the run
-      if (pendingPhotos.length > 0) {
-        await Promise.allSettled(
-          pendingPhotos.map((p) =>
-            photoApi.upload(run.id, {
+      // Upload any photos taken during the run.
+      //
+      // Backend validation requires:
+      //   distance_marker_km > 0
+      //   distance_marker_km <= run.distance_km
+      //
+      // Without clamping, a photo taken in the first second of the run (distance ≈ 0)
+      // or right at the end (where the in-flight GPS reading exceeds the rounded final
+      // distance) gets silently dropped by Promise.allSettled, which is exactly what
+      // bit us when a 17-photo run only saved 8.
+      const validPhotos = pendingPhotos.filter((p) => p.base64 && p.base64.length > 0);
+      if (validPhotos.length > 0) {
+        const upperBound = Math.max(0.05, savedDistanceKm - 0.01);
+        const uploadResults = await Promise.allSettled(
+          validPhotos.map((p) => {
+            const clampedMarker = Math.min(
+              upperBound,
+              Math.max(0.05, Number((p.distanceKm || 0).toFixed(3))),
+            );
+            return photoApi.upload(run.id, {
               photo_data: p.base64,
-              distance_marker_km: p.distanceKm,
-            }),
-          ),
+              distance_marker_km: clampedMarker,
+            });
+          }),
         );
+        const failed = uploadResults
+          .map((r, idx) => ({ result: r, photo: validPhotos[idx] }))
+          .filter((x) => x.result.status === 'rejected');
+        if (failed.length > 0) {
+          console.warn(`${failed.length} run photo(s) failed to upload`);
+          Alert.alert(
+            'Some photos not saved',
+            `${failed.length} of ${validPhotos.length} photo${
+              failed.length > 1 ? 's' : ''
+            } could not be uploaded. The run itself was saved — you can re-add photos from the run details screen.`,
+          );
+        }
       }
 
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}

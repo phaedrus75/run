@@ -97,7 +97,8 @@ export interface Run {
 export interface RunPhoto {
   id: number;
   run_id: number;
-  photo_data: string;
+  /** Base64 JPEG. Omitted by the server when `thumbnails_only=true` is requested. */
+  photo_data?: string;
   distance_marker_km: number;
   caption: string | null;
   created_at: string | null;

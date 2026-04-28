@@ -6,7 +6,7 @@
  * Outdoor runs can add/view/delete scenic photos tagged to distance markers.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,12 +18,15 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from './RunTypeButton';
+import { WalkMap } from './WalkMap';
 import { photoApi, levelApi, type Run, type RunPhoto } from '../services/api';
+import { decodePolyline } from '../services/walkLocationTracker';
 
 const ALL_RUN_TYPES = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
 
@@ -61,6 +64,35 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   const [pendingMarker, setPendingMarker] = useState<number | null>(null);
   const [pendingCaption, setPendingCaption] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState<RunPhoto | null>(null);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
+
+  const routePoints = useMemo(
+    () => (run?.route_polyline ? decodePolyline(run.route_polyline) : []),
+    [run?.route_polyline],
+  );
+
+  /** Center + zoom that fits the whole route on screen. */
+  const routeCamera = useMemo(() => {
+    if (routePoints.length === 0) return null;
+    const lats = routePoints.map((p) => p.lat);
+    const lngs = routePoints.map((p) => p.lng);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const span = Math.max(maxLat - minLat, maxLng - minLng);
+    let zoom = 15;
+    if (span > 0.008) zoom = 14;
+    if (span > 0.02) zoom = 13;
+    if (span > 0.05) zoom = 12;
+    if (span > 0.12) zoom = 11;
+    if (span > 0.3) zoom = 10;
+    return {
+      center: { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 },
+      zoom,
+    };
+  }, [routePoints]);
 
   useEffect(() => {
     if (run) {
@@ -85,8 +117,11 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
     if (!run) return;
     setLoadingPhotos(true);
     try {
-      // Load metadata only (no base64) for the thumbnail strip — much faster for runs with many photos
-      const data = await photoApi.getForRun(run.id, true);
+      // Fetch full photo data so we can actually render thumbnails. The previous
+      // `thumbnails_only: true` was a half-finished optimization — the server omitted
+      // photo_data but the UI never rendered an <Image>, so every photo appeared as a
+      // text-only placeholder ("📍2.347K") and looked corrupted to the user.
+      const data = await photoApi.getForRun(run.id);
       setPhotos(data);
     } catch {
       setPhotos([]);
@@ -245,6 +280,26 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* Route map (outdoor GPS-tracked runs only) */}
+          {isOutdoor && routePoints.length > 0 && routeCamera && (
+            <Pressable
+              style={styles.mapWrap}
+              onPress={() => setMapFullscreen(true)}
+            >
+              <WalkMap
+                style={styles.map}
+                route={routePoints}
+                centerOn={routeCamera.center}
+                zoom={routeCamera.zoom}
+                showUserLocation={false}
+                routeColor="#F97316"
+              />
+              <View style={styles.mapExpandHint}>
+                <Text style={styles.mapExpandHintText}>⤢</Text>
+              </View>
+            </Pressable>
+          )}
+
           {/* Run Type Selection */}
           <Text style={styles.label}>Distance</Text>
           <View style={styles.typeRow}>
@@ -329,21 +384,39 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                   {/* Existing photos */}
                   {photos.length > 0 && (
                     <View style={styles.photosGrid}>
-                      {photos.map(photo => (
-                        <View key={photo.id} style={styles.photoThumbWrap}>
-                          <View style={[styles.photoThumb, styles.photoThumbPlaceholder]}>
-                            <Text style={styles.photoThumbPlaceholderText}>📍{photo.distance_marker_km}K</Text>
-                            {photo.caption ? <Text style={styles.photoThumbPlaceholderCaption} numberOfLines={2}>{photo.caption}</Text> : null}
+                      {photos.map((photo) => {
+                        const km = Math.round(photo.distance_marker_km * 10) / 10;
+                        return (
+                          <View key={photo.id} style={styles.photoThumbWrap}>
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              onPress={() => setLightboxPhoto(photo)}
+                              style={styles.photoThumb}
+                            >
+                              {photo.photo_data ? (
+                                <Image
+                                  source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
+                                  style={styles.photoThumbImage}
+                                />
+                              ) : (
+                                <View style={[styles.photoThumbImage, styles.photoThumbPlaceholder]}>
+                                  <Text style={styles.photoThumbPlaceholderText}>📍{km}K</Text>
+                                </View>
+                              )}
+                              <View style={styles.photoMarkerBadge}>
+                                <Text style={styles.photoMarkerBadgeText}>{km}K</Text>
+                              </View>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.photoDeleteBtn}
+                              onPress={() => handleDeletePhoto(photo.id)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Text style={styles.photoDeleteText}>✕</Text>
+                            </TouchableOpacity>
                           </View>
-                          <TouchableOpacity
-                            style={styles.photoDeleteBtn}
-                            onPress={() => handleDeletePhoto(photo.id)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Text style={styles.photoDeleteText}>✕</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   )}
 
@@ -426,6 +499,65 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             <Text style={styles.deleteButtonText}>🗑️ Delete Run</Text>
           </TouchableOpacity>
         </ScrollView>
+
+        {/* Full-screen map */}
+        <Modal
+          visible={mapFullscreen}
+          animationType="slide"
+          onRequestClose={() => setMapFullscreen(false)}
+        >
+          <View style={styles.mapFullContainer}>
+            {routeCamera && (
+              <WalkMap
+                style={StyleSheet.absoluteFill}
+                route={routePoints}
+                centerOn={routeCamera.center}
+                zoom={routeCamera.zoom}
+                showUserLocation={false}
+                routeColor="#F97316"
+              />
+            )}
+            <Pressable
+              style={styles.mapFullClose}
+              onPress={() => setMapFullscreen(false)}
+              hitSlop={12}
+            >
+              <Text style={styles.mapFullCloseText}>✕</Text>
+            </Pressable>
+          </View>
+        </Modal>
+
+        {/* Photo lightbox */}
+        <Modal
+          visible={lightboxPhoto !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLightboxPhoto(null)}
+        >
+          <Pressable
+            style={styles.lightboxOverlay}
+            onPress={() => setLightboxPhoto(null)}
+          >
+            {lightboxPhoto?.photo_data && (
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${lightboxPhoto.photo_data}` }}
+                style={styles.lightboxImage}
+                resizeMode="contain"
+              />
+            )}
+            {lightboxPhoto && (
+              <View style={styles.lightboxInfo}>
+                <Text style={styles.lightboxMarker}>
+                  📍 {Math.round(lightboxPhoto.distance_marker_km * 10) / 10}K mark
+                </Text>
+                {lightboxPhoto.caption ? (
+                  <Text style={styles.lightboxCaption}>{lightboxPhoto.caption}</Text>
+                ) : null}
+                <Text style={styles.lightboxHint}>Tap anywhere to close</Text>
+              </View>
+            )}
+          </Pressable>
+        </Modal>
       </View>
     </Modal>
   );
@@ -557,6 +689,43 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
   },
 
+  // Map (outdoor GPS-tracked runs)
+  mapWrap: {
+    height: 200,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceAlt,
+    marginBottom: spacing.lg,
+  },
+  map: { flex: 1 },
+  mapExpandHint: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  mapExpandHintText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  mapFullContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  mapFullClose: {
+    position: 'absolute',
+    top: 50,
+    right: spacing.lg,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.medium,
+  },
+  mapFullCloseText: { fontSize: 18, fontWeight: '700', color: colors.text },
+
   // Scenic photo styles
   photosSection: {
     marginTop: spacing.sm,
@@ -575,6 +744,12 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  photoThumbImage: {
+    width: 100,
+    height: 100,
+    borderRadius: radius.md,
   },
   photoThumbPlaceholder: {
     backgroundColor: colors.background,
@@ -590,11 +765,55 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textAlign: 'center',
   },
-  photoThumbPlaceholderCaption: {
-    fontSize: 9,
-    color: colors.textSecondary,
+  photoMarkerBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  photoMarkerBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // Lightbox
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  lightboxImage: {
+    width: '100%',
+    aspectRatio: 1,
+    maxHeight: '70%',
+    borderRadius: radius.md,
+  },
+  lightboxInfo: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  lightboxMarker: {
+    color: '#fff',
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+  },
+  lightboxCaption: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: typography.sizes.md,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
     textAlign: 'center',
-    marginTop: 4,
+  },
+  lightboxHint: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: typography.sizes.xs,
+    marginTop: spacing.xl,
   },
   photoDeleteBtn: {
     position: 'absolute',
