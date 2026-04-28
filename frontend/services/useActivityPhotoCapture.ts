@@ -6,6 +6,10 @@
  * Usage:
  *   const { pendingPhotos, capturing, capturePhoto, clearPhotos } =
  *     useActivityPhotoCapture(() => tracker.getSnapshot().distanceKm, tracker);
+ *
+ * Photos are also saved to the user's iPhone Photos library (when permission
+ * is granted) into a "ZenRun" album, so the user keeps the originals even if
+ * the app's upload to the backend fails.
  */
 
 import { useState } from 'react';
@@ -13,7 +17,45 @@ import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
+import * as MediaLibrary from 'expo-media-library';
 import { WalkSnapshot } from './walkLocationTracker';
+
+const ZENRUN_ALBUM_NAME = 'ZenRun';
+
+/** Cached so we only ask for media-library permission once per app session. */
+let mediaLibraryPermissionState: 'unknown' | 'granted' | 'denied' = 'unknown';
+
+/**
+ * Save a photo file (from `result.assets[0].uri`) to the user's Photos library
+ * inside a "ZenRun" album. Best-effort — never throws, returns whether it
+ * succeeded so the caller can log/notify if interesting.
+ */
+async function saveOriginalToPhotos(uri: string): Promise<boolean> {
+  try {
+    if (mediaLibraryPermissionState === 'unknown') {
+      const perm = await MediaLibrary.requestPermissionsAsync();
+      mediaLibraryPermissionState = perm.granted ? 'granted' : 'denied';
+    }
+    if (mediaLibraryPermissionState !== 'granted') return false;
+
+    const asset = await MediaLibrary.createAssetAsync(uri);
+    try {
+      const album = await MediaLibrary.getAlbumAsync(ZENRUN_ALBUM_NAME);
+      if (album) {
+        await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+      } else {
+        await MediaLibrary.createAlbumAsync(ZENRUN_ALBUM_NAME, asset, false);
+      }
+    } catch (albumErr) {
+      // Asset is still saved to Photos at the top level — album is a nice-to-have.
+      console.warn('Could not file photo into ZenRun album:', albumErr);
+    }
+    return true;
+  } catch (e) {
+    console.warn('Failed to save photo to Photos library:', e);
+    return false;
+  }
+}
 
 export interface PendingPhoto {
   uri: string;
@@ -57,8 +99,15 @@ export function useActivityPhotoCapture(tracker: TrackerHandle) {
 
       try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
 
+      const originalUri = result.assets[0].uri;
+
+      // Fire-and-forget: archive the full-resolution original to the user's
+      // Photos library so they keep a copy regardless of upload success.
+      // Done in parallel with the manipulator so the user feels no extra delay.
+      const photoSaveTask = saveOriginalToPhotos(originalUri);
+
       const manipulated = await ImageManipulator.manipulateAsync(
-        result.assets[0].uri,
+        originalUri,
         [{ resize: { width: 1200 } }],
         { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
       );
@@ -76,6 +125,7 @@ export function useActivityPhotoCapture(tracker: TrackerHandle) {
       };
 
       setPendingPhotos((prev) => [...prev, photo]);
+      await photoSaveTask;
     } catch (e) {
       console.warn('Photo capture failed', e);
     } finally {
