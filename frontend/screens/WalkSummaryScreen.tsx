@@ -41,6 +41,7 @@ import {
 } from '../services/walkLocationTracker';
 import { walkApi, walkPhotoApi } from '../services/api';
 import { PendingPhoto } from '../services/useActivityPhotoCapture';
+import { enqueueWalkDraft } from '../services/pendingPhoneActivities';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
 interface SerialisedSnapshot {
@@ -150,7 +151,30 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
 
       navigation.replace('WalkDetail', { walkId: walk.id, justSaved: true });
     } catch (e: any) {
-      Alert.alert('Could not save walk', e?.message ?? 'Please try again.');
+      // Save failed mid-flight. Persist as a draft so the walk is not lost —
+      // `drainPendingPhoneActivities` retries on the next auth-ready boot.
+      const draftId = await enqueueWalkDraft({
+        snapshot,
+        photos: pendingPhotos.map((p) => ({
+          base64: p.base64,
+          lat: p.lat,
+          lng: p.lng,
+          distanceKm: p.distanceKm,
+          capturedAt: p.capturedAt,
+        })),
+        mood: mood || undefined,
+        note: note.trim() || undefined,
+        publicWalkId,
+      });
+      if (draftId) {
+        Alert.alert(
+          'Saved as draft',
+          `Could not save right now (${e?.message ?? 'unknown error'}). We've kept this walk safe — it'll auto-retry next time you open the app while signed in.`,
+          [{ text: 'OK', onPress: () => navigation.popToTop() }],
+        );
+      } else {
+        Alert.alert('Could not save walk', e?.message ?? 'Please try again.');
+      }
     } finally {
       setSaving(false);
     }

@@ -29,12 +29,23 @@ let mediaLibraryPermissionState: 'unknown' | 'granted' | 'denied' = 'unknown';
  * Save a photo file (from `result.assets[0].uri`) to the user's Photos library
  * inside a "ZenRun" album. Best-effort — never throws, returns whether it
  * succeeded so the caller can log/notify if interesting.
+ *
+ * Permission strategy: request *write-only* access (the friendly "Allow ZenRun
+ * to add to your Photos?" single-button prompt). The previous version asked
+ * for full read+write access, which a reasonable user declines, silently
+ * disabling the photo backup for the rest of the session. After Build 32 we
+ * never ask for read access here — we don't need it.
  */
 async function saveOriginalToPhotos(uri: string): Promise<boolean> {
   try {
     if (mediaLibraryPermissionState === 'unknown') {
-      const perm = await MediaLibrary.requestPermissionsAsync();
-      mediaLibraryPermissionState = perm.granted ? 'granted' : 'denied';
+      const existing = await MediaLibrary.getPermissionsAsync(true);
+      if (existing.granted) {
+        mediaLibraryPermissionState = 'granted';
+      } else {
+        const perm = await MediaLibrary.requestPermissionsAsync(true);
+        mediaLibraryPermissionState = perm.granted ? 'granted' : 'denied';
+      }
     }
     if (mediaLibraryPermissionState !== 'granted') return false;
 
@@ -47,7 +58,9 @@ async function saveOriginalToPhotos(uri: string): Promise<boolean> {
         await MediaLibrary.createAlbumAsync(ZENRUN_ALBUM_NAME, asset, false);
       }
     } catch (albumErr) {
-      // Asset is still saved to Photos at the top level — album is a nice-to-have.
+      // Asset is still saved to Photos at the top level — album is a
+      // nice-to-have that requires read access we may not have under the
+      // writeOnly scope.
       console.warn('Could not file photo into ZenRun album:', albumErr);
     }
     return true;

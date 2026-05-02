@@ -36,6 +36,7 @@ import {
 } from '../services/walkLocationTracker';
 import { runApi, photoApi } from '../services/api';
 import { PendingPhoto } from '../services/useActivityPhotoCapture';
+import { enqueueRunDraft } from '../services/pendingPhoneActivities';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
 const RUN_ACCENT = '#F97316';
@@ -163,7 +164,31 @@ export function RunSummaryScreen({ navigation, route }: Props) {
       // Pop back to the Runs tab root
       navigation.replace('RunHistory');
     } catch (e: any) {
-      Alert.alert('Could not save run', e?.message ?? 'Please try again.');
+      // Save failed (auth expired, network down, backend hiccup). Persist as a
+      // draft so the run is recoverable next time the app boots with valid
+      // auth — `drainPendingPhoneActivities` is called from App.tsx on every
+      // auth-ready transition.
+      const draftId = await enqueueRunDraft({
+        snapshot,
+        photos: pendingPhotos.map((p) => ({
+          base64: p.base64,
+          lat: p.lat,
+          lng: p.lng,
+          distanceKm: p.distanceKm,
+          capturedAt: p.capturedAt,
+        })),
+        mood: mood || undefined,
+        note: note.trim() || undefined,
+      });
+      if (draftId) {
+        Alert.alert(
+          'Saved as draft',
+          `Could not save right now (${e?.message ?? 'unknown error'}). We've kept this run safe — it'll auto-retry next time you open the app while signed in.`,
+          [{ text: 'OK', onPress: () => navigation.replace('RunHistory') }],
+        );
+      } else {
+        Alert.alert('Could not save run', e?.message ?? 'Please try again.');
+      }
     } finally {
       setSaving(false);
     }

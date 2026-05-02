@@ -9,7 +9,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 
 // 📱 Screens
 import { HomeScreen } from './screens/HomeScreen';
@@ -31,6 +31,7 @@ import { DiscoverWalksScreen } from './screens/DiscoverWalksScreen';
 import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
 import { BetaScreen } from './screens/BetaScreen';
 import { WatchDiagnosticsScreen } from './screens/WatchDiagnosticsScreen';
+import { PhotoRecoveryScreen } from './screens/PhotoRecoveryScreen';
 import { GymTabScreen } from './screens/GymTabScreen';
 import { StepsTabScreen } from './screens/StepsTabScreen';
 import { WeightTabScreen } from './screens/WeightTabScreen';
@@ -43,6 +44,7 @@ import './services/walkBackgroundTask';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { colors } from './theme/colors';
 import { registerWatchWorkoutSync, drainPendingWatchPayloads } from './services/watchBridge';
+import { drainPendingPhoneActivities } from './services/pendingPhoneActivities';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -130,6 +132,7 @@ function LabsStack() {
       <Stack.Screen name="StepsTab" component={StepsTabScreen} options={{ headerShown: false }} />
       <Stack.Screen name="WeightTab" component={WeightTabScreen} options={{ headerShown: false }} />
       <Stack.Screen name="WatchDiagnostics" component={WatchDiagnosticsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="PhotoRecovery" component={PhotoRecoveryScreen} options={{ headerShown: false }} />
       {/* Keep legacy history routes for any deep-links still using them */}
       <Stack.Screen name="GymHistory" component={HistoryScreen} initialParams={{ mode: 'gym' }} options={{ headerShown: false }} />
       <Stack.Screen name="StepsHistory" component={HistoryScreen} initialParams={{ mode: 'steps' }} options={{ headerShown: false }} />
@@ -241,9 +244,23 @@ function WatchWorkoutBridgeHost() {
   }, []);
 
   // Drain any payloads queued while signed-out as soon as auth is ready.
+  // Both the watch queue (workouts that failed to upload at receive-time) and
+  // the phone-side draft queue (in-app recordings whose save call failed)
+  // retry here. Phone drafts run after the watch drain to keep the alert
+  // ordering predictable.
   useEffect(() => {
     if (!isAuthenticated) return;
-    void drainPendingWatchPayloads();
+    (async () => {
+      await drainPendingWatchPayloads();
+      const result = await drainPendingPhoneActivities();
+      if (result.succeeded > 0) {
+        const noun = result.succeeded === 1 ? 'recording' : 'recordings';
+        Alert.alert(
+          'Recordings restored',
+          `${result.succeeded} pending ${noun} from earlier ${result.succeeded === 1 ? 'has' : 'have'} now been saved.`,
+        );
+      }
+    })();
   }, [isAuthenticated]);
 
   return null;

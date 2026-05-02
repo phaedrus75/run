@@ -85,6 +85,15 @@ const FEATURES: FeatureRow[] = [
     screen: 'WatchDiagnostics',
     alwaysVisible: true,
   },
+  {
+    key: 'photo_recovery',
+    icon: 'images',
+    iconColor: '#E8A87C',
+    label: 'Recover Lost Photos',
+    description: 'Scan the app cache for in-run photos that never made it to your Photos library.',
+    screen: 'PhotoRecovery',
+    alwaysVisible: true,
+  },
 ];
 
 export function BetaScreen({ navigation }: Props) {
