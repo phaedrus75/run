@@ -6,7 +6,7 @@
  * Distance, duration and route are immutable (they're computed from GPS).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -22,8 +22,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { walkApi, type Walk } from '../services/api';
+import { walkApi, walkPhotoApi, type Walk } from '../services/api';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
+import { decodePolyline } from '../services/walkLocationTracker';
+import type { RouteForRetroactive } from '../services/retroactivePhotos';
+import { RetroactivePhotoPicker } from './RetroactivePhotoPicker';
 
 const MOODS = [
   { id: 'peaceful', emoji: '🌿', label: 'Peaceful' },
@@ -51,16 +54,36 @@ export function EditWalkModal({ visible, walk, onClose, onSaved, onDeleted }: Pr
   const [notes, setNotes] = useState('');
   const [category, setCategory] = useState<string>('outdoor');
   const [saving, setSaving] = useState(false);
+  const [retroPickerVisible, setRetroPickerVisible] = useState(false);
+  const [photosAdded, setPhotosAdded] = useState(0);
 
   useEffect(() => {
     if (walk) {
       setMood(walk.mood);
       setNotes(walk.notes ?? '');
       setCategory(walk.category ?? 'outdoor');
+      setPhotosAdded(0);
     }
   }, [walk]);
 
+  /** Activity descriptor for the retroactive photo picker. */
+  const retroActivity = useMemo<RouteForRetroactive | null>(() => {
+    if (!walk) return null;
+    return {
+      startedAt: walk.started_at,
+      endedAt: walk.ended_at,
+      totalDistanceKm: walk.distance_km,
+      routePoints: walk.route_polyline ? decodePolyline(walk.route_polyline) : [],
+    };
+  }, [walk]);
+
   if (!walk) return null;
+
+  // Walks always allow retroactive photo attach as long as we have a usable
+  // time window AND a non-zero distance. (Without distance we can't compute
+  // a `distance_marker_km`.)
+  const canAddPhotos =
+    !!walk.started_at && !!walk.ended_at && walk.distance_km > 0;
 
   const handleSave = async () => {
     setSaving(true);
@@ -186,11 +209,47 @@ export function EditWalkModal({ visible, walk, onClose, onSaved, onDeleted }: Pr
             maxLength={500}
           />
 
+          {canAddPhotos && (
+            <>
+              <Text style={styles.section}>📸 Photos</Text>
+              <Pressable
+                onPress={() => setRetroPickerVisible(true)}
+                style={styles.addPhotosBtn}
+              >
+                <Ionicons name="images-outline" size={18} color={colors.primary} />
+                <Text style={styles.addPhotosText}>
+                  {photosAdded > 0 ? `Added ${photosAdded} · Tap to add more` : 'Add from Photos library'}
+                </Text>
+              </Pressable>
+              <Text style={styles.addPhotosHint}>
+                Pulls photos from your library shot during the walk window
+                (±15 min) and tags each with the right distance marker.
+              </Text>
+            </>
+          )}
+
           <Pressable onPress={handleDelete} style={styles.deleteBtn}>
             <Ionicons name="trash-outline" size={18} color={colors.error} />
             <Text style={styles.deleteText}>Delete this walk</Text>
           </Pressable>
         </ScrollView>
+
+        {retroActivity && (
+          <RetroactivePhotoPicker
+            visible={retroPickerVisible}
+            activity={retroActivity}
+            uploadPhoto={async ({ base64, distanceKm, lat, lng }) => {
+              await walkPhotoApi.upload(walk.id, {
+                photo_data: base64,
+                distance_marker_km: distanceKm,
+                lat: lat ?? undefined,
+                lng: lng ?? undefined,
+              });
+            }}
+            onClose={() => setRetroPickerVisible(false)}
+            onComplete={(n) => setPhotosAdded((prev) => prev + n)}
+          />
+        )}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -293,5 +352,29 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
+  },
+  addPhotosBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: colors.primary + '40',
+    borderStyle: 'dashed',
+  },
+  addPhotosText: {
+    color: colors.primary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+  },
+  addPhotosHint: {
+    color: colors.textLight,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: spacing.xs,
+    paddingHorizontal: 4,
   },
 });

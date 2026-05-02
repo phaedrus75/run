@@ -25,8 +25,10 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from './RunTypeButton';
 import { WalkMap } from './WalkMap';
+import { RetroactivePhotoPicker } from './RetroactivePhotoPicker';
 import { photoApi, levelApi, type Run, type RunPhoto } from '../services/api';
 import { decodePolyline } from '../services/walkLocationTracker';
+import type { RouteForRetroactive } from '../services/retroactivePhotos';
 
 const ALL_RUN_TYPES = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
 
@@ -66,10 +68,28 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   const [uploading, setUploading] = useState(false);
   const [lightboxPhoto, setLightboxPhoto] = useState<RunPhoto | null>(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  // Retroactive photo picker state — opens a sheet that pulls photos from
+  // the user's library matching the run's [started_at - 15min, completed_at +
+  // 15min] window. Used for both watch-recorded runs (no in-workout camera)
+  // and as an upgrade path on iPhone-led runs where the user took photos
+  // on their phone but didn't use the in-app camera.
+  const [retroPickerVisible, setRetroPickerVisible] = useState(false);
 
   const routePoints = useMemo(
     () => (run?.route_polyline ? decodePolyline(run.route_polyline) : []),
     [run?.route_polyline],
+  );
+
+  /** Activity descriptor for the retroactive photo picker. The picker uses
+   *  these fields to query the Photos library and compute distance markers. */
+  const retroActivity = useMemo<RouteForRetroactive>(
+    () => ({
+      startedAt: run?.started_at ?? null,
+      endedAt: run?.completed_at ?? null,
+      totalDistanceKm: run?.distance_km ?? 0,
+      routePoints,
+    }),
+    [run?.started_at, run?.completed_at, run?.distance_km, routePoints],
   );
 
   /** Center + zoom that fits the whole route on screen. */
@@ -108,7 +128,10 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   }, [run]);
 
   useEffect(() => {
-    if (visible && run && (run.category || 'outdoor') === 'outdoor') {
+    // Watch-recorded runs (category='watch') also keep route + photos, so
+    // they get the same photo section as outdoor iPhone-led runs.
+    const cat = run?.category || 'outdoor';
+    if (visible && run && (cat === 'outdoor' || cat === 'watch')) {
       fetchPhotos();
     }
   }, [visible, run]);
@@ -257,6 +280,10 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   if (!run) return null;
 
   const isOutdoor = category === 'outdoor';
+  const isWatch = category === 'watch';
+  const showsPhotoSection = isOutdoor || isWatch;
+  const hasRouteForRetro =
+    !!run.started_at && !!run.completed_at && (run.distance_km ?? 0) > 0;
 
   return (
     <Modal
@@ -372,8 +399,11 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             numberOfLines={3}
           />
 
-          {/* Scenic Photos - outdoor only */}
-          {isOutdoor && (
+          {/* Scenic Photos — shown for outdoor iPhone-led AND watch-recorded runs.
+              Watch runs only get the retroactive (library) flow since the watch
+              has no camera; outdoor runs get both that and the existing single-
+              photo manual-marker flow. */}
+          {showsPhotoSection && (
             <View style={styles.photosSection}>
               <Text style={styles.label}>📸 Scenic Photos</Text>
 
@@ -422,11 +452,35 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
 
                   {/* Photo flow: idle -> pick -> marker -> caption -> upload */}
                   {photoStep === 'idle' && (
-                    <TouchableOpacity style={styles.addPhotoBtn} onPress={pickPhoto}>
-                      <Text style={styles.addPhotoBtnText}>
-                        {photos.length > 0 ? '+ Add another photo' : '+ Add a scenic photo'}
-                      </Text>
-                    </TouchableOpacity>
+                    <View style={{ gap: spacing.sm }}>
+                      {hasRouteForRetro && (
+                        <TouchableOpacity
+                          style={styles.addPhotoBtn}
+                          onPress={() => setRetroPickerVisible(true)}
+                        >
+                          <Text style={styles.addPhotoBtnText}>
+                            ✨ Add from Photos library
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      {isOutdoor && (
+                        <TouchableOpacity
+                          style={[styles.addPhotoBtn, hasRouteForRetro && styles.addPhotoBtnSecondary]}
+                          onPress={pickPhoto}
+                        >
+                          <Text
+                            style={[
+                              styles.addPhotoBtnText,
+                              hasRouteForRetro && styles.addPhotoBtnTextSecondary,
+                            ]}
+                          >
+                            {photos.length > 0
+                              ? '+ Add another photo (manual marker)'
+                              : '+ Add a scenic photo (manual marker)'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   )}
 
                   {photoStep === 'marker' && pendingPhotoUri && (
@@ -558,6 +612,21 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             )}
           </Pressable>
         </Modal>
+
+        {/* Retroactive photo picker — pulls from Photos library and uploads
+            to the same /runs/:id/photos endpoint as the in-app camera. */}
+        <RetroactivePhotoPicker
+          visible={retroPickerVisible}
+          activity={retroActivity}
+          uploadPhoto={async ({ base64, distanceKm }) => {
+            await photoApi.upload(run.id, {
+              photo_data: base64,
+              distance_marker_km: distanceKm,
+            });
+          }}
+          onClose={() => setRetroPickerVisible(false)}
+          onComplete={() => fetchPhotos()}
+        />
       </View>
     </Modal>
   );
@@ -845,9 +914,18 @@ const styles = StyleSheet.create({
     borderColor: colors.primary + '40',
     borderStyle: 'dashed',
   },
+  /** When the retroactive picker button is shown above, the manual-marker
+   *  capture button is demoted to a secondary action. */
+  addPhotoBtnSecondary: {
+    borderColor: colors.textLight + '60',
+  },
   addPhotoBtnText: {
     color: colors.primary,
     fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+  },
+  addPhotoBtnTextSecondary: {
+    color: colors.textSecondary,
     fontWeight: typography.weights.medium,
   },
   flowSection: {
