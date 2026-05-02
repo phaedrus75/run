@@ -326,6 +326,7 @@ function WalkRow({ walk, onPress }: { walk: Walk; onPress: () => void }) {
         <Text style={styles.walkRowMeta}>
           {dateLabel}
           {timeLabel ? ` · ${timeLabel}` : ''}
+          {walk.category === 'watch' ? ' · ⌚' : ''}
           {walk.photo_count ? ` · 📸 ${walk.photo_count}` : ''}
         </Text>
       </View>

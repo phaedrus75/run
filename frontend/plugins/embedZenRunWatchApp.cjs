@@ -301,6 +301,42 @@ function ensureAssetsResource(proj, watchUuid, groupKey) {
   if (groupKey) proj.addToPbxGroup(file, groupKey);
 }
 
+/**
+ * Idempotent system-framework linker. Walks the existing PBXFrameworksBuildPhase
+ * and skips if the framework is already present. node-xcode's `addFramework`
+ * is technically idempotent for the customFramework=false case but it always
+ * generates a fresh build-file UUID which inflates the pbxproj noise on
+ * every prebuild.
+ */
+function ensureSystemFramework(proj, watchUuid, frameworkName) {
+  const phase = proj.pbxFrameworksBuildPhaseObj(watchUuid);
+  if (!phase) return;
+  const already = (phase.files || []).some(
+    (f) => String(f.comment || '').includes(frameworkName),
+  );
+  if (already) return;
+  proj.addFramework(`System/Library/Frameworks/${frameworkName}`, {
+    target: watchUuid,
+    customFramework: false,
+  });
+}
+
+/**
+ * Copy the watch entitlements file into the iOS folder and tell the watch
+ * target's build settings to sign with it. Without this, HealthKit on the
+ * watch target gets stripped during the signing step and TestFlight
+ * validation rejects the IPA with "missing capability" errors.
+ */
+function ensureWatchEntitlements(iosRoot, projectRoot) {
+  const entitlementsSrc = path.join(
+    projectRoot, '..', 'watch-app', APP_NAME, `${APP_NAME}.entitlements`
+  );
+  if (!fs.existsSync(entitlementsSrc)) return null;
+  const entitlementsDest = path.join(iosRoot, APP_NAME, `${APP_NAME}.entitlements`);
+  fs.copyFileSync(entitlementsSrc, entitlementsDest);
+  return `${APP_NAME}/${APP_NAME}.entitlements`;
+}
+
 // ---------------------------------------------------------------------------
 // Build settings injection — node-xcode's updateBuildProperty doesn't always
 // land cleanly for the modern application product type because Xcode treats
@@ -313,7 +349,7 @@ function setWatchBuildProperty(proj, key, value) {
   proj.updateBuildProperty(key, value, undefined, TARGET_NAME_QUOTED);
 }
 
-function applyWatchBuildSettings(proj, appleTeamId) {
+function applyWatchBuildSettings(proj, appleTeamId, entitlementsRelPath) {
   setWatchBuildProperty(proj, 'INFOPLIST_FILE', `"${APP_NAME}/Info.plist"`);
   setWatchBuildProperty(proj, 'PRODUCT_BUNDLE_IDENTIFIER', WATCH_BUNDLE_ID);
   setWatchBuildProperty(proj, 'PRODUCT_NAME', `"$(TARGET_NAME)"`);
@@ -327,6 +363,9 @@ function applyWatchBuildSettings(proj, appleTeamId) {
   setWatchBuildProperty(proj, 'ASSETCATALOG_COMPILER_APPICON_NAME', 'AppIcon');
   setWatchBuildProperty(proj, 'GENERATE_INFOPLIST_FILE', 'NO');
   if (appleTeamId) setWatchBuildProperty(proj, 'DEVELOPMENT_TEAM', appleTeamId);
+  if (entitlementsRelPath) {
+    setWatchBuildProperty(proj, 'CODE_SIGN_ENTITLEMENTS', `"${entitlementsRelPath}"`);
+  }
 }
 
 /**
@@ -447,21 +486,27 @@ function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
     proj.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', watchUuid);
     proj.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', watchUuid);
     proj.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', watchUuid);
-    proj.addFramework('System/Library/Frameworks/WatchConnectivity.framework', {
-      target: watchUuid,
-      customFramework: false,
-    });
   }
 
-  // 4. Wire sources, assets, settings, embed phase, and dependency.
+  // Always (re-)ensure the system frameworks are linked. addFramework is
+  // idempotent for the customFramework=false case so it's safe to call on
+  // re-runs even if the target already exists from a prior prebuild.
+  ensureSystemFramework(proj, watchUuid, 'WatchConnectivity.framework');
+  ensureSystemFramework(proj, watchUuid, 'HealthKit.framework');
+  ensureSystemFramework(proj, watchUuid, 'CoreLocation.framework');
+
+  // 4. Copy entitlements to iOS folder so the build settings can reference it.
+  const entitlementsRelPath = ensureWatchEntitlements(iosRoot, projectRoot);
+
+  // 5. Wire sources, assets, settings, embed phase, and dependency.
   const groupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
   ensureSwiftSources(proj, watchUuid, watchDest, groupKey);
   ensureAssetsResource(proj, watchUuid, groupKey);
-  applyWatchBuildSettings(proj, appleTeamId);
+  applyWatchBuildSettings(proj, appleTeamId, entitlementsRelPath);
   ensureWatchDependency(proj, watchUuid);
   ensureEmbedWatchContentPhase(proj, watchUuid);
 
-  // 5. Persist with our textual fixups.
+  // 6. Persist with our textual fixups.
   fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
 }
 

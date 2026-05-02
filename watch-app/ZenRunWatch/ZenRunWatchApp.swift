@@ -5,26 +5,22 @@
  *
  * Architecture (Xcode 14+ / watchOS 9+):
  *   - One target, product type `com.apple.product-type.application`.
- *   - No separate WatchKit Extension target (the legacy
- *     `application.watchapp2` / `watchkit2-extension` split is deprecated).
- *   - WCSession is owned by `WatchSessionManager` (an ObservableObject) which
- *     activates exactly once on app launch and is shared via @StateObject.
- *
- * Build 30 ships this as a hello-world that proves the WCSession channel
- * end-to-end (transferUserInfo, applicationContext, sendMessage reply).
- * GPS / HealthKit / workout features are deliberately NOT included here —
- * they will be re-added in subsequent builds once the channel is proven.
+ *   - No separate WatchKit Extension target.
+ *   - WCSession is owned by `WatchSessionManager` and activated in init() so
+ *     the iPhone can see the channel before the first view appears.
+ *   - The active workout (if any) is owned by `ActiveWorkoutController`, also
+ *     a `@StateObject` injected as an environment object — that way both the
+ *     home screen and the active-workout view see the same instance and the
+ *     workout doesn't restart when the user navigates back to home.
  */
 
 import SwiftUI
 
 @main
 struct ZenRunWatchApp: App {
+    @StateObject private var workout = ActiveWorkoutController()
+
     init() {
-        // Activate WCSession as early as possible so we don't miss reachability
-        // changes the iPhone may broadcast before our first view appears.
-        // SwiftUI subscribes to the @Published properties via the
-        // .environmentObject below.
         WatchSessionManager.shared.start()
     }
 
@@ -32,6 +28,7 @@ struct ZenRunWatchApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(WatchSessionManager.shared)
+                .environmentObject(workout)
         }
     }
 }

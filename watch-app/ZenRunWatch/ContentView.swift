@@ -1,117 +1,143 @@
 /**
  * ContentView
  * -----------
- * Hello-world UI for build 30. Two send buttons and live channel state.
- * The whole point of this screen is to let the user prove the WCSession
- * channel works end-to-end without any GPS / HealthKit / workout code in
- * the way.
+ * Watch home screen. Two main paths:
  *
- * Acceptance criteria (Phase 1 — must all pass before we re-add features):
- *   1. Activation row reads `activated` shortly after launch.
- *   2. Reachable row reads `yes` when the iPhone's ZenRun app is foregrounded.
- *   3. Tap "Send Hello" → iPhone diagnostics screen's
- *      `transferUserInfo received` counter ticks up.
- *   4. Tap "Send Context" → iPhone's `applicationContext received` ticks up.
- *   5. Tap "Ping watch (live)" on the phone → reply alert shows `pong: true`.
+ *   - "Walk" / "Run" buttons start a workout and push the live metrics view.
+ *     If a workout is already in progress (i.e. the user navigated back to
+ *     home without stopping), the buttons collapse into a single "Continue"
+ *     row that re-opens the live view without restarting the session.
+ *
+ *   - A `Diagnostics` link (collapsed by default) preserves the build 30
+ *     hello-world buttons so we can ping the channel from the watch even in
+ *     a production build. They're not visible on the main screen anymore so
+ *     the user doesn't accidentally fire them mid-run.
+ *
+ * Channel state (activation, reachability, iPhone-app installed) lives at the
+ * bottom as a compact line — it shouldn't dominate the screen but should be
+ * visible when triaging "did my run sync?" questions.
  */
 
 import SwiftUI
-import WatchConnectivity
 
 struct ContentView: View {
     @EnvironmentObject var session: WatchSessionManager
+    @EnvironmentObject var workout: ActiveWorkoutController
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("ZenRun")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity, alignment: .center)
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 8) {
+                    if workout.state == .recording || workout.state == .paused {
+                        continueBanner
+                    } else if workout.state == .ended {
+                        // The summary view is reached via the same NavigationLink
+                        // that started the workout — see ActiveWorkoutView.
+                        continueBanner
+                    } else {
+                        startButtons
+                    }
 
-                statusBlock
+                    NavigationLink {
+                        DiagnosticsView()
+                            .environmentObject(session)
+                    } label: {
+                        Label("Diagnostics", systemImage: "wrench.and.screwdriver")
+                            .font(.footnote)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.top, 4)
 
-                buttonBlock
-
-                if let at = session.lastSendAt {
-                    Text("\(session.lastSendStatus) · \(timeOnly(at))")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 4)
+                    statusFooter
                 }
-
-                if let err = session.lastError {
-                    Text(err)
-                        .font(.caption2)
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 8)
+            .navigationTitle("ZenRun")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
-    private var statusBlock: some View {
-        VStack(spacing: 4) {
-            statusRow("Activation", value: activationLabel, ok: session.activationState == .activated)
-            statusRow("Reachable", value: session.isReachable ? "yes" : "no", ok: session.isReachable)
-            statusRow("iPhone app", value: session.isCompanionAppInstalled ? "installed" : "missing",
-                      ok: session.isCompanionAppInstalled)
-            statusRow("Sent", value: "\(session.sendCount)", ok: nil)
-        }
-        .padding(8)
-        .background(Color.gray.opacity(0.18))
-        .cornerRadius(8)
-    }
-
-    private var buttonBlock: some View {
+    private var startButtons: some View {
         VStack(spacing: 8) {
-            Button(action: session.sendHello) {
-                Text("Send Hello")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
+            NavigationLink {
+                ActiveWorkoutView(intendedKind: .walk)
+            } label: {
+                workoutButtonLabel(title: "Walk", systemImage: "figure.walk", color: .blue)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+
+            NavigationLink {
+                ActiveWorkoutView(intendedKind: .run)
+            } label: {
+                workoutButtonLabel(title: "Run", systemImage: "figure.run", color: .orange)
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
+        }
+    }
 
-            Button(action: session.sendContext) {
-                Text("Send Context")
+    private var continueBanner: some View {
+        NavigationLink {
+            ActiveWorkoutView(intendedKind: workout.kind)
+        } label: {
+            VStack(spacing: 4) {
+                Text(workout.state == .ended ? "Workout ready to save" : "Workout in progress")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Text("\(workout.kind.displayName) · \(formatDistanceKm(workout.distanceKm))")
                     .font(.body)
-                    .frame(maxWidth: .infinity)
+                    .fontWeight(.semibold)
             }
-            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
         }
+        .buttonStyle(.borderedProminent)
+        .tint(workout.state == .ended ? .green : .orange)
     }
 
-    private var activationLabel: String {
-        switch session.activationState {
-        case .notActivated: return "not activated"
-        case .inactive:     return "inactive"
-        case .activated:    return "activated"
-        @unknown default:   return "unknown"
-        }
-    }
-
-    private func statusRow(_ label: String, value: String, ok: Bool?) -> some View {
+    private func workoutButtonLabel(title: String, systemImage: String, color: Color) -> some View {
         HStack {
-            Text(label)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            Spacer()
-            Text(value)
-                .font(.caption)
+            Image(systemName: systemImage)
+            Text(title)
                 .fontWeight(.semibold)
-                .foregroundColor(ok == true ? .green : (ok == false ? .red : .primary))
+            Spacer()
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
     }
 
-    private func timeOnly(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f.string(from: date)
+    private var statusFooter: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(session.activationState == .activated ? Color.green : Color.gray)
+                    .frame(width: 6, height: 6)
+                Text(channelLabel)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            if !session.isCompanionAppInstalled {
+                Text("Install the iPhone app first")
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private var channelLabel: String {
+        switch session.activationState {
+        case .activated:
+            return session.isReachable ? "Phone connected" : "Phone reachable when awake"
+        case .inactive:
+            return "Channel inactive"
+        case .notActivated:
+            return "Channel not activated"
+        @unknown default:
+            return "Channel unknown"
+        }
     }
 }

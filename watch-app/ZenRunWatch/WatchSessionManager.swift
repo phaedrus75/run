@@ -84,6 +84,91 @@ final class WatchSessionManager: NSObject, ObservableObject {
         }
     }
 
+    /// Build & fire a real workout payload to the iPhone. Shape matches
+    /// `WatchPayload` in `frontend/services/watchBridge.ts`:
+    ///   { zenRun, _seq, type, distance_km, duration_seconds,
+    ///     started_at, ended_at, elevation_gain_m, pointsJSON, source }
+    /// `pointsJSON` is `[[lat, lng, timestamp_ms], ...]` so the iPhone can
+    /// re-encode the polyline with its existing helpers (we don't need a
+    /// polyline encoder on the watch).
+    ///
+    /// Uses `transferUserInfo` (queued, durable) AND `updateApplicationContext`
+    /// (last-state, persists across launches) — same belt-and-braces pattern
+    /// the legacy app used. The iPhone bridge dedupes via `_seq`.
+    func sendWorkout(
+        kind: WorkoutKind,
+        distanceKm: Double,
+        durationSec: TimeInterval,
+        elevationGainM: Double,
+        startedAt: Date,
+        endedAt: Date,
+        points: [TrackedPoint]
+    ) -> Bool {
+        guard ensureActivated() else { return false }
+        guard let payload = buildWorkoutPayload(
+            kind: kind,
+            distanceKm: distanceKm,
+            durationSec: durationSec,
+            elevationGainM: elevationGainM,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            points: points
+        ) else {
+            DispatchQueue.main.async {
+                self.lastError = "workout: failed to encode points"
+                self.lastSendStatus = "encode failed"
+                self.lastSendAt = Date()
+            }
+            return false
+        }
+
+        WCSession.default.transferUserInfo(payload)
+        // Best-effort applicationContext too. If it throws (rare — only on
+        // a malformed dict) we still have the durable transferUserInfo
+        // queued so the iPhone will receive it.
+        try? WCSession.default.updateApplicationContext(payload)
+        persistLastPayload(payload)
+        bumpStatus("workout sent")
+        return true
+    }
+
+    private func buildWorkoutPayload(
+        kind: WorkoutKind,
+        distanceKm: Double,
+        durationSec: TimeInterval,
+        elevationGainM: Double,
+        startedAt: Date,
+        endedAt: Date,
+        points: [TrackedPoint]
+    ) -> [String: Any]? {
+        // pointsJSON shape that watchBridge.ts.parsePoints expects:
+        // each row is `[lat, lng, timestamp_ms]`. Anything shorter is
+        // skipped on the iPhone side, so be strict here too.
+        let rows: [[Double]] = points.map { p in
+            [p.lat, p.lng, p.timestamp.timeIntervalSince1970 * 1000.0]
+        }
+        guard let pointsData = try? JSONSerialization.data(withJSONObject: rows, options: []),
+              let pointsString = String(data: pointsData, encoding: .utf8) else {
+            return nil
+        }
+
+        let iso = ISO8601DateFormatter()
+        return [
+            "zenRun": true,
+            "_seq": nextSeq(),
+            "type": kind.payloadType,
+            "distance_km": distanceKm,
+            "duration_seconds": Int(durationSec.rounded()),
+            "elevation_gain_m": elevationGainM,
+            "started_at": iso.string(from: startedAt),
+            "ended_at": iso.string(from: endedAt),
+            "pointsJSON": pointsString,
+            "source": "watch",
+            "watchAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?",
+            "watchBuild": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?",
+        ]
+    }
+
     // MARK: - Helpers
 
     private func ensureActivated() -> Bool {
@@ -139,16 +224,31 @@ final class WatchSessionManager: NSObject, ObservableObject {
         return (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
     }
 
+    /// Dictionary returned to the iPhone's `pingWatch()` / `resendLastWorkout()`
+    /// calls. The keys here MUST match what `WatchLiveReply` (in
+    /// `services/watchBridge.ts`) reads, otherwise the diagnostic popup shows
+    /// stale "never / n/a / no" values even when sends are succeeding.
     private func snapshot() -> [String: Any] {
-        return [
+        var out: [String: Any] = [
             "activationState": activationStateLabel(activationState),
             "isReachable": WCSession.default.isReachable,
             "isCompanionAppInstalled": WCSession.default.isCompanionAppInstalled,
             "sendCount": sendCount,
             "lastSendStatus": lastSendStatus,
+            "hasStoredPayload": UserDefaults.standard.data(forKey: Self.kLastPayloadKey) != nil,
             "watchAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?",
             "watchBuild": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?",
         ]
+        if let at = lastSendAt {
+            out["lastSendAt"] = ISO8601DateFormatter().string(from: at)
+            // A non-nil lastError means the most recent send threw; otherwise
+            // the iPhone treats `lastSendOk` as the success indicator.
+            out["lastSendOk"] = (lastError == nil)
+        }
+        if let err = lastError {
+            out["lastSendError"] = err
+        }
+        return out
     }
 }
 

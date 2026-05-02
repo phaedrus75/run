@@ -22,8 +22,19 @@
 	<string>1.6.0</string>
 	<key>CFBundleVersion</key>
 	<string>30</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>ZenRun reads heart rate and active energy during your watch workouts so we can show your live performance.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>ZenRun records your workouts on your watch and uses the workout session to keep tracking when the screen is off.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ZenRun needs your location to record your route while you walk or run with the watch.</string>
 	<key>WKApplication</key>
 	<true/>
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>workout-processing</string>
+		<string>location</string>
+	</array>
 	<key>WKCompanionAppBundleIdentifier</key>
 	<string>com.phaedrus75.runzen</string>
 	<key>WKWatchOnly</key>

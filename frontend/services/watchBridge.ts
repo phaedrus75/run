@@ -224,7 +224,10 @@ async function uploadPayload(raw: WatchPayload, opts: { showAlerts: boolean }): 
         run_type: runType,
         duration_seconds: durationSeconds,
         distance_km: Number(distanceKm.toFixed(3)),
-        category: 'outdoor',
+        // Watch-recorded runs use a distinct category so the iPhone UI can
+        // badge them and skip the live in-workout photo capture (the watch
+        // has no camera). Walks already used 'watch' for the same reason.
+        category: 'watch',
         started_at: raw.started_at,
         completed_at: new Date().toISOString(),
         route_polyline: polylineStr || undefined,

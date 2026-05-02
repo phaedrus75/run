@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.phaedrus75.runzen",
-      "buildNumber": "30",
+      "buildNumber": "31",
       "appleTeamId": "45WAZFV76R",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -70,6 +70,7 @@
     },
     "plugins": [
       "./plugins/withWatchApp.js",
+      "./plugins/withHealthKit.js",
       "./plugins/withPodfileResourceBundleFix.js",
       "expo-font",
       "@react-native-community/datetimepicker",
