@@ -232,7 +232,12 @@ function ensureEmbedWatchContentPhase(proj, watchUuid) {
   objs.PBXCopyFilesBuildPhase[phaseUuid] = {
     isa: 'PBXCopyFilesBuildPhase',
     buildActionMask: 2147483647,
-    dstPath: '$(CONTENTS_FOLDER_PATH)/Watch',
+    // Pbxproj string values containing $/(/) must be wrapped in literal
+    // quotes inside the JS string. CocoaPods' Nanaimo parser is stricter
+    // than Xcode's and will refuse to parse `$(CONTENTS_FOLDER_PATH)/Watch`
+    // without them. Compare node-xcode's own watch2_app code in
+    // pbxProject.js which uses `'"$(CONTENTS_FOLDER_PATH)/Watch"'`.
+    dstPath: '"$(CONTENTS_FOLDER_PATH)/Watch"',
     dstSubfolderSpec: 16,
     files: [{ value: buildFileUuid, comment: `${APP_NAME}.app in Embed Watch Content` }],
     name: '"Embed Watch Content"',
