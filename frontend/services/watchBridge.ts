@@ -16,6 +16,12 @@ const PENDING_QUEUE_KEY = '@zenrun:pendingWatchPayloads';
 type WatchPayload = {
   zenRun?: boolean | number;
   type?: string;
+  /**
+   * `kind` is set to "hello" / "hello-context" by the watch's diagnostic
+   * channel-prove buttons (build 30 hello-world). Real workouts leave it
+   * unset and use `type` to distinguish walk from run.
+   */
+  kind?: string;
   distance_km?: number;
   duration_seconds?: number;
   elevation_gain_m?: number;
@@ -162,6 +168,12 @@ async function enqueuePayload(payload: WatchPayload): Promise<void> {
 async function uploadPayload(raw: WatchPayload, opts: { showAlerts: boolean }): Promise<boolean> {
   const isZen = raw.zenRun === true || raw.zenRun === 1;
   if (!isZen) return false;
+
+  // Diagnostic hello-world payloads (sent by the watch's hello-world UI in
+  // build 30) prove the WCSession channel works without representing a real
+  // workout. Skip silently — the native bridge has already incremented its
+  // diagnostic counters by the time we reach this JS handler.
+  if (raw.kind === 'hello' || raw.kind === 'hello-context') return false;
 
   const token = await getToken();
   if (!token) {

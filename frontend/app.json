@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.phaedrus75.runzen",
-      "buildNumber": "29",
+      "buildNumber": "30",
       "appleTeamId": "45WAZFV76R",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -61,10 +61,6 @@
                 {
                   "targetName": "ZenRunWatch",
                   "bundleIdentifier": "com.phaedrus75.runzen.watchkitapp"
-                },
-                {
-                  "targetName": "ZenRunWatch WatchKit Extension",
-                  "bundleIdentifier": "com.phaedrus75.runzen.watchkitapp.watchkitextension"
                 }
               ]
             }

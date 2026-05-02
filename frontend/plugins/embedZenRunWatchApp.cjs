@@ -1,6 +1,21 @@
 /**
- * Copies watch-app sources into ios/ and adds WatchKit 2 app + extension targets via node-xcode.
- * Idempotent: skips if a watchOS app target is already present.
+ * embedZenRunWatchApp
+ * -------------------
+ * Adds a modern single-target SwiftUI watchOS app to the iOS Xcode project.
+ *
+ * Architecture (Xcode 14+ / watchOS 9+):
+ *   - One target: `ZenRunWatch`, productType `com.apple.product-type.application`.
+ *   - SDKROOT=watchos, TARGETED_DEVICE_FAMILY=4.
+ *   - No separate WatchKit Extension target — the deprecated
+ *     `application.watchapp2` / `watchkit2-extension` split is gone.
+ *   - The iPhone target embeds the watch .app via a PBXCopyFilesBuildPhase
+ *     ("Embed Watch Content") so the IPA contains it under
+ *     `Payload/ZenRun.app/Watch/ZenRunWatch.app`.
+ *
+ * Source-of-truth lives at `<projectRoot>/../watch-app/ZenRunWatch/` and is
+ * copied to `<iosRoot>/ZenRunWatch/` on every prebuild. The plugin is
+ * idempotent — when the watchOS target already exists it only refreshes the
+ * source files, version strings, and signing settings.
  */
 
 const fs = require('fs');
@@ -8,131 +23,15 @@ const path = require('path');
 const xcode = require('xcode');
 const pbxFile = require('xcode/lib/pbxFile');
 
-const EXT_NAME = 'ZenRunWatch WatchKit Extension';
 const APP_NAME = 'ZenRunWatch';
-/** PBXNativeTarget _comment values include quotes; pbxTargetByName matches these exactly. */
-const EXT_NATIVE_TARGET_COMMENT = '"ZenRunWatch WatchKit Extension"';
-const APP_NATIVE_TARGET_COMMENT = '"ZenRunWatch"';
-/** Values of `name` on PBXNativeTarget as stored by node-xcode / parser (includes embedded quotes). */
-const APP_TARGET_FIND_KEY = '"ZenRunWatch"';
-const EXT_TARGET_FIND_KEY = '"ZenRunWatch WatchKit Extension"';
+const APP_TARGET_FIND_KEY = `"${APP_NAME}"`;
+const WATCH_BUNDLE_ID = 'com.phaedrus75.runzen.watchkitapp';
+const PHONE_BUNDLE_ID = 'com.phaedrus75.runzen';
+const WATCHOS_DEPLOYMENT_TARGET = '9.0';
 
-/**
- * Expo's template pbxproj often has no PBXTargetDependency / PBXContainerItemProxy sections.
- * node-xcode's addTargetDependency skips work when those sections are missing, so Watch never
- * builds before the iOS "Embed Watch Content" phase (archive fails: Release-watchos/ZenRunWatch.app missing).
- */
-function ensurePbxDependencySections(proj) {
-  const objs = proj.hash.project.objects;
-  if (!objs.PBXTargetDependency) objs.PBXTargetDependency = {};
-  if (!objs.PBXContainerItemProxy) objs.PBXContainerItemProxy = {};
-}
-
-function nativeTargetDependsOn(proj, fromUuid, toUuid) {
-  const nt = proj.pbxNativeTargetSection();
-  const from = nt[fromUuid];
-  if (!from || !Array.isArray(from.dependencies)) return false;
-  const depSection = proj.hash.project.objects.PBXTargetDependency;
-  if (!depSection) return false;
-  for (const ref of from.dependencies) {
-    const row = depSection[ref.value];
-    if (row && String(row.target).replace(/"/g, '') === String(toUuid).replace(/"/g, '')) return true;
-  }
-  return false;
-}
-
-/**
- * App Store rejects the IPA with "Missing Icons" / "CFBundleIconName missing" if the Watch app's
- * Assets.xcassets isn't compiled into the .app product. node-xcode's addTarget('watch2_app')
- * doesn't create a Resources build phase, so we add one and wire the asset catalog into it.
- *
- * We bypass `proj.addResourceFile` because it calls `correctForResourcesPath` which throws on
- * Expo templates (no "Resources" PBXGroup → null .path access). Lower-level helpers do the same
- * work without that lookup.
- *
- * Idempotent: skips work when the catalog is already wired up.
- */
-function ensureWatchAppResources(proj) {
-  const watchUuid = proj.findTargetKey(APP_TARGET_FIND_KEY);
-  if (!watchUuid) return;
-  const nt = proj.pbxNativeTargetSection()[watchUuid];
-  if (!nt) return;
-
-  const hasResources = (nt.buildPhases || []).some((bp) => bp.comment === 'Resources');
-  if (!hasResources) {
-    proj.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', watchUuid);
-  }
-
-  const assetsRel = `${APP_NAME}/Assets.xcassets`;
-  const phase = proj.pbxResourcesBuildPhaseObj(watchUuid);
-  const alreadyHasAssets =
-    phase && (phase.files || []).some((f) => String(f.comment || '').includes('Assets.xcassets'));
-
-  if (!alreadyHasAssets) {
-    const file = new pbxFile(assetsRel);
-    file.uuid = proj.generateUuid();
-    file.fileRef = proj.generateUuid();
-    file.target = watchUuid;
-    proj.addToPbxFileReferenceSection(file);
-    proj.addToPbxBuildFileSection(file);
-    proj.addToPbxResourcesBuildPhase(file);
-    const zenGroupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
-    if (zenGroupKey) proj.addToPbxGroup(file, zenGroupKey);
-  }
-
-  proj.updateBuildProperty('ASSETCATALOG_COMPILER_APPICON_NAME', 'AppIcon', undefined, APP_NATIVE_TARGET_COMMENT);
-}
-
-/**
- * Without DEVELOPMENT_TEAM on Watch targets Xcode 14+ archives fail with
- * `Signing for "X" requires a development team`. EAS provisions credentials for these
- * bundle IDs via `extra.eas.build.experimental.ios.appExtensions`, but Xcode still needs
- * the team set on the target. Idempotent: the property setter is a no-op when unchanged.
- */
-function ensureWatchTargetDevelopmentTeam(proj, appleTeamId) {
-  if (!appleTeamId) return;
-  proj.updateBuildProperty('DEVELOPMENT_TEAM', appleTeamId, undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('DEVELOPMENT_TEAM', appleTeamId, undefined, APP_NATIVE_TARGET_COMMENT);
-}
-
-/**
- * Idempotently registers any new .swift files in the WatchKit Extension folder against the
- * extension target's Sources phase. The initial-creation path already loops through every
- * file once, but for local incremental rebuilds (or when adding files later) we need to
- * pick up newcomers without re-running the whole add-target flow.
- */
-function ensureWatchExtensionSources(proj, extDest) {
-  const extUuid = proj.findTargetKey(EXT_TARGET_FIND_KEY);
-  if (!extUuid) return;
-  const sourcesPhase = proj.pbxSourcesBuildPhaseObj(extUuid);
-  if (!sourcesPhase) return;
-  const present = new Set(
-    (sourcesPhase.files || []).map((f) => String(f.comment || '').replace(/ in Sources$/, '').trim()),
-  );
-  const zenGroupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
-  if (!zenGroupKey) return;
-  for (const fname of fs.readdirSync(extDest).filter((f) => f.endsWith('.swift'))) {
-    if (present.has(fname)) continue;
-    const rel = `${EXT_NAME}/${fname}`;
-    proj.addSourceFile(rel, { target: extUuid }, zenGroupKey);
-  }
-}
-
-/** ZenRun → ZenRunWatch → WatchKit Extension so archive builds watch products before embed. */
-function ensureWatchTargetDependencies(proj) {
-  ensurePbxDependencySections(proj);
-  const mainUuid = proj.getFirstTarget().uuid;
-  const watchUuid = proj.findTargetKey(APP_TARGET_FIND_KEY);
-  const extUuid = proj.findTargetKey(EXT_TARGET_FIND_KEY);
-  if (!watchUuid || !extUuid) return;
-
-  if (!nativeTargetDependsOn(proj, mainUuid, watchUuid)) {
-    proj.addTargetDependency(mainUuid, [watchUuid]);
-  }
-  if (!nativeTargetDependsOn(proj, watchUuid, extUuid)) {
-    proj.addTargetDependency(watchUuid, [extUuid]);
-  }
-}
+// ---------------------------------------------------------------------------
+// File system helpers
+// ---------------------------------------------------------------------------
 
 function rmrf(p) {
   if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
@@ -158,50 +57,50 @@ function findPbxproj(iosRoot) {
 }
 
 /**
- * Apple requires the Watch app + extension Info.plists to share CFBundleShortVersionString and
- * CFBundleVersion with the companion iOS app. Validation otherwise fails with:
- *   "The value of CFBundleShortVersionString in your WatchKit app's Info.plist (X) does not match
- *    the value in your companion app's Info.plist (Y)."
- * Idempotent: regex covers any current value, including ours after a prior run.
+ * Apple validation requires the watch app's CFBundleShortVersionString to
+ * match the iPhone app's. Build number (CFBundleVersion) must also match per
+ * App Store Connect rules. Substitute both via simple regex — the source
+ * Info.plist holds placeholder values that we overwrite on every prebuild.
  */
-function syncWatchAppVersion(plistPaths, version, buildNumber) {
-  const escape = (v) => String(v).replace(/[<&>]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
-  for (const plistPath of plistPaths) {
-    if (!fs.existsSync(plistPath)) continue;
-    let body = fs.readFileSync(plistPath, 'utf8');
-    if (version) {
-      body = body.replace(
-        /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]*(<\/string>)/,
-        `$1${escape(version)}$2`,
-      );
-    }
-    if (buildNumber) {
-      body = body.replace(
-        /(<key>CFBundleVersion<\/key>\s*<string>)[^<]*(<\/string>)/,
-        `$1${escape(buildNumber)}$2`,
-      );
-    }
-    fs.writeFileSync(plistPath, body);
+function syncWatchAppVersion(plistPath, version, buildNumber) {
+  if (!fs.existsSync(plistPath)) return;
+  const escape = (v) =>
+    String(v).replace(/[<&>]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  let body = fs.readFileSync(plistPath, 'utf8');
+  if (version) {
+    body = body.replace(
+      /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]*(<\/string>)/,
+      `$1${escape(version)}$2`,
+    );
   }
+  if (buildNumber) {
+    body = body.replace(
+      /(<key>CFBundleVersion<\/key>\s*<string>)[^<]*(<\/string>)/,
+      `$1${escape(buildNumber)}$2`,
+    );
+  }
+  fs.writeFileSync(plistPath, body);
 }
 
+/**
+ * Copy `assets/icon.png` into the watch app's AppIcon.appiconset so the
+ * IPA passes Apple's "Missing Icons" validation. We write a minimal
+ * watchos-platform Contents.json alongside it.
+ */
 function ensureAppIcon(iosRoot, projectRoot) {
   const iconSrc = path.join(projectRoot, 'assets', 'icon.png');
-  const appIconDir = path.join(iosRoot, APP_NAME, 'Assets.xcassets', 'AppIcon.appiconset');
   if (!fs.existsSync(iconSrc)) return;
-  fs.mkdirSync(appIconDir, { recursive: true });
-  fs.copyFileSync(iconSrc, path.join(appIconDir, 'AppIcon.png'));
+  const iconDir = path.join(iosRoot, APP_NAME, 'Assets.xcassets', 'AppIcon.appiconset');
+  fs.mkdirSync(iconDir, { recursive: true });
+  fs.copyFileSync(iconSrc, path.join(iconDir, 'AppIcon.png'));
+  // The source-of-truth Contents.json files are also copied; this is a
+  // belt-and-braces overwrite in case we ever lose them.
   fs.writeFileSync(
-    path.join(appIconDir, 'Contents.json'),
+    path.join(iconDir, 'Contents.json'),
     JSON.stringify(
       {
         images: [
-          {
-            filename: 'AppIcon.png',
-            idiom: 'universal',
-            platform: 'watchos',
-            size: '1024x1024',
-          },
+          { filename: 'AppIcon.png', idiom: 'universal', platform: 'watchos', size: '1024x1024' },
         ],
         info: { version: 1, author: 'xcode' },
       },
@@ -209,83 +108,274 @@ function ensureAppIcon(iosRoot, projectRoot) {
       2,
     ),
   );
-  fs.writeFileSync(
-    path.join(iosRoot, APP_NAME, 'Assets.xcassets', 'Contents.json'),
-    JSON.stringify({ info: { version: 1, author: 'xcode' } }, null, 2),
-  );
 }
 
-function watchTargetsAlreadyPresent(proj) {
-  const section = proj.pbxNativeTargetSection();
-  for (const key of Object.keys(section)) {
-    if (key.endsWith('_comment')) continue;
-    const t = section[key];
-    const pt = t && t.productType ? String(t.productType).replace(/"/g, '') : '';
-    if (pt === 'com.apple.product-type.application.watchapp2') return true;
-  }
-  return false;
+// ---------------------------------------------------------------------------
+// Xcode project mutators
+// ---------------------------------------------------------------------------
+
+/**
+ * Expo's template pbxproj often has empty PBXTargetDependency /
+ * PBXContainerItemProxy sections. node-xcode's addTargetDependency silently
+ * skips work when those are missing, so the iPhone target never depends on
+ * the watch target and the archive can race ahead of the watch build.
+ */
+function ensurePbxDependencySections(proj) {
+  const objs = proj.hash.project.objects;
+  if (!objs.PBXTargetDependency) objs.PBXTargetDependency = {};
+  if (!objs.PBXContainerItemProxy) objs.PBXContainerItemProxy = {};
+}
+
+function findWatchTarget(proj) {
+  return proj.findTargetKey(APP_TARGET_FIND_KEY);
 }
 
 /**
- * node-xcode addTarget leaves Watch targets inheriting iOS (TARGETED_DEVICE_FAMILY 1,2) with no SDKROOT,
- * so Xcode builds them for iphoneos and fails on watchkit2-extension / watchapp2 product types.
- * Inject watchOS settings on every XCBuildConfiguration that uses our Watch bundle IDs.
+ * Wipes any prior watch app target (legacy or modern) so we can re-add a
+ * clean one. Used when the existing target doesn't match the modern
+ * product type — historically we shipped `application.watchapp2`.
+ */
+function removeStaleWatchTargets(proj) {
+  const section = proj.pbxNativeTargetSection();
+  const stale = [];
+  for (const key of Object.keys(section)) {
+    if (key.endsWith('_comment')) continue;
+    const t = section[key];
+    if (!t || typeof t !== 'object') continue;
+    const productType = String(t.productType || '').replace(/"/g, '');
+    const name = String(t.name || '').replace(/"/g, '');
+    const isWatch =
+      name === APP_NAME ||
+      name === 'ZenRunWatch WatchKit Extension' ||
+      productType === 'com.apple.product-type.application.watchapp2' ||
+      productType === 'com.apple.product-type.watchkit2-extension';
+    if (isWatch) stale.push({ uuid: key, name });
+  }
+  for (const s of stale) {
+    try {
+      proj.removeTarget(s.uuid);
+    } catch (_) {
+      // node-xcode's removeTarget can throw on partial sections; fall through
+      // and let the addTarget below recreate the canonical entries.
+    }
+  }
+}
+
+/**
+ * Add an "Embed Watch Content" copy-files build phase to the iPhone target.
+ * The watch app .app needs to land at `$(CONTENTS_FOLDER_PATH)/Watch/`
+ * inside the iPhone .app bundle.
+ *
+ * We construct the phase manually because node-xcode's helpers don't offer
+ * the right `dstSubfolderSpec` for watch embedding.
+ */
+function ensureEmbedWatchContentPhase(proj, watchUuid) {
+  const phoneUuid = proj.getFirstTarget().uuid;
+  const phoneTarget = proj.pbxNativeTargetSection()[phoneUuid];
+  if (!phoneTarget) return;
+
+  // Idempotent: skip if the phase already exists.
+  const existing = (phoneTarget.buildPhases || []).find(
+    (bp) => String(bp.comment || '').includes('Embed Watch Content'),
+  );
+
+  // Locate the watch app's product reference so we can copy its .app.
+  const productRef = proj.pbxNativeTargetSection()[watchUuid] &&
+    proj.pbxNativeTargetSection()[watchUuid].productReference;
+  if (!productRef) return;
+
+  // The PBXBuildFile that wraps the productReference for the copy phase.
+  const objs = proj.hash.project.objects;
+  if (!objs.PBXBuildFile) objs.PBXBuildFile = {};
+  if (!objs.PBXCopyFilesBuildPhase) objs.PBXCopyFilesBuildPhase = {};
+
+  let buildFileUuid;
+  for (const key of Object.keys(objs.PBXBuildFile)) {
+    if (key.endsWith('_comment')) continue;
+    const bf = objs.PBXBuildFile[key];
+    if (
+      bf &&
+      String(bf.fileRef).replace(/"/g, '') === String(productRef).replace(/"/g, '') &&
+      String(bf.settings || '').includes('RemoveHeadersOnCopy')
+    ) {
+      buildFileUuid = key;
+      break;
+    }
+  }
+  if (!buildFileUuid) {
+    buildFileUuid = proj.generateUuid();
+    objs.PBXBuildFile[buildFileUuid] = {
+      isa: 'PBXBuildFile',
+      fileRef: productRef,
+      settings: { ATTRIBUTES: ['RemoveHeadersOnCopy'] },
+    };
+    objs.PBXBuildFile[`${buildFileUuid}_comment`] = `${APP_NAME}.app in Embed Watch Content`;
+  }
+
+  if (existing) {
+    // Phase already wired up; ensure the build file is present.
+    const phaseUuid = existing.value;
+    const phase = objs.PBXCopyFilesBuildPhase[phaseUuid];
+    if (phase) {
+      phase.files = phase.files || [];
+      const already = phase.files.some(
+        (f) => String(f.value).replace(/"/g, '') === String(buildFileUuid).replace(/"/g, ''),
+      );
+      if (!already) {
+        phase.files.push({ value: buildFileUuid, comment: `${APP_NAME}.app in Embed Watch Content` });
+      }
+    }
+    return;
+  }
+
+  const phaseUuid = proj.generateUuid();
+  objs.PBXCopyFilesBuildPhase[phaseUuid] = {
+    isa: 'PBXCopyFilesBuildPhase',
+    buildActionMask: 2147483647,
+    dstPath: '$(CONTENTS_FOLDER_PATH)/Watch',
+    dstSubfolderSpec: 16,
+    files: [{ value: buildFileUuid, comment: `${APP_NAME}.app in Embed Watch Content` }],
+    name: '"Embed Watch Content"',
+    runOnlyForDeploymentPostprocessing: 0,
+  };
+  objs.PBXCopyFilesBuildPhase[`${phaseUuid}_comment`] = 'Embed Watch Content';
+
+  phoneTarget.buildPhases = phoneTarget.buildPhases || [];
+  phoneTarget.buildPhases.push({ value: phaseUuid, comment: 'Embed Watch Content' });
+}
+
+/**
+ * Make sure the iPhone target depends on the watch target so Xcode builds
+ * the .app before the embed phase tries to copy it.
+ */
+function ensureWatchDependency(proj, watchUuid) {
+  ensurePbxDependencySections(proj);
+  const phoneUuid = proj.getFirstTarget().uuid;
+  const nt = proj.pbxNativeTargetSection();
+  const phoneTarget = nt[phoneUuid];
+  if (!phoneTarget) return;
+  const depSection = proj.hash.project.objects.PBXTargetDependency;
+
+  const alreadyDepends = (phoneTarget.dependencies || []).some((d) => {
+    const row = depSection[d.value];
+    return row && String(row.target).replace(/"/g, '') === String(watchUuid).replace(/"/g, '');
+  });
+  if (alreadyDepends) return;
+  proj.addTargetDependency(phoneUuid, [watchUuid]);
+}
+
+/**
+ * Wire all .swift files from the watch sources directory into the watch
+ * target's Sources build phase. Idempotent — skips files already present.
+ */
+function ensureSwiftSources(proj, watchUuid, watchDest, groupKey) {
+  const sourcesPhase = proj.pbxSourcesBuildPhaseObj(watchUuid);
+  if (!sourcesPhase) return;
+  const present = new Set(
+    (sourcesPhase.files || []).map((f) => String(f.comment || '').replace(/ in Sources$/, '').trim()),
+  );
+  for (const fname of fs.readdirSync(watchDest).filter((f) => f.endsWith('.swift'))) {
+    if (present.has(fname)) continue;
+    const rel = `${APP_NAME}/${fname}`;
+    proj.addSourceFile(rel, { target: watchUuid }, groupKey);
+  }
+}
+
+function ensureAssetsResource(proj, watchUuid, groupKey) {
+  const phase = proj.pbxResourcesBuildPhaseObj(watchUuid);
+  if (!phase) return;
+  const already = (phase.files || []).some((f) => String(f.comment || '').includes('Assets.xcassets'));
+  if (already) return;
+  const file = new pbxFile(`${APP_NAME}/Assets.xcassets`);
+  file.uuid = proj.generateUuid();
+  file.fileRef = proj.generateUuid();
+  file.target = watchUuid;
+  proj.addToPbxFileReferenceSection(file);
+  proj.addToPbxBuildFileSection(file);
+  proj.addToPbxResourcesBuildPhase(file);
+  if (groupKey) proj.addToPbxGroup(file, groupKey);
+}
+
+// ---------------------------------------------------------------------------
+// Build settings injection — node-xcode's updateBuildProperty doesn't always
+// land cleanly for the modern application product type because Xcode treats
+// the configurations differently from extension types.
+// ---------------------------------------------------------------------------
+
+const TARGET_NAME_QUOTED = `"${APP_NAME}"`;
+
+function setWatchBuildProperty(proj, key, value) {
+  proj.updateBuildProperty(key, value, undefined, TARGET_NAME_QUOTED);
+}
+
+function applyWatchBuildSettings(proj, appleTeamId) {
+  setWatchBuildProperty(proj, 'INFOPLIST_FILE', `"${APP_NAME}/Info.plist"`);
+  setWatchBuildProperty(proj, 'PRODUCT_BUNDLE_IDENTIFIER', WATCH_BUNDLE_ID);
+  setWatchBuildProperty(proj, 'PRODUCT_NAME', `"$(TARGET_NAME)"`);
+  setWatchBuildProperty(proj, 'SDKROOT', 'watchos');
+  setWatchBuildProperty(proj, 'SUPPORTED_PLATFORMS', '"watchos watchsimulator"');
+  setWatchBuildProperty(proj, 'WATCHOS_DEPLOYMENT_TARGET', WATCHOS_DEPLOYMENT_TARGET);
+  setWatchBuildProperty(proj, 'TARGETED_DEVICE_FAMILY', '4');
+  setWatchBuildProperty(proj, 'SKIP_INSTALL', 'YES');
+  setWatchBuildProperty(proj, 'SWIFT_VERSION', '5.0');
+  setWatchBuildProperty(proj, 'CODE_SIGN_STYLE', 'Automatic');
+  setWatchBuildProperty(proj, 'ASSETCATALOG_COMPILER_APPICON_NAME', 'AppIcon');
+  setWatchBuildProperty(proj, 'GENERATE_INFOPLIST_FILE', 'NO');
+  if (appleTeamId) setWatchBuildProperty(proj, 'DEVELOPMENT_TEAM', appleTeamId);
+}
+
+/**
+ * Belt-and-braces fixup for the textual pbxproj. node-xcode occasionally
+ * emits configuration blocks where TARGETED_DEVICE_FAMILY ends up as "1,2"
+ * or where SDKROOT is missing for the watch target's bundle ID. This
+ * regex pass coerces them to watchOS values without touching the iPhone
+ * target's own configurations.
  */
 function patchWatchOSInPbxproj(body) {
   const tab = '\t\t\t\t';
-  const watchSdkBlock = `${tab}SDKROOT = watchos;
-${tab}SUPPORTED_PLATFORMS = "watchos watchsimulator";
-${tab}WATCHOS_DEPLOYMENT_TARGET = 10.0;
-${tab}SWIFT_VERSION = 5.0;
-`;
+  const watchSdkBlock =
+    `${tab}SDKROOT = watchos;\n` +
+    `${tab}SUPPORTED_PLATFORMS = "watchos watchsimulator";\n` +
+    `${tab}WATCHOS_DEPLOYMENT_TARGET = ${WATCHOS_DEPLOYMENT_TARGET};\n` +
+    `${tab}SWIFT_VERSION = 5.0;\n`;
 
-  function injectBeforeTargeted(match, bundleLine, middle, tfPrefix) {
-    // node-xcode updateBuildProperty may already add SDKROOT/SWIFT; we must still fix TARGETED_DEVICE_FAMILY.
-    if (middle.includes('SDKROOT = watchos')) {
-      const platforms =
-        middle.includes('SUPPORTED_PLATFORMS') ? '' : `${tab}SUPPORTED_PLATFORMS = "watchos watchsimulator";\n`;
-      return `${bundleLine}${middle}${platforms}${tfPrefix}4;`;
-    }
-    return `${bundleLine}${middle}${watchSdkBlock}${tfPrefix}4;`;
-  }
+  const bundlePatterns = [
+    `PRODUCT_BUNDLE_IDENTIFIER = "${WATCH_BUNDLE_ID}";`,
+    `PRODUCT_BUNDLE_IDENTIFIER = ${WATCH_BUNDLE_ID};`,
+  ];
 
   let out = body;
-  // WatchKit extension
-  out = out.replace(
-    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp\.watchkitextension";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )"1,2";/g,
-    injectBeforeTargeted,
-  );
-  // Watch app container
-  out = out.replace(
-    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )"1,2";/g,
-    injectBeforeTargeted,
-  );
-  // If a prior run already set TARGETED_DEVICE_FAMILY = 4 but forgot SDKROOT
-  out = out.replace(
-    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp\.watchkitextension";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )4;/g,
-    (m, bundleLine, middle, tfPrefix) => {
-      if (middle.includes('SDKROOT = watchos')) return m;
-      return `${bundleLine}${middle}${watchSdkBlock}${tfPrefix}4;`;
-    },
-  );
-  out = out.replace(
-    /(PRODUCT_BUNDLE_IDENTIFIER = "com\.phaedrus75\.runzen\.watchkitapp";)([\s\S]*?)(\t\t\t\tTARGETED_DEVICE_FAMILY = )4;/g,
-    (m, bundleLine, middle, tfPrefix) => {
-      if (middle.includes('SDKROOT = watchos')) return m;
-      return `${bundleLine}${middle}${watchSdkBlock}${tfPrefix}4;`;
-    },
-  );
+  for (const bundleLine of bundlePatterns) {
+    const escaped = bundleLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // 1,2 → 4 + ensure SDK block
+    out = out.replace(
+      new RegExp(`(${escaped})([\\s\\S]*?)(${tab}TARGETED_DEVICE_FAMILY = )"1,2";`, 'g'),
+      (_m, line, middle, tfPrefix) => {
+        if (middle.includes('SDKROOT = watchos')) {
+          const platforms = middle.includes('SUPPORTED_PLATFORMS')
+            ? ''
+            : `${tab}SUPPORTED_PLATFORMS = "watchos watchsimulator";\n`;
+          return `${line}${middle}${platforms}${tfPrefix}4;`;
+        }
+        return `${line}${middle}${watchSdkBlock}${tfPrefix}4;`;
+      },
+    );
+    // already 4 but missing SDK block
+    out = out.replace(
+      new RegExp(`(${escaped})([\\s\\S]*?)(${tab}TARGETED_DEVICE_FAMILY = )4;`, 'g'),
+      (m, line, middle, tfPrefix) => {
+        if (middle.includes('SDKROOT = watchos')) return m;
+        return `${line}${middle}${watchSdkBlock}${tfPrefix}4;`;
+      },
+    );
+  }
   return out;
 }
 
-/** node-xcode bug: pbxCreateGroup sets isa to quoted string; CocoaPods cannot parse it. */
 function sanitizePbxprojText(body) {
-  let out = body;
-  out = out.replace(/isa = "PBXGroup";/g, 'isa = PBXGroup;');
-  out = out.replace(
-    /INFOPLIST_FILE = "ZenRunWatch WatchKit Extension\/ZenRunWatch WatchKit Extension-Info\.plist";/g,
-    'INFOPLIST_FILE = "ZenRunWatch WatchKit Extension/Info.plist";',
-  );
+  // node-xcode bug: pbxCreateGroup quotes the isa, which breaks CocoaPods.
+  let out = body.replace(/isa = "PBXGroup";/g, 'isa = PBXGroup;');
+  // Some Expo templates emit suffixed Info.plist names; force ours back.
   out = out.replace(
     /INFOPLIST_FILE = "ZenRunWatch\/ZenRunWatch-Info\.plist";/g,
     'INFOPLIST_FILE = "ZenRunWatch/Info.plist";',
@@ -294,109 +384,79 @@ function sanitizePbxprojText(body) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Main entry
+// ---------------------------------------------------------------------------
+
 /**
  * @param {string} projectRoot — Expo project root (…/frontend)
- * @param {string} iosRoot — …/frontend/ios
+ * @param {string} iosRoot     — …/frontend/ios
  * @param {{ appleTeamId?: string, version?: string, buildNumber?: string }} [options]
  */
 function embedZenRunWatchApp(projectRoot, iosRoot, options = {}) {
   const { appleTeamId, version, buildNumber } = options;
-  const watchRoot = path.join(projectRoot, '..', 'watch-app');
-  if (!fs.existsSync(watchRoot)) {
-    console.warn('[withWatchApp] watch-app folder not found at', watchRoot);
+  const watchSrc = path.join(projectRoot, '..', 'watch-app', APP_NAME);
+  if (!fs.existsSync(watchSrc)) {
+    console.warn('[withWatchApp] Source not found at', watchSrc);
     return;
   }
+  const watchDest = path.join(iosRoot, APP_NAME);
 
-  const extSrc = path.join(watchRoot, 'Extension');
-  const appSrc = path.join(watchRoot, 'ZenRunWatch');
-  const extDest = path.join(iosRoot, EXT_NAME);
-  const appDest = path.join(iosRoot, APP_NAME);
-
-  copyRecursive(extSrc, extDest);
-  copyRecursive(appSrc, appDest);
+  // 1. Sync source files into the iOS folder.
+  copyRecursive(watchSrc, watchDest);
   ensureAppIcon(iosRoot, projectRoot);
-  syncWatchAppVersion(
-    [path.join(extDest, 'Info.plist'), path.join(appDest, 'Info.plist')],
-    version,
-    buildNumber,
-  );
+  syncWatchAppVersion(path.join(watchDest, 'Info.plist'), version, buildNumber);
 
+  // 2. Mutate project.pbxproj.
   const pbxPath = findPbxproj(iosRoot);
   const proj = xcode.project(pbxPath);
   proj.parseSync();
   ensurePbxDependencySections(proj);
 
-  if (watchTargetsAlreadyPresent(proj)) {
-    ensureWatchTargetDependencies(proj);
-    ensureWatchTargetDevelopmentTeam(proj, appleTeamId);
-    ensureWatchAppResources(proj);
-    ensureWatchExtensionSources(proj, extDest);
-    fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
-    return;
+  // Wipe any prior watch targets (legacy or modern) so re-runs are clean.
+  // The product files / build configurations stick around but addTarget below
+  // re-uses them by name.
+  let watchUuid = findWatchTarget(proj);
+  if (watchUuid) {
+    const existing = proj.pbxNativeTargetSection()[watchUuid];
+    const productType = String((existing && existing.productType) || '').replace(/"/g, '');
+    if (productType !== 'com.apple.product-type.application') {
+      removeStaleWatchTargets(proj);
+      watchUuid = null;
+    }
+  } else {
+    // Always sweep stale entries (e.g. WatchKit Extension) before adding fresh.
+    removeStaleWatchTargets(proj);
   }
 
-  proj.addTarget(APP_NAME, 'watch2_app', APP_NAME, 'com.phaedrus75.runzen.watchkitapp');
-  const extRet = proj.addTarget(EXT_NAME, 'watch2_extension', EXT_NAME, 'com.phaedrus75.runzen.watchkitapp.watchkitextension');
-  const extKey = extRet && extRet.uuid;
-  if (!extKey) {
-    throw new Error('[withWatchApp] addTarget(watch2_extension) did not return a uuid — aborting to avoid corrupting the iOS target.');
+  // 3. Create the watch target if needed. We bypass node-xcode's
+  // `addTarget('watch_app', …)` (no such helper for modern single-target) and
+  // use the lower-level `application` registration which yields a clean
+  // PBXNativeTarget with productType `com.apple.product-type.application`.
+  if (!watchUuid) {
+    const newTarget = proj.addTarget(APP_NAME, 'application', APP_NAME, WATCH_BUNDLE_ID);
+    if (!newTarget || !newTarget.uuid) {
+      throw new Error('[withWatchApp] addTarget returned no uuid — aborting');
+    }
+    watchUuid = newTarget.uuid;
+    proj.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', watchUuid);
+    proj.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', watchUuid);
+    proj.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', watchUuid);
+    proj.addFramework('System/Library/Frameworks/WatchConnectivity.framework', {
+      target: watchUuid,
+      customFramework: false,
+    });
   }
 
-  proj.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', extKey);
-  proj.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', extKey);
-  proj.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', extKey);
+  // 4. Wire sources, assets, settings, embed phase, and dependency.
+  const groupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
+  ensureSwiftSources(proj, watchUuid, watchDest, groupKey);
+  ensureAssetsResource(proj, watchUuid, groupKey);
+  applyWatchBuildSettings(proj, appleTeamId);
+  ensureWatchDependency(proj, watchUuid);
+  ensureEmbedWatchContentPhase(proj, watchUuid);
 
-  proj.addFramework('System/Library/Frameworks/WatchConnectivity.framework', {
-    target: extKey,
-    customFramework: false,
-  });
-
-  const zenGroupKey = proj.findPBXGroupKey({ name: 'ZenRun' });
-  if (!zenGroupKey) {
-    throw new Error('[withWatchApp] Could not find PBX group "ZenRun".');
-  }
-
-  const swiftFiles = fs.readdirSync(extDest).filter((f) => f.endsWith('.swift'));
-  for (const f of swiftFiles) {
-    const rel = `${EXT_NAME}/${f}`;
-    proj.addSourceFile(rel, { target: extKey }, zenGroupKey);
-  }
-
-  const plistExt = `"${EXT_NAME}/Info.plist"`;
-  const plistApp = `"${APP_NAME}/Info.plist"`;
-  proj.updateBuildProperty('INFOPLIST_FILE', plistExt, undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('INFOPLIST_FILE', plistApp, undefined, APP_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('SDKROOT', 'watchos', undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('SDKROOT', 'watchos', undefined, APP_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty(
-    'SUPPORTED_PLATFORMS',
-    '"watchos watchsimulator"',
-    undefined,
-    EXT_NATIVE_TARGET_COMMENT,
-  );
-  proj.updateBuildProperty(
-    'SUPPORTED_PLATFORMS',
-    '"watchos watchsimulator"',
-    undefined,
-    APP_NATIVE_TARGET_COMMENT,
-  );
-  proj.updateBuildProperty('WATCHOS_DEPLOYMENT_TARGET', '10.0', undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('WATCHOS_DEPLOYMENT_TARGET', '10.0', undefined, APP_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('TARGETED_DEVICE_FAMILY', '4', undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('TARGETED_DEVICE_FAMILY', '4', undefined, APP_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('SKIP_INSTALL', 'YES', undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('SKIP_INSTALL', 'YES', undefined, APP_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('SWIFT_VERSION', '5.0', undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('SWIFT_VERSION', '5.0', undefined, APP_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, EXT_NATIVE_TARGET_COMMENT);
-  proj.updateBuildProperty('CODE_SIGN_STYLE', 'Automatic', undefined, APP_NATIVE_TARGET_COMMENT);
-
-  proj.updateBuildProperty('WK_WATCHKIT_APP', 'YES', undefined, 'ZenRun');
-
-  ensureWatchTargetDependencies(proj);
-  ensureWatchTargetDevelopmentTeam(proj, appleTeamId);
-  ensureWatchAppResources(proj);
-
+  // 5. Persist with our textual fixups.
   fs.writeFileSync(pbxPath, sanitizePbxprojText(proj.writeSync()));
 }
 
