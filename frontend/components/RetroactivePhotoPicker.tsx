@@ -37,8 +37,8 @@ import {
   Alert,
   Pressable,
   Dimensions,
+  Linking,
 } from 'react-native';
-import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing, typography, shadows } from '../theme/colors';
 import {

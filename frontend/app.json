@@ -60,7 +60,11 @@
               "appExtensions": [
                 {
                   "targetName": "ZenRunWatch",
-                  "bundleIdentifier": "com.phaedrus75.runzen.watchkitapp"
+                  "bundleIdentifier": "com.phaedrus75.runzen.watchkitapp",
+                  "entitlements": {
+                    "com.apple.developer.healthkit": true,
+                    "com.apple.developer.healthkit.access": []
+                  }
                 }
               ]
             }
