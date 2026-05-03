@@ -26,6 +26,7 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
+import { listSessions, loadManifest } from './photoSession';
 
 const ZENRUN_ALBUM_NAME = 'ZenRun';
 
@@ -58,6 +59,11 @@ export interface RecoverablePhoto {
   size: number;
   /** UNIX seconds. May be 0 on platforms that don't expose mtime. */
   modificationTime: number;
+  /** Content hash. Used to dedup across session folders + cache scans. */
+  contentHash?: string;
+  /** True if this is from a structured photo session (Build 34+); false
+   *  for files found in the legacy cache scan. */
+  fromSession?: boolean;
 }
 
 export interface ScanResult {
@@ -80,8 +86,49 @@ export async function scanOrphanedPhotos(
   const photos: RecoverablePhoto[] = [];
   const scannedDirs: string[] = [];
   const errors: string[] = [];
-  const seen = new Set<string>();
+  /** Dedup table: content-hash → first added photo. Keeps the highest-fidelity
+   *  source we've seen (sessions beat raw cache files). */
+  const byHash = new Map<string, RecoverablePhoto>();
+  const seenUris = new Set<string>();
 
+  // ─── 1. Structured photo sessions (preferred) ──────────────────────────────
+  // These come from Build 34+ captures and have an actual content hash on
+  // record. Sessions whose uploads + archives are fully done are skipped —
+  // those photos are already safe.
+  try {
+    const sessions = await listSessions();
+    for (const summary of sessions) {
+      if (summary.pendingArchiveCount === 0 && summary.pendingUploadCount === 0) continue;
+      const m = await loadManifest(summary.sessionId);
+      if (!m) continue;
+      scannedDirs.push(`session:${summary.sessionId}`);
+      for (const entry of m.photos) {
+        if (entry.archive.status === 'done') continue;
+        if (sinceUnixSeconds > 0 && entry.capturedAt / 1000 < sinceUnixSeconds) continue;
+        if (entry.contentHash && byHash.has(entry.contentHash)) continue;
+        const info = await FileSystem.getInfoAsync(entry.uri);
+        if (!info.exists || info.isDirectory) continue;
+        const photo: RecoverablePhoto = {
+          uri: entry.uri,
+          filename: entry.uri.split('/').pop() ?? entry.id,
+          size: typeof info.size === 'number' ? info.size : (entry.fileSize ?? 0),
+          modificationTime: Math.round(entry.capturedAt / 1000),
+          contentHash: entry.contentHash,
+          fromSession: true,
+        };
+        if (entry.contentHash) byHash.set(entry.contentHash, photo);
+        seenUris.add(entry.uri);
+        photos.push(photo);
+      }
+    }
+  } catch (e) {
+    errors.push(`session scan: ${(e as Error).message}`);
+  }
+
+  // ─── 2. Cache directory scan (legacy fallback) ────────────────────────────
+  // For photos taken before Build 34 OR session-less paths (test fixtures,
+  // recovered drafts that never had a session). Hashed and deduped against
+  // the session set so the user doesn't see the same image twice.
   for (const rawDir of candidateDirs()) {
     const dir = rawDir.endsWith('/') ? rawDir : `${rawDir}/`;
     try {
@@ -93,10 +140,10 @@ export async function scanOrphanedPhotos(
       for (const name of entries) {
         if (!IMAGE_EXT_RE.test(name)) continue;
         const uri = `${dir}${name}`;
-        if (seen.has(uri)) continue;
-        seen.add(uri);
+        if (seenUris.has(uri)) continue;
+        seenUris.add(uri);
         try {
-          const info = await FileSystem.getInfoAsync(uri, { md5: false });
+          const info = await FileSystem.getInfoAsync(uri, { md5: true });
           if (!info.exists || info.isDirectory) continue;
           const mtime =
             typeof info.modificationTime === 'number'
@@ -105,12 +152,18 @@ export async function scanOrphanedPhotos(
           if (sinceUnixSeconds > 0 && mtime > 0 && mtime < sinceUnixSeconds) {
             continue;
           }
-          photos.push({
+          const md5 = (info as { md5?: string }).md5;
+          if (md5 && byHash.has(md5)) continue;
+          const photo: RecoverablePhoto = {
             uri,
             filename: name,
             size: typeof info.size === 'number' ? info.size : 0,
             modificationTime: mtime,
-          });
+            contentHash: md5,
+            fromSession: false,
+          };
+          if (md5) byHash.set(md5, photo);
+          photos.push(photo);
         } catch (e) {
           errors.push(`stat ${uri}: ${(e as Error).message}`);
         }

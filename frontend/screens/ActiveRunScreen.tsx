@@ -39,7 +39,8 @@ import {
   requestAlwaysLocationPermission,
   setBackgroundTrackingEnabled,
 } from '../services/walkBackgroundTask';
-import { useActivityPhotoCapture, PendingPhoto } from '../services/useActivityPhotoCapture';
+import { useActivityPhotoCapture } from '../services/useActivityPhotoCapture';
+import { openPhotosSettings, refreshMediaPermission } from '../services/photoArchiver';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
 const RUN_ACCENT = '#F97316'; // orange
@@ -53,7 +54,14 @@ export function ActiveRunScreen({ navigation, route }: Props) {
   const [snapshot, setSnapshot] = useState<WalkSnapshot>(runTracker.getSnapshot());
   const [starting, setStarting] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const { pendingPhotos, capturing, capturePhoto } = useActivityPhotoCapture(runTracker);
+  const {
+    pendingPhotos,
+    capturing,
+    photosDenied,
+    capturePhoto,
+    getSessionId,
+    clear: clearPhotoSession,
+  } = useActivityPhotoCapture(runTracker, 'run');
   const startedOnceRef = useRef(false);
 
   useEffect(() => {
@@ -84,6 +92,7 @@ export function ActiveRunScreen({ navigation, route }: Props) {
               style: 'destructive',
               onPress: async () => {
                 await runTracker.discard();
+                await clearPhotoSession({ discard: true });
                 navigation.dispatch(e.data.action);
               },
             },
@@ -149,6 +158,7 @@ export function ActiveRunScreen({ navigation, route }: Props) {
         style: 'destructive',
         onPress: async () => {
           await runTracker.discard();
+          await clearPhotoSession({ discard: true });
           navigation.goBack();
         },
       },
@@ -158,7 +168,7 @@ export function ActiveRunScreen({ navigation, route }: Props) {
           const final = await runTracker.stop();
           navigation.replace('RunSummary', {
             snapshot: serialiseSnapshot(final),
-            pendingPhotos,
+            sessionId: getSessionId(),
           });
         },
       },
@@ -188,6 +198,25 @@ export function ActiveRunScreen({ navigation, route }: Props) {
       </View>
 
       <View style={styles.statsCard}>
+        {photosDenied && pendingPhotos.length > 0 && (
+          <Pressable
+            onPress={async () => {
+              await openPhotosSettings();
+              // Re-probe after the user comes back. If they granted, the
+              // archiver drainer will pick up any photos that were 'denied'.
+              setTimeout(() => { void refreshMediaPermission(); }, 1000);
+            }}
+            style={styles.photosDeniedBanner}
+          >
+            <Ionicons name="warning-outline" size={14} color={colors.warning} />
+            <Text style={styles.photosDeniedText} numberOfLines={2}>
+              Photos library access denied — your originals aren't being
+              backed up. Tap to open Settings.
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.warning} />
+          </Pressable>
+        )}
+
         {pendingPhotos.length > 0 && (
           <ScrollView
             horizontal
@@ -196,9 +225,18 @@ export function ActiveRunScreen({ navigation, route }: Props) {
             contentContainerStyle={styles.photoStripContent}
           >
             {pendingPhotos.map((p) => (
-              <View key={p.capturedAt} style={styles.thumbWrap}>
+              <View key={p.id} style={styles.thumbWrap}>
                 <Image source={{ uri: p.uri }} style={styles.thumb} />
                 <Text style={styles.thumbDist}>{p.distanceKm.toFixed(1)} km</Text>
+                <View
+                  style={[
+                    styles.thumbArchiveDot,
+                    p.archive.status === 'done'    && { backgroundColor: '#3B82F6' },
+                    p.archive.status === 'denied'  && { backgroundColor: colors.warning },
+                    p.archive.status === 'failed'  && { backgroundColor: colors.error },
+                    p.archive.status === 'pending' && { backgroundColor: colors.textLight },
+                  ]}
+                />
               </View>
             ))}
           </ScrollView>
@@ -373,7 +411,7 @@ const styles = StyleSheet.create({
     gap: 8,
     flexDirection: 'row',
   },
-  thumbWrap: { alignItems: 'center', gap: 3 },
+  thumbWrap: { alignItems: 'center', gap: 3, position: 'relative' },
   thumb: {
     width: 60,
     height: 60,
@@ -381,6 +419,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
   },
   thumbDist: { fontSize: 10, color: colors.textSecondary },
+  thumbArchiveDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  photosDeniedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.warning + '20',
+    borderRadius: radius.md,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: spacing.sm,
+    marginHorizontal: -4,
+  },
+  photosDeniedText: {
+    flex: 1,
+    fontSize: 11,
+    color: colors.text,
+    lineHeight: 14,
+  },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -18,7 +18,7 @@ You'll see interactive API documentation!
 """
 
 import os
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
@@ -2797,9 +2797,12 @@ def upload_run_photo(
     if not base64_data:
         raise HTTPException(status_code=400, detail="photo_data is required")
     
-    MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+    # 2400px JPEG at 0.85 quality is ~1.5-2.5 MB binary; base64 inflates ~33%
+    # so headroom of 10 MB covers worst-case (less compressible / wider photos)
+    # without rejecting otherwise-valid uploads.
+    MAX_PHOTO_BYTES = 10 * 1024 * 1024
     if len(base64_data) > MAX_PHOTO_BYTES:
-        raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 5MB")
+        raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 10MB")
     
     VALID_IMAGE_PREFIXES = ("/9j/", "iVBOR", "R0lGO", "UklGR", "data:image/")
     clean_data = base64_data.split(",", 1)[-1] if base64_data.startswith("data:") else base64_data
@@ -2866,6 +2869,152 @@ def delete_run_photo(
     db.delete(photo)
     db.commit()
     return {"message": "Photo deleted"}
+
+
+@app.put("/runs/{run_id}/photos/{photo_id}")
+def update_run_photo(
+    run_id: int,
+    photo_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Update editable fields on a run photo. Currently: caption."""
+    photo = db.query(RunPhoto).filter(
+        RunPhoto.id == photo_id,
+        RunPhoto.run_id == run_id,
+        RunPhoto.user_id == current_user.id,
+    ).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    if "caption" in payload:
+        new_caption = payload.get("caption")
+        if new_caption is None or new_caption == "":
+            photo.caption = None
+        else:
+            photo.caption = _sanitize_text(str(new_caption), max_length=200)
+    db.commit()
+    db.refresh(photo)
+    return {
+        "id": photo.id,
+        "run_id": photo.run_id,
+        "distance_marker_km": photo.distance_marker_km,
+        "caption": photo.caption,
+        "created_at": photo.created_at.isoformat() if photo.created_at else None,
+    }
+
+
+@app.get("/me/photos")
+def list_my_photos(
+    cursor: Optional[str] = None,
+    limit: int = Query(20, ge=1, le=50),
+    include_data: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """
+    📸 Unified Album feed — every photo the current user has, runs and walks
+    merged into a single timeline ordered by created_at DESC.
+
+    Pagination is cursor-based on `created_at`. Pass the `next_cursor` from
+    the previous response to fetch the next page. `next_cursor` is null on
+    the last page.
+
+    `include_data` controls whether `photo_data` (base64) is included. The
+    Album grid wants it, but tools that just want metadata can pass false.
+
+    Each item carries a small `activity` payload so the client can render
+    distance / when / kind without a second round-trip per photo.
+    """
+    from datetime import datetime as _dt
+
+    cursor_dt = None
+    if cursor:
+        try:
+            cursor_dt = _dt.fromisoformat(cursor)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid cursor")
+
+    # Fetch a window from each source so the merge has enough material to
+    # fill `limit` even when one source dominates the timeline.
+    window = limit * 2
+
+    run_q = (
+        db.query(RunPhoto, Run)
+        .join(Run, Run.id == RunPhoto.run_id)
+        .filter(RunPhoto.user_id == current_user.id)
+    )
+    if cursor_dt is not None:
+        run_q = run_q.filter(RunPhoto.created_at < cursor_dt)
+    run_rows = run_q.order_by(RunPhoto.created_at.desc()).limit(window).all()
+
+    walk_q = (
+        db.query(WalkPhoto, Walk)
+        .join(Walk, Walk.id == WalkPhoto.walk_id)
+        .filter(WalkPhoto.user_id == current_user.id)
+    )
+    if cursor_dt is not None:
+        walk_q = walk_q.filter(WalkPhoto.created_at < cursor_dt)
+    walk_rows = walk_q.order_by(WalkPhoto.created_at.desc()).limit(window).all()
+
+    items: list[dict] = []
+    for p, r in run_rows:
+        item = {
+            "id": p.id,
+            "kind": "run",
+            "activity_id": p.run_id,
+            "distance_marker_km": p.distance_marker_km,
+            "lat": None,
+            "lng": None,
+            "caption": p.caption,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "activity": {
+                "id": r.id,
+                "kind": "run",
+                "distance_km": r.distance_km,
+                "duration_seconds": r.duration_seconds,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                "run_type": r.run_type,
+                "category": getattr(r, "category", None),
+            },
+        }
+        if include_data:
+            item["photo_data"] = p.photo_data
+        items.append(item)
+
+    for p, w in walk_rows:
+        item = {
+            "id": p.id,
+            "kind": "walk",
+            "activity_id": p.walk_id,
+            "distance_marker_km": p.distance_marker_km,
+            "lat": p.lat,
+            "lng": p.lng,
+            "caption": p.caption,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "activity": {
+                "id": w.id,
+                "kind": "walk",
+                "distance_km": w.distance_km,
+                "duration_seconds": w.duration_seconds,
+                "started_at": w.started_at.isoformat() if w.started_at else None,
+                "completed_at": w.ended_at.isoformat() if w.ended_at else None,
+                "run_type": None,
+                "category": getattr(w, "category", None),
+            },
+        }
+        if include_data:
+            item["photo_data"] = p.photo_data
+        items.append(item)
+
+    items.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    items = items[:limit]
+
+    next_cursor = items[-1]["created_at"] if len(items) == limit and items[-1]["created_at"] else None
+
+    return {"items": items, "next_cursor": next_cursor}
 
 
 @app.get("/scenic-runs")
@@ -3102,9 +3251,9 @@ def upload_walk_photo(
     base64_data = payload.get("photo_data")
     if not base64_data:
         raise HTTPException(status_code=400, detail="photo_data is required")
-    MAX_PHOTO_BYTES = 5 * 1024 * 1024
+    MAX_PHOTO_BYTES = 10 * 1024 * 1024
     if len(base64_data) > MAX_PHOTO_BYTES:
-        raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 5MB")
+        raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 10MB")
     VALID_IMAGE_PREFIXES = ("/9j/", "iVBOR", "R0lGO", "UklGR", "data:image/")
     clean_data = base64_data.split(",", 1)[-1] if base64_data.startswith("data:") else base64_data
     if not any(clean_data.startswith(p) for p in VALID_IMAGE_PREFIXES) and not base64_data.startswith("data:image/"):
@@ -3171,6 +3320,45 @@ def delete_walk_photo_endpoint(
     if not ok:
         raise HTTPException(status_code=404, detail="Photo not found")
     return {"message": "Photo deleted"}
+
+
+@app.put("/walks/{walk_id}/photos/{photo_id}")
+def update_walk_photo(
+    walk_id: int,
+    photo_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Update editable fields on a walk photo. Currently: caption."""
+    walk = crud.get_walk(db, walk_id=walk_id, user_id=current_user.id)
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    photo = db.query(WalkPhoto).filter(
+        WalkPhoto.id == photo_id,
+        WalkPhoto.walk_id == walk_id,
+        WalkPhoto.user_id == current_user.id,
+    ).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    if "caption" in payload:
+        new_caption = payload.get("caption")
+        if new_caption is None or new_caption == "":
+            photo.caption = None
+        else:
+            photo.caption = _sanitize_text(str(new_caption), max_length=200)
+    db.commit()
+    db.refresh(photo)
+    return {
+        "id": photo.id,
+        "walk_id": photo.walk_id,
+        "lat": photo.lat,
+        "lng": photo.lng,
+        "distance_marker_km": photo.distance_marker_km,
+        "caption": photo.caption,
+        "created_at": photo.created_at.isoformat() if photo.created_at else None,
+    }
 
 
 # --- Public Walks (Overpass / OpenStreetMap powered) ---

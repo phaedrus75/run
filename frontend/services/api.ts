@@ -773,8 +773,73 @@ export const photoApi = {
     return apiFetch(`/runs/${runId}/photos/${photoId}`, { method: 'DELETE' });
   },
 
+  /**
+   * 📸 Update a run photo's caption.
+   * Pass `null` or `''` to clear it.
+   */
+  updateCaption: (runId: number, photoId: number, caption: string | null): Promise<RunPhoto> => {
+    return apiFetch(`/runs/${runId}/photos/${photoId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ caption: caption ?? null }),
+    });
+  },
+
   getScenicRuns: (): Promise<ScenicRun[]> => {
     return apiFetch('/scenic-runs');
+  },
+};
+
+// ==========================================
+// 📸 UNIFIED ALBUM API — runs + walks photos in one feed
+// ==========================================
+
+export interface AlbumPhotoActivity {
+  id: number;
+  kind: 'run' | 'walk';
+  distance_km: number;
+  duration_seconds: number;
+  started_at: string | null;
+  completed_at: string | null;
+  run_type: string | null;
+  category: string | null;
+}
+
+export interface AlbumPhoto {
+  id: number;
+  kind: 'run' | 'walk';
+  activity_id: number;
+  distance_marker_km: number;
+  lat: number | null;
+  lng: number | null;
+  caption: string | null;
+  created_at: string;
+  photo_data?: string;
+  activity: AlbumPhotoActivity;
+}
+
+export interface AlbumPage {
+  items: AlbumPhoto[];
+  next_cursor: string | null;
+}
+
+export const albumApi = {
+  /**
+   * 📸 List the current user's photos across runs and walks, newest first.
+   * Cursor-based pagination — pass `next_cursor` from a previous response.
+   * `include_data` controls whether the response carries the base64 image
+   * data (heavier; on by default for grid use).
+   */
+  list: (params?: {
+    cursor?: string | null;
+    limit?: number;
+    include_data?: boolean;
+  }): Promise<AlbumPage> => {
+    const qs = new URLSearchParams();
+    if (params?.cursor) qs.set('cursor', params.cursor);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.include_data === false) qs.set('include_data', 'false');
+    const query = qs.toString();
+    return apiFetch(`/me/photos${query ? `?${query}` : ''}`);
   },
 };
 
@@ -909,6 +974,17 @@ export const walkPhotoApi = {
 
   delete: (walkId: number, photoId: number): Promise<void> => {
     return apiFetch(`/walks/${walkId}/photos/${photoId}`, { method: 'DELETE' });
+  },
+
+  /**
+   * 📸 Update a walk photo's caption.
+   * Pass `null` or `''` to clear it.
+   */
+  updateCaption: (walkId: number, photoId: number, caption: string | null): Promise<WalkPhoto> => {
+    return apiFetch(`/walks/${walkId}/photos/${photoId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ caption: caption ?? null }),
+    });
   },
 };
 

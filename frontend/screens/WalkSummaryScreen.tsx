@@ -26,6 +26,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,8 +40,14 @@ import {
   encodePolyline,
   TrackedPoint,
 } from '../services/walkLocationTracker';
-import { walkApi, walkPhotoApi } from '../services/api';
-import { PendingPhoto } from '../services/useActivityPhotoCapture';
+import { walkApi } from '../services/api';
+import {
+  PhotoEntry,
+  linkActivityId,
+  loadManifest,
+  discardSession,
+} from '../services/photoSession';
+import { drainSession } from '../services/photoUploader';
 import { enqueueWalkDraft } from '../services/pendingPhoneActivities';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
@@ -58,7 +65,7 @@ interface Props {
     params?: {
       snapshot?: SerialisedSnapshot;
       publicWalkId?: number;
-      pendingPhotos?: PendingPhoto[];
+      sessionId?: string | null;
     };
   };
 }
@@ -73,10 +80,27 @@ const MOODS = [
 export function WalkSummaryScreen({ navigation, route }: Props) {
   const snapshot = route?.params?.snapshot;
   const publicWalkId = route?.params?.publicWalkId;
-  const pendingPhotos = route?.params?.pendingPhotos ?? [];
+  const sessionId = route?.params?.sessionId ?? null;
   const [mood, setMood] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const reload = async () => {
+      if (!sessionId) {
+        setPhotos([]);
+        return;
+      }
+      const m = await loadManifest(sessionId);
+      if (cancelled) return;
+      setPhotos(m?.photos ?? []);
+    };
+    void reload();
+    const unsub = navigation.addListener('focus', reload);
+    return () => { cancelled = true; unsub(); };
+  }, [navigation, sessionId]);
 
   const pace = useMemo(
     () =>
@@ -96,10 +120,11 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
       const start = points[0];
       const end = points[points.length - 1];
       const polyline = encodePolyline(points as TrackedPoint[]);
+      const savedDistanceKm = Number(snapshot.distanceKm.toFixed(3));
 
       const walk = await walkApi.create({
         duration_seconds: Math.max(1, Math.round(snapshot.durationSeconds)),
-        distance_km: Number(snapshot.distanceKm.toFixed(3)),
+        distance_km: savedDistanceKm,
         started_at: snapshot.startedAt
           ? new Date(snapshot.startedAt).toISOString()
           : undefined,
@@ -118,31 +143,11 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
         public_walk_id: publicWalkId,
       });
 
-      // Upload any photos captured during the walk
-      if (pendingPhotos.length > 0) {
-        const uploadResults = await Promise.allSettled(
-          pendingPhotos
-            .filter((p) => p.base64 && p.base64.length > 0)
-            .map((p) =>
-              walkPhotoApi.upload(walk.id, {
-                photo_data: p.base64,
-                lat: p.lat ?? undefined,
-                lng: p.lng ?? undefined,
-                distance_marker_km: p.distanceKm,
-              }),
-            ),
-        );
-        const failCount = uploadResults.filter((r) => r.status === 'rejected').length;
-        if (failCount > 0) {
-          console.warn(`${failCount} walk photo(s) failed to upload`);
-          Alert.alert(
-            'Some photos not saved',
-            `${failCount} photo${failCount > 1 ? 's' : ''} could not be uploaded. The walk itself was saved. You can try adding photos from the walk detail page.`,
-          );
-          // Still navigate — the walk is saved even if photos failed
-          navigation.replace('WalkDetail', { walkId: walk.id, justSaved: true });
-          return;
-        }
+      if (sessionId) {
+        await linkActivityId(sessionId, walk.id, savedDistanceKm);
+        // Fire-and-forget — the uploader runs in the background and the
+        // user is taken straight to the walk detail.
+        void drainSession(sessionId);
       }
 
       try {
@@ -153,15 +158,12 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
     } catch (e: any) {
       // Save failed mid-flight. Persist as a draft so the walk is not lost —
       // `drainPendingPhoneActivities` retries on the next auth-ready boot.
+      // Photos are already on disk in the photo session; the draft only
+      // needs to remember the sessionId.
       const draftId = await enqueueWalkDraft({
         snapshot,
-        photos: pendingPhotos.map((p) => ({
-          base64: p.base64,
-          lat: p.lat,
-          lng: p.lng,
-          distanceKm: p.distanceKm,
-          capturedAt: p.capturedAt,
-        })),
+        sessionId: sessionId ?? null,
+        photos: [],
         mood: mood || undefined,
         note: note.trim() || undefined,
         publicWalkId,
@@ -169,7 +171,7 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
       if (draftId) {
         Alert.alert(
           'Saved as draft',
-          `Could not save right now (${e?.message ?? 'unknown error'}). We've kept this walk safe — it'll auto-retry next time you open the app while signed in.`,
+          `Could not save right now (${e?.message ?? 'unknown error'}). Your walk and photos are safe — we'll auto-retry next time you open the app while signed in.`,
           [{ text: 'OK', onPress: () => navigation.popToTop() }],
         );
       } else {
@@ -183,16 +185,26 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
   const handleDiscard = () => {
     Alert.alert(
       'Discard walk?',
-      'You will lose this recorded walk.',
+      photos.length > 0
+        ? `You will lose this recorded walk and ${photos.length} captured photo${photos.length > 1 ? 's' : ''}.`
+        : 'You will lose this recorded walk.',
       [
         { text: 'Keep', style: 'cancel' },
         {
           text: 'Discard',
           style: 'destructive',
-          onPress: () => navigation.popToTop(),
+          onPress: async () => {
+            if (sessionId) await discardSession(sessionId);
+            navigation.popToTop();
+          },
         },
       ],
     );
+  };
+
+  const goReviewPhotos = () => {
+    if (!sessionId || photos.length === 0) return;
+    navigation.navigate('PhotoReview', { sessionId, accentColor: '#10B981' });
   };
 
   if (!snapshot) {
@@ -222,7 +234,7 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
           <Text style={styles.subtitle}>
             {formatDistanceKm(snapshot.distanceKm)} ·{' '}
             {formatDurationHms(snapshot.durationSeconds)} · {pace} /km
-            {pendingPhotos.length > 0 ? ` · 📸 ${pendingPhotos.length} photo${pendingPhotos.length > 1 ? 's' : ''}` : ''}
+            {photos.length > 0 ? ` · 📸 ${photos.length} photo${photos.length > 1 ? 's' : ''}` : ''}
           </Text>
 
           <View style={styles.mapWrap}>
@@ -247,6 +259,34 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
               value={`${Math.round(snapshot.elevationGainM || 0)} m`}
             />
           </View>
+
+          {photos.length > 0 && (
+            <Pressable onPress={goReviewPhotos} style={styles.photoSummary}>
+              <View style={styles.photoSummaryThumbs}>
+                {photos.slice(0, 3).map((p) => (
+                  <Image
+                    key={p.id}
+                    source={{ uri: p.uri }}
+                    style={styles.photoSummaryThumb}
+                  />
+                ))}
+                {photos.length > 3 && (
+                  <View style={[styles.photoSummaryThumb, styles.photoSummaryMore]}>
+                    <Text style={styles.photoSummaryMoreText}>+{photos.length - 3}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.photoSummaryTitle}>
+                  {photos.length} photo{photos.length > 1 ? 's' : ''}
+                </Text>
+                <Text style={styles.photoSummarySubtitle}>
+                  Tap to review, caption, or remove
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            </Pressable>
+          )}
 
           <Text style={styles.section}>How did it feel?</Text>
           <View style={styles.moodRow}>
@@ -367,6 +407,46 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   statLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  photoSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    ...shadows.small,
+  },
+  photoSummaryThumbs: { flexDirection: 'row' },
+  photoSummaryThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    marginLeft: -8,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    backgroundColor: colors.surfaceAlt,
+  },
+  photoSummaryMore: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981' + '22',
+  },
+  photoSummaryMoreText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    color: '#10B981',
+  },
+  photoSummaryTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  photoSummarySubtitle: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,

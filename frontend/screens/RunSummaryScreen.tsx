@@ -2,14 +2,28 @@
  * 🏃 RUN SUMMARY SCREEN
  * =====================
  *
- * Shown after a GPS-tracked outdoor run finishes.
- * - Shows route map replay, distance, time, pace, elevation
- * - Pick mood + add a note
- * - Save via runApi (includes GPS fields)
- * - Uploads any in-run photos via photoApi
+ * Shown after a GPS-tracked outdoor run finishes. The active screen hands
+ * us a `sessionId` (already on disk via `photoSession`) — we don't pass
+ * heavy photo arrays through navigation params any more.
+ *
+ * Save flow:
+ *   1. Create the run via runApi.
+ *   2. Stamp the run id + distance into the photo session manifest so the
+ *      uploader can attribute uploads to the right run.
+ *   3. Kick the uploader (fire-and-forget — UI doesn't wait).
+ *   4. Pop back to the run history.
+ *
+ * If the run create call fails (auth expired, network down) we enqueue a
+ * draft that references the session (no base64 inline). The drainer in
+ * pendingPhoneActivities re-tries the create + link on the next launch
+ * with valid auth, and the photo uploader picks up where it left off.
+ *
+ * Photo review: a "Photos (N)" tile that opens the review screen for
+ * captioning / deletion before save. Optional — users can save straight
+ * through if they want.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +35,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,8 +49,14 @@ import {
   encodePolyline,
   TrackedPoint,
 } from '../services/walkLocationTracker';
-import { runApi, photoApi } from '../services/api';
-import { PendingPhoto } from '../services/useActivityPhotoCapture';
+import { runApi } from '../services/api';
+import {
+  PhotoEntry,
+  linkActivityId,
+  loadManifest,
+  discardSession,
+} from '../services/photoSession';
+import { drainSession } from '../services/photoUploader';
 import { enqueueRunDraft } from '../services/pendingPhoneActivities';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
@@ -54,7 +75,7 @@ interface Props {
   route: {
     params?: {
       snapshot?: SerialisedSnapshot;
-      pendingPhotos?: PendingPhoto[];
+      sessionId?: string | null;
     };
   };
 }
@@ -77,10 +98,29 @@ function distanceToRunType(km: number): string {
 
 export function RunSummaryScreen({ navigation, route }: Props) {
   const snapshot = route?.params?.snapshot;
-  const pendingPhotos = route?.params?.pendingPhotos ?? [];
+  const sessionId = route?.params?.sessionId ?? null;
   const [mood, setMood] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+
+  // Re-read the session whenever this screen gets focus (e.g. coming back
+  // from the review screen with caption / delete edits).
+  useEffect(() => {
+    let cancelled = false;
+    const reload = async () => {
+      if (!sessionId) {
+        setPhotos([]);
+        return;
+      }
+      const m = await loadManifest(sessionId);
+      if (cancelled) return;
+      setPhotos(m?.photos ?? []);
+    };
+    void reload();
+    const unsub = navigation.addListener('focus', reload);
+    return () => { cancelled = true; unsub(); };
+  }, [navigation, sessionId]);
 
   const pace = useMemo(
     () => snapshot ? paceFromDistance(snapshot.durationSeconds, snapshot.distanceKm) : '--:--',
@@ -120,70 +160,33 @@ export function RunSummaryScreen({ navigation, route }: Props) {
         mood: mood || undefined,
       });
 
-      // Upload any photos taken during the run.
-      //
-      // Backend validation requires:
-      //   distance_marker_km > 0
-      //   distance_marker_km <= run.distance_km
-      //
-      // Without clamping, a photo taken in the first second of the run (distance ≈ 0)
-      // or right at the end (where the in-flight GPS reading exceeds the rounded final
-      // distance) gets silently dropped by Promise.allSettled, which is exactly what
-      // bit us when a 17-photo run only saved 8.
-      const validPhotos = pendingPhotos.filter((p) => p.base64 && p.base64.length > 0);
-      if (validPhotos.length > 0) {
-        const upperBound = Math.max(0.05, savedDistanceKm - 0.01);
-        const uploadResults = await Promise.allSettled(
-          validPhotos.map((p) => {
-            const clampedMarker = Math.min(
-              upperBound,
-              Math.max(0.05, Number((p.distanceKm || 0).toFixed(3))),
-            );
-            return photoApi.upload(run.id, {
-              photo_data: p.base64,
-              distance_marker_km: clampedMarker,
-            });
-          }),
-        );
-        const failed = uploadResults
-          .map((r, idx) => ({ result: r, photo: validPhotos[idx] }))
-          .filter((x) => x.result.status === 'rejected');
-        if (failed.length > 0) {
-          console.warn(`${failed.length} run photo(s) failed to upload`);
-          Alert.alert(
-            'Some photos not saved',
-            `${failed.length} of ${validPhotos.length} photo${
-              failed.length > 1 ? 's' : ''
-            } could not be uploaded. The run itself was saved — you can re-add photos from the run details screen.`,
-          );
-        }
+      // Stamp the manifest so the uploader can attribute photos.
+      if (sessionId) {
+        await linkActivityId(sessionId, run.id, savedDistanceKm);
+        // Kick the uploader for this session immediately. Don't await —
+        // the user shouldn't sit here while photos churn over the wire.
+        // Failed photos will be retried by the global drainer on next
+        // launch.
+        void drainSession(sessionId);
       }
 
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
 
-      // Pop back to the Runs tab root
       navigation.replace('RunHistory');
     } catch (e: any) {
-      // Save failed (auth expired, network down, backend hiccup). Persist as a
-      // draft so the run is recoverable next time the app boots with valid
-      // auth — `drainPendingPhoneActivities` is called from App.tsx on every
-      // auth-ready transition.
+      // Save failed before the run was created. The session (with photos
+      // safely on disk) becomes a draft that retries from boot.
       const draftId = await enqueueRunDraft({
         snapshot,
-        photos: pendingPhotos.map((p) => ({
-          base64: p.base64,
-          lat: p.lat,
-          lng: p.lng,
-          distanceKm: p.distanceKm,
-          capturedAt: p.capturedAt,
-        })),
+        sessionId: sessionId ?? null,
+        photos: [],
         mood: mood || undefined,
         note: note.trim() || undefined,
       });
       if (draftId) {
         Alert.alert(
           'Saved as draft',
-          `Could not save right now (${e?.message ?? 'unknown error'}). We've kept this run safe — it'll auto-retry next time you open the app while signed in.`,
+          `Could not save right now (${e?.message ?? 'unknown error'}). Your run and photos are safe — we'll auto-retry next time you open the app while signed in.`,
           [{ text: 'OK', onPress: () => navigation.replace('RunHistory') }],
         );
       } else {
@@ -195,10 +198,28 @@ export function RunSummaryScreen({ navigation, route }: Props) {
   };
 
   const handleDiscard = () => {
-    Alert.alert('Discard run?', 'You will lose this recorded run.', [
-      { text: 'Keep', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: () => navigation.popToTop() },
-    ]);
+    Alert.alert(
+      'Discard run?',
+      photos.length > 0
+        ? `You will lose this recorded run and ${photos.length} captured photo${photos.length > 1 ? 's' : ''}.`
+        : 'You will lose this recorded run.',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            if (sessionId) await discardSession(sessionId);
+            navigation.popToTop();
+          },
+        },
+      ],
+    );
+  };
+
+  const goReviewPhotos = () => {
+    if (!sessionId || photos.length === 0) return;
+    navigation.navigate('PhotoReview', { sessionId, accentColor: RUN_ACCENT });
   };
 
   if (!snapshot) {
@@ -225,7 +246,7 @@ export function RunSummaryScreen({ navigation, route }: Props) {
           <Text style={styles.subtitle}>
             {formatDistanceKm(snapshot.distanceKm)} ·{' '}
             {formatDurationHms(snapshot.durationSeconds)} · {pace} /km
-            {pendingPhotos.length > 0 ? ` · 📸 ${pendingPhotos.length} photo${pendingPhotos.length > 1 ? 's' : ''}` : ''}
+            {photos.length > 0 ? ` · 📸 ${photos.length} photo${photos.length > 1 ? 's' : ''}` : ''}
           </Text>
 
           <View style={styles.mapWrap}>
@@ -244,6 +265,34 @@ export function RunSummaryScreen({ navigation, route }: Props) {
             <Stat label="Pace"     value={pace} />
             <Stat label="Elevation" value={`${Math.round(snapshot.elevationGainM || 0)} m`} />
           </View>
+
+          {photos.length > 0 && (
+            <Pressable onPress={goReviewPhotos} style={styles.photoSummary}>
+              <View style={styles.photoSummaryThumbs}>
+                {photos.slice(0, 3).map((p) => (
+                  <Image
+                    key={p.id}
+                    source={{ uri: p.uri }}
+                    style={styles.photoSummaryThumb}
+                  />
+                ))}
+                {photos.length > 3 && (
+                  <View style={[styles.photoSummaryThumb, styles.photoSummaryMore]}>
+                    <Text style={styles.photoSummaryMoreText}>+{photos.length - 3}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.photoSummaryTitle}>
+                  {photos.length} photo{photos.length > 1 ? 's' : ''}
+                </Text>
+                <Text style={styles.photoSummarySubtitle}>
+                  Tap to review, caption, or remove
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            </Pressable>
+          )}
 
           <Text style={styles.section}>How did it feel?</Text>
           <View style={styles.moodRow}>
@@ -354,6 +403,48 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   statLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  photoSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    ...shadows.small,
+  },
+  photoSummaryThumbs: {
+    flexDirection: 'row',
+  },
+  photoSummaryThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    marginLeft: -8,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    backgroundColor: colors.surfaceAlt,
+  },
+  photoSummaryMore: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: RUN_ACCENT + '22',
+  },
+  photoSummaryMoreText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    color: RUN_ACCENT,
+  },
+  photoSummaryTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  photoSummarySubtitle: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,

@@ -22,7 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useActivityPhotoCapture, PendingPhoto } from '../services/useActivityPhotoCapture';
+import { useActivityPhotoCapture } from '../services/useActivityPhotoCapture';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { WalkMap } from '../components/WalkMap';
@@ -45,15 +45,19 @@ interface Props {
   route: any;
 }
 
-// PendingPhoto type imported from useActivityPhotoCapture
-
 export function ActiveWalkScreen({ navigation, route }: Props) {
   const publicWalk = route?.params?.publicWalk;
   const [snapshot, setSnapshot] = useState<WalkSnapshot>(walkTracker.getSnapshot());
   const [starting, setStarting] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [backgroundEnabled, setBackgroundEnabled] = useState(false);
-  const { pendingPhotos, capturing, capturePhoto } = useActivityPhotoCapture(walkTracker);
+  const {
+    pendingPhotos,
+    capturing,
+    capturePhoto,
+    getSessionId,
+    clear: clearPhotoSession,
+  } = useActivityPhotoCapture(walkTracker, 'walk');
   const startedOnceRef = useRef(false);
 
   useEffect(() => {
@@ -84,6 +88,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
               style: 'destructive',
               onPress: async () => {
                 await walkTracker.discard();
+                await clearPhotoSession({ discard: true });
                 navigation.dispatch(e.data.action);
               },
             },
@@ -146,6 +151,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
         style: 'destructive',
         onPress: async () => {
           await walkTracker.discard();
+          await clearPhotoSession({ discard: true });
           navigation.goBack();
         },
       },
@@ -156,7 +162,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
           navigation.replace('WalkSummary', {
             snapshot: serialiseSnapshot(final),
             publicWalkId: publicWalk?.id,
-            pendingPhotos,
+            sessionId: getSessionId(),
           });
         },
       },
@@ -202,10 +208,19 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
             style={styles.photoStrip}
             contentContainerStyle={styles.photoStripContent}
           >
-            {pendingPhotos.map((p, i) => (
-              <View key={p.capturedAt} style={styles.thumbWrap}>
+            {pendingPhotos.map((p) => (
+              <View key={p.id} style={styles.thumbWrap}>
                 <Image source={{ uri: p.uri }} style={styles.thumb} />
                 <Text style={styles.thumbDist}>{p.distanceKm.toFixed(1)} km</Text>
+                <View
+                  style={[
+                    styles.thumbArchiveDot,
+                    p.archive.status === 'done'    && { backgroundColor: '#3B82F6' },
+                    p.archive.status === 'denied'  && { backgroundColor: colors.warning },
+                    p.archive.status === 'failed'  && { backgroundColor: colors.error },
+                    p.archive.status === 'pending' && { backgroundColor: colors.textLight },
+                  ]}
+                />
               </View>
             ))}
           </ScrollView>
@@ -388,6 +403,7 @@ const styles = StyleSheet.create({
   thumbWrap: {
     alignItems: 'center',
     gap: 3,
+    position: 'relative',
   },
   thumb: {
     width: 60,
@@ -398,6 +414,16 @@ const styles = StyleSheet.create({
   thumbDist: {
     fontSize: 10,
     color: colors.textSecondary,
+  },
+  thumbArchiveDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
   },
   // Stats
   statsRow: {

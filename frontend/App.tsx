@@ -32,6 +32,9 @@ import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
 import { BetaScreen } from './screens/BetaScreen';
 import { WatchDiagnosticsScreen } from './screens/WatchDiagnosticsScreen';
 import { PhotoRecoveryScreen } from './screens/PhotoRecoveryScreen';
+import { PhotoReviewScreen } from './screens/PhotoReviewScreen';
+import { AlbumScreen } from './screens/AlbumScreen';
+import { AlbumPhotoDetailScreen } from './screens/AlbumPhotoDetailScreen';
 import { GymTabScreen } from './screens/GymTabScreen';
 import { StepsTabScreen } from './screens/StepsTabScreen';
 import { WeightTabScreen } from './screens/WeightTabScreen';
@@ -45,6 +48,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { colors } from './theme/colors';
 import { registerWatchWorkoutSync, drainPendingWatchPayloads } from './services/watchBridge';
 import { drainPendingPhoneActivities } from './services/pendingPhoneActivities';
+import { drainPendingUploads } from './services/photoUploader';
+import { drainPendingArchives } from './services/photoArchiver';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -85,6 +90,11 @@ function RunsStack() {
         options={{ headerShown: false, gestureEnabled: false }}
       />
       <Stack.Screen
+        name="PhotoReview"
+        component={PhotoReviewScreen}
+        options={{ headerShown: false, presentation: 'modal' }}
+      />
+      <Stack.Screen
         name="AddRun"
         component={AddRunScreen}
         options={{
@@ -105,6 +115,7 @@ function WalkStack() {
       <Stack.Screen name="WalkHome" component={WalkScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ActiveWalk" component={ActiveWalkScreen} options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="WalkSummary" component={WalkSummaryScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="PhotoReview" component={PhotoReviewScreen} options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="WalkDetail" component={WalkDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="PublicWalkDetail"
@@ -116,6 +127,17 @@ function WalkStack() {
         component={DiscoverWalksScreen}
         options={{ headerShown: true, title: 'Discover walks', headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.primary }}
       />
+    </Stack.Navigator>
+  );
+}
+
+// ─── Album stack ──────────────────────────────────────────────────────────────
+// Top-level "Album" tab — every photo from every run/walk in one timeline.
+function AlbumStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="AlbumGrid" component={AlbumScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="AlbumPhoto" component={AlbumPhotoDetailScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -170,17 +192,18 @@ function MainTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let icon: keyof typeof Ionicons.glyphMap = 'home';
           switch (route.name) {
-            case 'Home':  icon = focused ? 'home'    : 'home-outline';    break;
-            case 'Runs':  icon = focused ? 'fitness' : 'fitness-outline'; break;
-            case 'Walks': icon = focused ? 'walk'    : 'walk-outline';    break;
-            case 'Labs':  icon = focused ? 'flask'   : 'flask-outline';   break;
+            case 'Home':   icon = focused ? 'home'    : 'home-outline';    break;
+            case 'Runs':   icon = focused ? 'fitness' : 'fitness-outline'; break;
+            case 'Walks':  icon = focused ? 'walk'    : 'walk-outline';    break;
+            case 'Album':  icon = focused ? 'images'  : 'images-outline';  break;
+            case 'Labs':   icon = focused ? 'flask'   : 'flask-outline';   break;
           }
           return <Ionicons name={icon} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="Home"  component={HomeStack}    options={{ tabBarLabel: 'Home'  }} />
-      <Tab.Screen name="Runs"  component={RunsStack}    options={{ tabBarLabel: 'Runs'  }} />
+      <Tab.Screen name="Home"   component={HomeStack}  options={{ tabBarLabel: 'Home'  }} />
+      <Tab.Screen name="Runs"   component={RunsStack}  options={{ tabBarLabel: 'Runs'  }} />
       <Tab.Screen
         name="Go"
         component={GoPlaceholder}
@@ -199,7 +222,8 @@ function MainTabs() {
           },
         })}
       />
-      <Tab.Screen name="Labs"  component={LabsStack}    options={{ tabBarLabel: 'Labs'  }} />
+      <Tab.Screen name="Album"  component={AlbumStack} options={{ tabBarLabel: 'Album' }} />
+      <Tab.Screen name="Labs"   component={LabsStack}  options={{ tabBarLabel: 'Labs'  }} />
     </Tab.Navigator>
   );
 }
@@ -260,6 +284,12 @@ function WatchWorkoutBridgeHost() {
           `${result.succeeded} pending ${noun} from earlier ${result.succeeded === 1 ? 'has' : 'have'} now been saved.`,
         );
       }
+      // Drain photo uploads + Photos-library archives. Both are idempotent
+      // and silent on success; the user only sees noise if many photos
+      // surface at once. Run after activity drains so any newly-linked
+      // sessions get picked up.
+      void drainPendingUploads();
+      void drainPendingArchives();
     })();
   }, [isAuthenticated]);
 

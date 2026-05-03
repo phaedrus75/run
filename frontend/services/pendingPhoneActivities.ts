@@ -28,6 +28,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { runApi, photoApi, walkApi, walkPhotoApi } from './api';
 import { encodePolyline, type TrackedPoint } from './walkLocationTracker';
+import { linkActivityId, loadManifest } from './photoSession';
+import { drainSession } from './photoUploader';
 
 const INDEX_KEY = '@zenrun:pendingPhoneActivities';
 const DRAFTS_DIR = `${FileSystem.documentDirectory ?? ''}pendingActivities/`;
@@ -52,7 +54,20 @@ interface BaseDraft {
   id: string;
   draftedAt: number;
   snapshot: SerialisedSnapshot;
+  /**
+   * Photos field — kept for backward compatibility with drafts created by
+   * Build 32 and earlier (base64 inline). Build 34+ uses `sessionId` instead
+   * and leaves this empty.
+   */
   photos: SerialisedPhoto[];
+  /**
+   * Build 34+: id of the on-disk photo session that holds the captured
+   * photos. When set, the drainer creates the activity, links it via
+   * `linkActivityId`, and the photo uploader picks up the photos. The
+   * draft itself stays small (no base64 inline) and the photos are never
+   * lost even if the draft file is corrupted.
+   */
+  sessionId?: string | null;
   mood?: string;
   note?: string;
 }
@@ -245,7 +260,7 @@ export async function drainPendingPhoneActivities(): Promise<DrainResult> {
 }
 
 async function uploadRunDraft(draft: PendingRunDraft): Promise<void> {
-  const { snapshot, mood, note } = draft;
+  const { snapshot, mood, note, sessionId } = draft;
   const points = snapshot.points;
   if (points.length < 2 || snapshot.distanceKm <= 0) {
     // Bad draft — discard rather than retry forever.
@@ -278,6 +293,20 @@ async function uploadRunDraft(draft: PendingRunDraft): Promise<void> {
     mood: mood || undefined,
   });
 
+  // Build 34+ path: photos are in a session folder. Link the activity
+  // and let the uploader handle the rest.
+  if (sessionId) {
+    const manifest = await loadManifest(sessionId);
+    if (manifest) {
+      await linkActivityId(sessionId, run.id, savedDistanceKm);
+      void drainSession(sessionId);
+      return;
+    }
+    // Session vanished (cache cleared, etc.) — fall through to inline
+    // photos if any are still present in the draft.
+  }
+
+  // Legacy path: photos inlined as base64 in the draft.
   const valid = draft.photos.filter((p) => p.base64 && p.base64.length > 0);
   if (valid.length > 0) {
     const upperBound = Math.max(0.05, savedDistanceKm - 0.01);
@@ -297,7 +326,7 @@ async function uploadRunDraft(draft: PendingRunDraft): Promise<void> {
 }
 
 async function uploadWalkDraft(draft: PendingWalkDraft): Promise<void> {
-  const { snapshot, mood, note, publicWalkId } = draft;
+  const { snapshot, mood, note, publicWalkId, sessionId } = draft;
   const points = snapshot.points;
   if (points.length < 2 || snapshot.distanceKm <= 0) {
     throw new Error('Insufficient GPS points');
@@ -305,10 +334,11 @@ async function uploadWalkDraft(draft: PendingWalkDraft): Promise<void> {
   const start = points[0];
   const end = points[points.length - 1];
   const polyline = encodePolyline(points as TrackedPoint[]);
+  const savedDistanceKm = Number(snapshot.distanceKm.toFixed(3));
 
   const walk = await walkApi.create({
     duration_seconds: Math.max(1, Math.round(snapshot.durationSeconds)),
-    distance_km: Number(snapshot.distanceKm.toFixed(3)),
+    distance_km: savedDistanceKm,
     started_at: snapshot.startedAt
       ? new Date(snapshot.startedAt).toISOString()
       : undefined,
@@ -326,6 +356,15 @@ async function uploadWalkDraft(draft: PendingWalkDraft): Promise<void> {
     category: 'outdoor',
     public_walk_id: publicWalkId,
   });
+
+  if (sessionId) {
+    const manifest = await loadManifest(sessionId);
+    if (manifest) {
+      await linkActivityId(sessionId, walk.id, savedDistanceKm);
+      void drainSession(sessionId);
+      return;
+    }
+  }
 
   const valid = draft.photos.filter((p) => p.base64 && p.base64.length > 0);
   if (valid.length > 0) {
