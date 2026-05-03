@@ -45,16 +45,47 @@ George Sheehan, the cardiologist-turned-running-philosopher, wrote in *Running &
 
 Sheehan understood that running transforms the runner. Not through data, but through the accumulated experience of showing up, day after day.
 
-### The Anti-Strava Movement
+### Bringing the joy back
 
-A growing counter-culture of runners is deliberately leaving GPS watches at home. They report:
+We believe metrics have made running less joyful. The numbers were meant to help; instead they pulled attention away from the run itself.
 
-- Rediscovering running as "pure joy rather than data collection"
-- Noticing their breathing, their surroundings, and their body for the first time in years
-- Running longer simply because they enjoy it -- without anxiety about pace
-- Breaking free from the comparison trap that social fitness platforms create
+ZenRun's bet is the opposite shape. Enjoy the moment while you run. Take pictures of what you see. Let the numbers settle quietly into the journal afterwards — pace, heart rate, zones, all of it.
 
-Research supports this instinct. Studies show runners perform up to 10% faster when focusing on breath and body sensations rather than external data. The body already knows its pace. The lungs already know their capacity.
+Reflection is what brings the joy back. The photo you took at km 4. The route you traced through the park. The pace you settled into, read the next morning like a journal entry. A run becomes joyful again when you have somewhere meaningful to look back at it.
+
+---
+
+## A new paradigm
+
+ZenRun brings mindfulness, photos, and reflection into running — three things kept close together as one practice.
+
+They create a virtuous loop: showing up makes the moments. The moments become an album. The album is what pulls you back out tomorrow.
+
+ZenRun lives in two places: the path you take, and the album you enjoy afterwards.
+
+### 1. Show up
+
+The important thing is to put the shoes-on and get out-the-door. 
+
+ZenRun wants to stay out of the way. There is no pressure to perform, no leaderboard waiting for you to finish. Logging takes two seconds. Or you can use the apple watch.  The weekly rhythm rewards two runs a week. The watch app is a quiet companion to your running journey. 
+
+When you've shown up enough times, you stop calling yourself someone who runs sometimes. You become a runner.
+
+### 2. Reflect
+
+The journal has the stats, the photos and the map of where you went. It is the story of your run that you can reflect on. 
+
+Reflection is what makes a run *yours* a year later. ZenRun saves the things you'll want to look back at — the photos you took at km 4, the route you traced through the park, the month where you finally hit your rhythm, the quarter you ran more than any other. Numbers live here too: heart rate, zones, energy, VO₂ Max. Fitness data you can read like a journal entry, not a performance scorecard.
+
+Reflection is what pulls you back out the door tomorrow.
+
+### How they feed each other
+
+You show up to make material. You reflect to remember why. The two halves feed each other.
+
+Most apps only do the first -- they track and grade. ZenRun tries to hold both: the path, and the album it makes.
+
+Every feature in ZenRun lives in one of the two places. If it doesn't, it shouldn't.
 
 ---
 
@@ -75,19 +106,48 @@ The runners who improve year after year aren't the ones with the most data. They
 
 ## ZenRun's Position
 
-**Less tracking. More running.**
+**Show up. Reflect.**
 
-ZenRun exists for one reason: to help you build a consistent running habit and enjoy the process. We believe:
+ZenRun exists to help you build a running practice you actually enjoy looking back on. A few things we believe:
 
-1. **Consistency beats intensity.** A rhythm of regular runs matters more than any single performance. Our core mechanic -- the weekly rhythm -- rewards showing up twice a week, every week. Not pace. Not distance. Just presence.
+1. **Consistency beats intensity.** A rhythm of regular runs matters more than any single performance. The weekly rhythm rewards two runs a week. Not pace. Not distance. Just presence.
 
-2. **Simplicity is a feature, not a limitation.** Log a run in 2 seconds. See your rhythm. Check your monthly progress. That's it. We deliberately leave out the noise: no live pace tracking, no cadence analysis, no social feeds, no leaderboards against strangers.
+2. **Data behind you, not in front of you.** Other apps push numbers at you mid-stride. ZenRun records them quietly and serves them back when you're ready to read. Heart rate, zones, energy, VO₂ Max -- available, never demanding.
 
-3. **Celebration over comparison.** 50 achievement badges reward milestones in *your* journey -- your first 5K, your 100th run, your first year of consistency. Not how you rank against others.
+3. **The album is half the product.** Scenic photos, the map of your route, your monthly recap, your quarterly review. This is where a run becomes a memory worth keeping.
 
-4. **Community without competition.** Circles let you share your running journey with close friends -- up to 10 people who care about your consistency, not your splits. It's accountability, not a leaderboard.
+4. **Celebration over comparison.** 100 milestones reward *your* journey -- your first 5K, your 100th run, your first year of consistency. Not how you rank against anyone else.
 
-5. **The run is the reward.** We don't want you staring at your phone while you run. Log it when you're done. Reflect on how it felt. Move on with your day.
+5. **Community at two scales.** Circles for the people you know. The neighbourhood for the city you run in. We rank places, never people.
+
+6. **Walks count too.** A walk is a smaller version of the same practice. Same scenic photos, same maps, same recaps.
+
+---
+
+## The neighbourhood
+
+Most running apps give you two options: connect to friends, or get ranked against strangers. ZenRun adds a third: the runners in your city, pseudonymous and opt-in.
+
+Share an album -- the route, the photos, the captions -- to your city's shared map. Other ZenRunners nearby can save it as inspiration, or go run it themselves and post their own version. The signal is "I want to go there", not "I beat you".
+
+Two rules hold the spirit:
+
+- **Pseudonymous by default.** A handle, never your real name. The unit of share is the album, not the runner. Your circle still sees the real you.
+- **Rank places, not people.** Saves and *"I ran this!"* sit on the album. There is no leaderboard of users, no public photo count on a profile, no kudos race.
+
+The neighbourhood pulls inspiration in from people you don't know yet, without the pressure of competing with them. It's a Pinterest of beautiful runs near you, not a Strava feed of strangers.
+
+### Two layers, one rule
+
+| | Circles | The neighbourhood |
+|---|---|---|
+| Who | Up to 10 close friends | Pseudonymous ZenRunners in your city |
+| What's shared | Full runs, photos, reactions | Albums (route + photos), opt-in per album |
+| Identity | The real you | A handle |
+| Signal | Reactions, encouragement | Saves, *"I ran this!"* |
+| Purpose | Accountability | Discovery |
+
+The same rule governs both: nothing comparative ever lands on a runner's profile.
 
 ---
 
@@ -95,16 +155,18 @@ ZenRun exists for one reason: to help you build a consistent running habit and e
 
 You are a ZenRunner if you:
 
-- Run 2-5 times a week and want to keep doing that for years
-- Values the mental clarity of running as much as the physical fitness
-- Have felt the anxiety of tracking apps and wants something calmer
-- Care about building a sustainable habit, not chasing a PR every week
+- Run (or walk) 2--5 times a week and want to keep doing that for years
+- Value the mental clarity of running as much as the physical fitness
+- Take photos on the trail and want somewhere meaningful to keep them
+- Have felt the anxiety of tracking apps and want something calmer
+- Care about building a sustainable practice, not chasing a PR every week
 - Want to share your journey with close friends, not perform for followers
+- Like to discover new places to run through other runners' eyes -- without seeing their pace
 - Believe that the best run is the one you actually did
 
-We're not for the runner optimising their 5K time by 3 seconds. We're not for the runner who needs VO2 max charts and lactate threshold estimates. Those runners are well-served by existing apps.
+We're not for the runner glued to a wrist coach, chasing 3 seconds off a 5K. We don't hide fitness data. Your heart rate, zones, and VO₂ Max are all in the album. We just don't put them on your wrist mid-run, and we don't grade you on them.
 
-**We're for the runner who just wants to run.**
+**We're for the runner who shows up, looks back, and goes again.**
 
 ---
 
@@ -114,20 +176,35 @@ We're not for the runner optimising their 5K time by 3 seconds. We're not for th
 |-----------|--------|------------|
 | Tone | Calm, encouraging, warm | Aggressive, competitive, urgent |
 | Language | "You showed up" | "You crushed it" |
-| Focus | This week, this month | Lifetime PRs, rankings |
-| Motivation | Internal satisfaction | External validation |
-| Complexity | Intentionally minimal | Feature-rich, data-dense |
-| Social | Small circles of friends | Public profiles, follower counts |
+| Focus | This week, this month, this view | Lifetime PRs, rankings |
+| Motivation | Internal satisfaction, memory | External validation |
+| Data stance | Reflective (after the run) | Prescriptive (during the run) |
+| Visual feel | Scenic photos, warm tones, generous whitespace | Dashboards, charts, neon |
+| Social | Circles + a city of pseudonymous runners | Named public profiles, follower counts |
 | Philosophy | "Run because it feels good" | "Run faster, run harder" |
 
 ---
 
 ## Tagline Options
 
+Primary candidates (current direction):
+
+- **Show up. Reflect.**
+- **The path and the album.**
+- **ZenRun lives in two places: the path you take, and the album you enjoy afterwards.**
+
+Community / neighbourhood:
+
+- **Find places, not pace.**
+- **A running journal you can share with your city.**
+- **We rank places, never people.**
+
+Secondary / contextual:
+
+- **A running journal -- show up, reflect, repeat.**
 - **Less tracking. More running.**
-- **Just run.**
+- **Run. Remember.**
 - **Built for consistency, not competition.**
-- **The running app that gets out of your way.**
 - **Run your own run.**
 
 ---
@@ -138,7 +215,7 @@ ZenRun wasn't built in a product lab. It was built by a runner who knows what it
 
 The creator of ZenRun has been through the cycle that most runners know: stretches of motivation followed by months of nothing. Hardly a run in all of 2025. Then, at the start of 2026, a decision -- run 1,000km this year. Not for a race. Not for a time. Just to see if the habit could stick.
 
-2.5 months and 160km in, the habit is holding. Some weeks are strong. Some weeks are a fight to get out the door. The app was built during that same period, evolving alongside the runs -- through the ebb and flow of real motivation.
+4 months and 375km in, the habit is holding. Some weeks are strong. Some weeks are a fight to get out the door. The app was built during that same period, evolving alongside the runs -- through the ebb and flow of real motivation.
 
 The shift from "streaks" to "rhythm" wasn't a branding exercise. It came from lived experience. Streaks felt like pressure. Missing a week felt like failure. "Rhythm" reframed the same idea as something you return to, not something you break. That insight only came from being a runner using the app, not just building it.
 
@@ -158,6 +235,7 @@ This is what makes ZenRun different from Strava, Nike Run Club, or any venture-b
 | The Raramuri (Tarahumara) | Running as community, prayer, and celebration -- not performance |
 | The Anti-Strava Movement | Runners reclaiming joy by leaving trackers behind |
 | Habit Formation Research | Consistency (4x/week for 6+ weeks) matters more than intensity |
+| The journaling tradition (commonplace books, photo albums, Instagram-as-archive) | Memory as a practice; small artefacts becoming a life's record |
 
 ---
 

@@ -7,13 +7,17 @@ export default function Home() {
         <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-16 md:pt-36 md:pb-24">
           <div className="flex flex-col md:flex-row items-center gap-12 md:gap-16">
             <div className="flex-1 max-w-xl">
+              <p className="text-xs font-semibold tracking-[0.25em] uppercase text-coral mb-5">
+                Show up. <span className="text-teal">Reflect.</span>
+              </p>
               <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
                 Your <span className="text-coral">joyful</span> running journal
               </h1>
               <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
-                Running apps turned running into a spreadsheet. ZenRun is a
-                journal &mdash; Log your run in 2 seconds, build your rhythm
-                and find joy in every step.
+                Running apps turned running into a spreadsheet. ZenRun is the
+                journal you fill in afterwards &mdash; logged in 2 seconds,
+                stitched together with your photos, your routes, and the slow
+                story of showing up.
               </p>
               <div id="download" className="flex flex-wrap gap-4">
                 <a
@@ -110,21 +114,20 @@ export default function Home() {
           </h2>
           <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
             <p>
-              Open any popular running app and you&apos;re hit with pace splits, cadence,
-              heart rate zones, VO2 max estimates, power output, vertical oscillation.
-              Then comes the social layer &mdash; leaderboards, segment records, and the
-              unspoken pressure to perform for an audience.
+              Open any popular running app and the numbers come at you mid-stride &mdash;
+              live pace, zone alarms, cadence prompts, segment leaderboards, the unspoken
+              pressure to perform for an audience while your lungs are still warming up.
             </p>
             <p>
-              Trying to track whether we are staying in optimum zone 2, pushing another
-              mile to staying on top of leaderboard and often running the easy runs &mdash;
-              the foundation of aerobic fitness &mdash; too fast because posting a slow
-              pace feels embarrassing are taking the joy away from running.
+              Easy runs get pushed too fast because the pace is being watched. Recovery
+              jogs become zone-2 audits. The last 200 metres turn into a sprint to fix
+              an average. The run we set out for &mdash; the one that was supposed to feel
+              good &mdash; quietly disappears under the dashboard.
             </p>
             <p className="text-gray-900 font-semibold">
               What started as tools to help runners have become tools that own them.
-              The run worth having, it turns out, is the one in which you are present &mdash;
-              not to the data, but to yourself.
+              The run worth having, it turns out, is the one you stayed present in &mdash;
+              and the one you can still remember a year later.
             </p>
           </div>
         </div>
@@ -190,6 +193,36 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Bringing the joy back */}
+      <section className="bg-warm-bg py-20 md:py-28">
+        <div className="max-w-3xl mx-auto px-6">
+          <p className="text-xs font-semibold tracking-[0.25em] uppercase text-coral mb-4">
+            What we believe
+          </p>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
+            Reflection is what brings the joy back.
+          </h2>
+          <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
+            <p>
+              We believe metrics have made running less joyful. The numbers
+              were meant to help; instead they pulled attention away from the
+              run itself.
+            </p>
+            <p>
+              ZenRun&apos;s bet is the opposite shape. Enjoy the moment while you run.
+              Take pictures of what you see. Let the numbers settle quietly into
+              the journal afterwards &mdash; pace, heart rate, zones, all of it.
+            </p>
+            <p className="text-gray-900 font-semibold">
+              The photo you took at km 4. The route you traced through the park.
+              The pace you settled into, read the next morning like a journal
+              entry. A run becomes joyful again when you have somewhere
+              meaningful to look back at it.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* What the science says */}
       <section className="bg-warm-surface py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6 text-center">
@@ -197,10 +230,10 @@ export default function Home() {
             Consistency is the only metric that matters.
           </h2>
           <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto mb-12">
-            The single most important factor in running progress is not pace,
-            cadence, or VO2 max. Runners who show up regularly &mdash;
-            even with imperfect sessions &mdash; build lasting fitness.
-            Chasing perfect data slows you down.
+            The single most important factor in running progress isn&apos;t pace
+            or any single number. Runners who show up regularly &mdash; even
+            with imperfect sessions &mdash; build lasting fitness. Chasing
+            perfect data on every run is what slows you down.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             <div className="bg-white rounded-2xl p-6">
@@ -230,104 +263,225 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How ZenRun works */}
+      {/* A new paradigm */}
       <section className="bg-white py-20 md:py-28">
+        <div className="max-w-3xl mx-auto px-6 text-center">
+          <p className="text-xs font-semibold tracking-[0.25em] uppercase text-gray-400 mb-4">
+            A new paradigm
+          </p>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
+            <span className="text-coral">Show up.</span>{' '}
+            <span className="text-teal">Reflect.</span>
+          </h2>
+          <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto mb-5">
+            ZenRun brings mindfulness, photos, and reflection into running
+            &mdash; three things kept close together as one practice.
+          </p>
+          <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto">
+            They create a virtuous loop: showing up makes the moments. The
+            moments become an album. The album is what pulls you back out
+            tomorrow.
+          </p>
+        </div>
+      </section>
+
+      {/* Pillar: Show up */}
+      <section className="bg-warm-surface py-20 md:py-28">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
+          <div className="max-w-3xl mb-14">
+            <p className="text-xs font-semibold tracking-[0.25em] uppercase text-coral mb-3">
+              The path
+            </p>
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              How ZenRun works
+              Show up.
             </h2>
-            <p className="text-lg text-gray-500 max-w-xl mx-auto">
-              Everything you need, nothing you don&apos;t.
+            <p className="text-lg text-gray-600 leading-relaxed">
+              The important thing is to put the shoes on and get out the door.
+              ZenRun stays out of your way. Logging takes two seconds. The
+              watch app, if you use it, is a quiet companion. Show up enough
+              times and you stop calling yourself someone who runs sometimes
+              &mdash; you become a runner.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
                 icon: '⏱️',
                 title: 'Log in 2 seconds',
-                desc: 'Pick your distance, enter your time, done. You can use your Apple Watch or not. Run however you want, log it when you\'re back.',
+                desc: 'Pick your distance, enter your time, done. Run however you want, log it when you\'re back.',
               },
               {
                 icon: '🌳',
-                title: 'Rhythm rewards showing up',
-                desc: 'Run at least twice a week to keep your rhythm going. Not pace. Not distance. Just presence. And showing up.',
+                title: 'Weekly rhythm',
+                desc: 'Two runs (or walks) a week keeps your rhythm going. Not pace. Not distance. Just presence.',
               },
               {
-                icon: '🏆',
-                title: '100 milestones for your journey',
-                desc: 'Earn achievements across your running life — first 5K, 100th run, a year of consistency, and beyond. Your journey, celebrated.',
-              },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="bg-warm-bg rounded-2xl p-8 text-center hover:shadow-lg transition-shadow"
-              >
-                <div className="text-5xl mb-5">{item.icon}</div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
-            {[
-              {
-                icon: '📸',
-                title: 'Scenic run photos',
-                desc: 'Capture the joy of outdoor runs. Tag photos to distance markers. Build a visual album of your running journey, km by km.',
+                icon: '⌚',
+                title: 'Quiet Apple Watch companion',
+                desc: 'One tap to start a run or walk. GPS captured in the background. The watch face stays out of your face.',
               },
               {
-                icon: '👥',
-                title: 'Circles, not leaderboards',
-                desc: 'Share your running journey with up to 10 close friends. Accountability and maybe some joyful competition.',
+                icon: '🚶',
+                title: 'Walks count too',
+                desc: 'Walks are first-class citizens. Same logging, same rhythm, same scenic photos. Show up however you can.',
               },
               {
                 icon: '🎯',
-                title: 'Goals that keep you honest',
-                desc: 'Set yearly and monthly km targets. A simple progress bar shows where you are and where you should be.',
+                title: 'Goals you can keep',
+                desc: 'Yearly and monthly km targets. A simple bar shows where you are and where you should be. No judgement.',
+              },
+              {
+                icon: '🎉',
+                title: 'Quiet celebrations',
+                desc: 'A small moment of confetti when you maintain your rhythm or hit a goal. No fanfare. Just a nod.',
               },
             ].map((item) => (
               <div
                 key={item.title}
-                className="bg-warm-bg rounded-2xl p-8 text-center hover:shadow-lg transition-shadow"
+                className="bg-white rounded-2xl p-7 hover:shadow-md transition-shadow"
               >
-                <div className="text-5xl mb-5">{item.icon}</div>
+                <div className="text-4xl mb-4">{item.icon}</div>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
                 <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pillar: Reflect */}
+      <section className="bg-white py-20 md:py-28">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="max-w-3xl mb-14">
+            <p className="text-xs font-semibold tracking-[0.25em] uppercase text-teal mb-3">
+              The album
+            </p>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Reflect.
+            </h2>
+            <p className="text-lg text-gray-600 leading-relaxed">
+              The journal. The photos you took at km 4. The map of where you
+              went. The slow, occasional looking-back that turns runs into a
+              story. Numbers live here too &mdash; pace, heart rate, zones,
+              energy, VO₂ Max &mdash; all kept, all available, all read like
+              journal entries.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
+                icon: '📸',
+                title: 'Scenic photos, km by km',
+                desc: 'Snap photos during your run, tagged to distance markers. Build a visual album of the places you ran through.',
+              },
+              {
+                icon: '🗺️',
+                title: 'Maps of every route',
+                desc: 'Every GPS-tracked run and walk gets a map you can revisit. The line of where you went, kept.',
+              },
+              {
+                icon: '📅',
+                title: 'Month in Review',
+                desc: 'A Spotify-Wrapped-style carousel at the end of each month. Distance, runs, photos, rhythm, goals &mdash; one swipe-through story.',
+              },
+              {
                 icon: '📊',
-                title: 'Just enough data',
-                desc: 'Distance. Time. Rhythm. Goals. Personal records. That\'s the full list. No cadence, no heart rate zones, no VO2 max.',
+                title: 'Quarter in Review',
+                desc: 'Every three months, a full-screen recap of the season. Total km, scenic moments, PRs, the shape of how you ran.',
               },
               {
-                icon: '🏃‍♂️',
-                title: 'Outdoor & treadmill',
-                desc: 'Log runs by type. Filter your stats and personal records by outdoor or treadmill to see what matters to you.',
+                icon: '❤️',
+                title: 'Heart rate, gently',
+                desc: 'Average HR, max HR, time-in-zone, active energy, VO₂ Max &mdash; recorded by your watch, served back in the journal. No alarms while you run.',
               },
               {
-                icon: '✏️',
-                title: 'Edit anytime',
-                desc: 'Made a typo? Added the wrong distance? Edit or delete any run, anytime. Your log, your rules.',
+                icon: '⚡',
+                title: 'Personal records',
+                desc: 'Your fastest at each distance, tracked automatically. The opponent is yourself, the way you used to be.',
+              },
+              {
+                icon: '🏆',
+                title: '100 milestones',
+                desc: 'Across distance, first completions, rhythm, and goals. Each badge celebrates a marker in your journey.',
               },
             ].map((item) => (
               <div
                 key={item.title}
-                className="bg-warm-bg rounded-2xl p-8 text-center hover:shadow-lg transition-shadow"
+                className="bg-warm-bg rounded-2xl p-7 hover:shadow-md transition-shadow"
               >
-                <div className="text-5xl mb-5">{item.icon}</div>
+                <div className="text-4xl mb-4">{item.icon}</div>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
                 <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Two scales of community */}
+      <section className="bg-warm-bg py-20 md:py-28">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="max-w-3xl mb-14 text-center mx-auto">
+            <p className="text-xs font-semibold tracking-[0.25em] uppercase text-gray-400 mb-3">
+              Two scales of community
+            </p>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Friends close. Neighbours nearby.
+            </h2>
+            <p className="text-lg text-gray-600 leading-relaxed">
+              Circles for the people you know. The neighbourhood for the city
+              you run in. Both opt-in, both about places celebrated and
+              people encouraged.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <div className="bg-white rounded-2xl p-8 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-4xl">👥</div>
+                <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-coral bg-coral/10 px-2.5 py-1 rounded-full">
+                  Available now
+                </span>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Circles</h3>
+              <p className="text-sm text-gray-500 leading-relaxed mb-4">
+                Up to 10 close friends. Runs, scenic photos, reactions. The
+                kitchen table of your running life &mdash; accountability with
+                warmth.
+              </p>
+              <ul className="space-y-1.5 text-xs text-gray-500">
+                <li>&middot; The real you</li>
+                <li>&middot; Full activity feed</li>
+                <li>&middot; Reactions and encouragement</li>
+              </ul>
+            </div>
+
+            <div className="bg-white rounded-2xl p-8 hover:shadow-md transition-shadow border border-teal/30">
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-4xl">🏘️</div>
+                <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-teal bg-teal/10 px-2.5 py-1 rounded-full">
+                  Coming soon
+                </span>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">The neighbourhood</h3>
+              <p className="text-sm text-gray-500 leading-relaxed mb-4">
+                Pseudonymous ZenRunners in your city. Share an album, save
+                someone else&apos;s, run it yourself. Discovery, not ranking.
+              </p>
+              <ul className="space-y-1.5 text-xs text-gray-500">
+                <li>&middot; A handle, not your real name</li>
+                <li>&middot; Albums opt-in per run</li>
+                <li>&middot; Saves and &quot;I ran this!&quot;</li>
+              </ul>
+            </div>
+          </div>
+
+          <p className="text-center text-sm text-gray-400 mt-10 max-w-xl mx-auto">
+            We rank places, never people. No leaderboards of users, no public
+            photo counts on a profile.
+          </p>
         </div>
       </section>
 
@@ -339,12 +493,13 @@ export default function Home() {
           </h2>
           <ul className="space-y-5">
             {[
-              'Run 2–5 times a week and want to keep doing that for years',
-              'Value the running mindfulness as much as the physical fitness',
-              'Have used tracking apps but have not stayed consistent',
-              'Care more about running than chasing a PR every week',
-              'Want to share your journey with close friends',
-              'Believe that the best run is the one you actually did',
+              'Run (or walk) 2–5 times a week and want to keep doing that for years',
+              'Value the mental clarity of running as much as the physical fitness',
+              'Take photos on the trail and want somewhere meaningful to keep them',
+              'Care about building a sustainable practice, not chasing a PR every week',
+              'Want to share your journey with close friends, not perform for followers',
+              'Like to discover new places to run through other runners’ eyes',
+              'Believe the best run is the one you actually did',
             ].map((item) => (
               <li key={item} className="flex items-start gap-4">
                 <span className="mt-1.5 w-2 h-2 rounded-full bg-coral shrink-0" />
@@ -352,9 +507,8 @@ export default function Home() {
               </li>
             ))}
           </ul>
-          <p className="mt-10 text-gray-500 leading-relaxed">
-            We&apos;re not for the runner optimising their 5K time by 3 seconds.
-            We&apos;re for the runner who just wants to run.
+          <p className="mt-10 text-lg text-gray-700 font-semibold leading-relaxed">
+            ZenRun is for the runner who shows up, looks back, and goes again.
           </p>
         </div>
       </section>
@@ -415,11 +569,15 @@ export default function Home() {
       {/* CTA */}
       <section className="bg-gray-900 py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6 text-center">
+          <p className="text-xs font-semibold tracking-[0.25em] uppercase text-coral-light mb-4">
+            Show up. Reflect.
+          </p>
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
             Start running. Stop tracking.
           </h2>
           <p className="text-lg text-gray-400 mb-10 max-w-lg mx-auto">
-            Join runners who focus on showing up, not showing off.
+            Join runners who focus on showing up, not showing off &mdash; and
+            on remembering it later.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a

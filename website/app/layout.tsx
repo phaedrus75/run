@@ -5,12 +5,13 @@ import Image from 'next/image';
 import AuthNav from '../components/AuthNav';
 
 export const metadata: Metadata = {
-  title: 'ZenRun — Your running journal.',
+  title: 'ZenRun — Show up. Reflect.',
   description:
-    'A running journal built for consistency. Log your run in 2 seconds, build your rhythm and find joy in every step.',
+    'A running journal built around two halves of one practice: the path you take, and the album you enjoy afterwards. Log a run in 2 seconds, capture scenic photos, build your rhythm.',
   openGraph: {
-    title: 'ZenRun — Your running journal.',
-    description: 'Your running journal.',
+    title: 'ZenRun — Show up. Reflect.',
+    description:
+      'Your running journal. Mindfulness, photos, and reflection — three things kept close together as one practice.',
     url: 'https://zenrun.co',
     siteName: 'ZenRun',
     type: 'website',
@@ -65,7 +66,9 @@ function Footer() {
               <span className="text-xl font-bold text-white">ZenRun</span>
             </div>
             <p className="text-sm leading-relaxed max-w-md">
-              Show up. That&apos;s the whole plan. A journal so you find joy in every run.
+              Show up. Reflect. A running journal built around two halves of one
+              practice &mdash; the path you take, and the album you enjoy
+              afterwards.
             </p>
           </div>
           <div>
