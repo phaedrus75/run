@@ -102,7 +102,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
         elevationGainM: Double,
         startedAt: Date,
         endedAt: Date,
-        points: [TrackedPoint]
+        points: [TrackedPoint],
+        avgHr: Double = 0,
+        maxHr: Double = 0,
+        activeEnergyKcal: Double = 0,
+        timeInZoneSec: [HRZone: TimeInterval] = [:]
     ) -> Bool {
         guard ensureActivated() else { return false }
         guard let payload = buildWorkoutPayload(
@@ -112,7 +116,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
             elevationGainM: elevationGainM,
             startedAt: startedAt,
             endedAt: endedAt,
-            points: points
+            points: points,
+            avgHr: avgHr,
+            maxHr: maxHr,
+            activeEnergyKcal: activeEnergyKcal,
+            timeInZoneSec: timeInZoneSec
         ) else {
             DispatchQueue.main.async {
                 self.lastError = "workout: failed to encode points"
@@ -139,7 +147,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
         elevationGainM: Double,
         startedAt: Date,
         endedAt: Date,
-        points: [TrackedPoint]
+        points: [TrackedPoint],
+        avgHr: Double,
+        maxHr: Double,
+        activeEnergyKcal: Double,
+        timeInZoneSec: [HRZone: TimeInterval]
     ) -> [String: Any]? {
         // pointsJSON shape that watchBridge.ts.parsePoints expects:
         // each row is `[lat, lng, timestamp_ms]`. Anything shorter is
@@ -152,8 +164,17 @@ final class WatchSessionManager: NSObject, ObservableObject {
             return nil
         }
 
+        // Time-in-zone serialised as a flat dict keyed by raw zone number
+        // ("1".."5") so the iPhone can decode it without knowing the Swift
+        // enum. Build 33's iPhone bridge ignores it; build 34 surfaces it
+        // on the run/walk detail view.
+        var zoneDict: [String: Int] = [:]
+        for (zone, sec) in timeInZoneSec where sec > 0 {
+            zoneDict[String(zone.rawValue)] = Int(sec.rounded())
+        }
+
         let iso = ISO8601DateFormatter()
-        return [
+        var payload: [String: Any] = [
             "zenRun": true,
             "_seq": nextSeq(),
             "type": kind.payloadType,
@@ -167,6 +188,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
             "watchAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?",
             "watchBuild": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?",
         ]
+        if avgHr > 0 { payload["hr_avg_bpm"] = Int(avgHr.rounded()) }
+        if maxHr > 0 { payload["hr_max_bpm"] = Int(maxHr.rounded()) }
+        if activeEnergyKcal > 0 { payload["calories_kcal"] = Int(activeEnergyKcal.rounded()) }
+        if !zoneDict.isEmpty { payload["hr_zone_seconds"] = zoneDict }
+        return payload
     }
 
     // MARK: - Helpers

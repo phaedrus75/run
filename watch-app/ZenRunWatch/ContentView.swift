@@ -1,21 +1,17 @@
 /**
  * ContentView
  * -----------
- * Watch home screen. Two main paths:
+ * Watch home screen. Three vertical zones:
  *
- *   - "Walk" / "Run" buttons start a workout and push the live metrics view.
- *     If a workout is already in progress (i.e. the user navigated back to
- *     home without stopping), the buttons collapse into a single "Continue"
- *     row that re-opens the live view without restarting the session.
+ *   1. Action area  — Walk / Run buttons, OR a "Continue" banner when a
+ *                     workout is in progress.
+ *   2. Status line  — VO₂ Max headline (latest reading from HealthKit) when
+ *                     available — the most "fitness-app-y" stat we can glance
+ *                     without starting a workout.
+ *   3. Footer       — channel state + Diagnostics tucked in a NavigationLink.
  *
- *   - A `Diagnostics` link (collapsed by default) preserves the build 30
- *     hello-world buttons so we can ping the channel from the watch even in
- *     a production build. They're not visible on the main screen anymore so
- *     the user doesn't accidentally fire them mid-run.
- *
- * Channel state (activation, reachability, iPhone-app installed) lives at the
- * bottom as a compact line — it shouldn't dominate the screen but should be
- * visible when triaging "did my run sync?" questions.
+ * The VO₂ Max read is refreshed lazily on appear; HealthKit auth may not be
+ * granted yet on first launch, in which case the line stays hidden.
  */
 
 import SwiftUI
@@ -27,7 +23,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     if workout.state == .recording || workout.state == .paused {
                         continueBanner
                     } else if workout.state == .ended {
@@ -38,15 +34,9 @@ struct ContentView: View {
                         startButtons
                     }
 
-                    NavigationLink {
-                        DiagnosticsView()
-                            .environmentObject(session)
-                    } label: {
-                        Label("Diagnostics", systemImage: "wrench.and.screwdriver")
-                            .font(.footnote)
+                    if let vo2 = workout.latestVO2Max {
+                        vo2MaxLine(vo2)
                     }
-                    .buttonStyle(.bordered)
-                    .padding(.top, 4)
 
                     statusFooter
                 }
@@ -55,15 +45,18 @@ struct ContentView: View {
             }
             .navigationTitle("ZenRun")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { workout.refreshVO2Max() }
         }
     }
+
+    // MARK: - Sections
 
     private var startButtons: some View {
         VStack(spacing: 8) {
             NavigationLink {
                 ActiveWorkoutView(intendedKind: .walk)
             } label: {
-                workoutButtonLabel(title: "Walk", systemImage: "figure.walk", color: .blue)
+                workoutButtonLabel(title: "Walk", systemImage: "figure.walk")
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)
@@ -71,7 +64,7 @@ struct ContentView: View {
             NavigationLink {
                 ActiveWorkoutView(intendedKind: .run)
             } label: {
-                workoutButtonLabel(title: "Run", systemImage: "figure.run", color: .orange)
+                workoutButtonLabel(title: "Run", systemImage: "figure.run")
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
@@ -89,6 +82,7 @@ struct ContentView: View {
                 Text("\(workout.kind.displayName) · \(formatDistanceKm(workout.distanceKm))")
                     .font(.body)
                     .fontWeight(.semibold)
+                    .monospacedDigit()
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
@@ -97,19 +91,43 @@ struct ContentView: View {
         .tint(workout.state == .ended ? .green : .orange)
     }
 
-    private func workoutButtonLabel(title: String, systemImage: String, color: Color) -> some View {
-        HStack {
+    private func workoutButtonLabel(title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
             Image(systemName: systemImage)
+                .font(.body)
             Text(title)
                 .fontWeight(.semibold)
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+    }
+
+    private func vo2MaxLine(_ vo2: Double) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "lungs.fill")
+                .font(.caption2)
+                .foregroundColor(.cyan)
+            Text("VO₂ Max")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(String(format: "%.1f", vo2))
+                .font(.caption)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+            Text("ml/kg·min")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.gray.opacity(0.15))
+        .cornerRadius(6)
     }
 
     private var statusFooter: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 4) {
             HStack(spacing: 4) {
                 Circle()
                     .fill(session.activationState == .activated ? Color.green : Color.gray)
@@ -124,8 +142,18 @@ struct ContentView: View {
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }
+            NavigationLink {
+                DiagnosticsView()
+                    .environmentObject(session)
+            } label: {
+                Text("Diagnostics")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 2)
         }
-        .padding(.top, 4)
+        .padding(.top, 6)
     }
 
     private var channelLabel: String {

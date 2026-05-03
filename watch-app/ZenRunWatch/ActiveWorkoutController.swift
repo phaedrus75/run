@@ -2,9 +2,9 @@
  * ActiveWorkoutController
  * -----------------------
  * The brain of an in-progress watch workout. Combines `WorkoutLocationManager`
- * (filtered GPS) and `WorkoutHealthManager` (background runtime) under a
- * single `ObservableObject` so the SwiftUI views can render live metrics
- * without touching CoreLocation / HealthKit directly.
+ * (filtered GPS) and `WorkoutHealthManager` (background runtime + live HR /
+ * energy / VO₂ Max) under a single `ObservableObject` so the SwiftUI views
+ * can render live metrics without touching CoreLocation / HealthKit directly.
  *
  * State machine:
  *   .idle ──start──▶ .recording ──pause──▶ .paused ──resume──▶ .recording
@@ -14,15 +14,20 @@
  *                          ▼                            ▼
  *                       .ended (immutable snapshot for the summary view)
  *                       │
- *                       discard() / send() ──▶ .idle
+ *                       saveAndPersist() / discard() ──▶ .idle
  *
- * Snapshot fields mirror `WalkSnapshot` in `walkLocationTracker.ts` so the
- * iPhone-side payload uploader sees identical shapes regardless of recorder.
+ * Build 33 additions:
+ *   • Live heart rate (latest sample), avg, max
+ *   • Time-in-zone accumulation (seconds per HRZone)
+ *   • Active energy (kcal) — cumulative for the workout
+ *   • VO₂ Max read on init (used by the home screen footer)
+ *   • Save vs Discard now actually means something — Save persists the
+ *     workout to Apple Health, Discard drops it.
  *
  * Heads-up: HKWorkoutSession can fail to start (HK off, simulator, etc).
  * We treat that as non-fatal — the GPS path still works, we just lose the
- * background-runtime guarantee. The UI surfaces a quiet warning so the user
- * knows to keep the wrist raised.
+ * background-runtime guarantee plus all HR/energy metrics. The UI surfaces
+ * a quiet warning so the user knows to keep the wrist raised.
  */
 
 import Foundation
@@ -52,6 +57,23 @@ final class ActiveWorkoutController: ObservableObject {
     @Published private(set) var locationAuthorization: CLAuthorizationStatus = .notDetermined
     @Published private(set) var healthAuthorizationOk: Bool = false
 
+    // Heart rate
+    @Published private(set) var currentHr: Double = 0
+    @Published private(set) var avgHr: Double = 0
+    @Published private(set) var maxHr: Double = 0
+    @Published private(set) var currentZone: HRZone?
+    @Published private(set) var timeInZoneSec: [HRZone: TimeInterval] = [:]
+
+    // Energy
+    @Published private(set) var activeEnergyKcal: Double = 0
+
+    // Latest user VO₂ Max from HealthKit (set on init / on home-screen mount).
+    @Published private(set) var latestVO2Max: Double?
+
+    /// User max-HR setting for zone calculation. Build 33 uses the default;
+    /// build 34 will let the iPhone push a user-overridden value.
+    @Published var maxHrSetting: Double = HeartRateZones.defaultMaxHR
+
     // MARK: - Internals
 
     private let location = WorkoutLocationManager()
@@ -61,6 +83,14 @@ final class ActiveWorkoutController: ObservableObject {
     private var pausedAccumulatedSec: TimeInterval = 0
     private var pausedAt: Date?
     private var ticker: Timer?
+
+    /// HR running totals — kept separately so we don't recompute every tick.
+    private var hrSampleCount: Int = 0
+    private var hrSum: Double = 0
+
+    /// Last instant we updated time-in-zone, so we can credit the elapsed
+    /// delta to the current zone on the next tick.
+    private var lastZoneTickAt: Date?
 
     init() {
         location.onPoint = { [weak self] point in
@@ -72,6 +102,13 @@ final class ActiveWorkoutController: ObservableObject {
         // Reflect the cached value immediately so the UI doesn't flash
         // "permission unknown" while we wait for the system callback.
         self.locationAuthorization = location.authorizationStatus
+
+        health.onHeartRate = { [weak self] bpm in
+            self?.handleHeartRate(bpm)
+        }
+        health.onActiveEnergy = { [weak self] kcal in
+            self?.activeEnergyKcal = kcal
+        }
     }
 
     // MARK: - Permission entry points (called from the home screen on tap)
@@ -85,7 +122,18 @@ final class ActiveWorkoutController: ObservableObject {
     func ensureHealthAuthorization(completion: ((Bool) -> Void)? = nil) {
         health.requestAuthorization { [weak self] ok in
             self?.healthAuthorizationOk = ok
+            // Pull VO₂ Max once auth is granted — it's a one-shot read used
+            // by the home screen, no need to keep polling.
+            if ok { self?.refreshVO2Max() }
             completion?(ok)
+        }
+    }
+
+    /// Read the user's most recent VO₂ Max sample. Safe to call from anywhere;
+    /// no-op if HealthKit auth hasn't been granted yet.
+    func refreshVO2Max() {
+        health.fetchLatestVO2Max { [weak self] value in
+            self?.latestVO2Max = value
         }
     }
 
@@ -105,6 +153,15 @@ final class ActiveWorkoutController: ObservableObject {
         self.paceText = "--:--"
         self.lastError = nil
         self.endedAt = nil
+        self.currentHr = 0
+        self.avgHr = 0
+        self.maxHr = 0
+        self.currentZone = nil
+        self.timeInZoneSec = [:]
+        self.activeEnergyKcal = 0
+        self.hrSampleCount = 0
+        self.hrSum = 0
+        self.lastZoneTickAt = nil
 
         let now = Date()
         self.startedAt = now
@@ -114,7 +171,6 @@ final class ActiveWorkoutController: ObservableObject {
         do {
             try health.startSession(kind: kind, startDate: now)
         } catch {
-            // Non-fatal: we still record GPS, just without background runtime.
             self.lastError = "HealthKit: \(error.localizedDescription)"
         }
         startTicker()
@@ -134,11 +190,14 @@ final class ActiveWorkoutController: ObservableObject {
         }
         pausedAt = nil
         state = .recording
+        // Reset the zone-tick anchor so we don't credit paused time to a
+        // zone bucket on the next tick.
+        lastZoneTickAt = Date()
         health.resumeSession()
     }
 
-    /// Stop without saving — points are kept in memory so the summary screen
-    /// can let the user choose to save or discard.
+    /// Stop without saving — points and HR stats are kept in memory so the
+    /// summary screen can let the user choose to save or discard.
     func stop() {
         guard state == .recording || state == .paused else { return }
         if state == .paused, let pa = pausedAt {
@@ -148,14 +207,39 @@ final class ActiveWorkoutController: ObservableObject {
         endedAt = Date()
         state = .ended
         location.stop()
-        health.endSession()
         stopTicker()
         // Recompute one final time so the summary view sees up-to-date numbers.
         recomputeDuration(now: endedAt ?? Date())
+        // Note: we do NOT call health.discardWorkout() / saveWorkoutToHealth()
+        // here — the user chooses one in the summary view.
     }
 
-    /// Throw away the current session and return to idle. Called by the
-    /// summary view's Discard button.
+    /// Called by the summary view's Save button. Persists the workout to
+    /// Apple Health, then resets the controller. Async because the HK save
+    /// is non-trivial; the completion fires once the write is durable.
+    func saveAndPersistToHealth(completion: @escaping (Bool) -> Void) {
+        guard state == .ended, let ended = endedAt else {
+            completion(false)
+            return
+        }
+        health.saveWorkoutToHealth(endDate: ended) { [weak self] ok in
+            // Whether the HK persist succeeded or not, we still want to clear
+            // local state and let the user move on. The iPhone payload was
+            // already queued separately.
+            self?.reset()
+            completion(ok)
+        }
+    }
+
+    /// Called by the summary view's Discard button. Drops the workout from
+    /// HealthKit (no record kept) and returns to idle.
+    func discard() {
+        health.discardWorkout()
+        reset()
+    }
+
+    /// Internal reset — clears all state without touching HealthKit. Used by
+    /// `saveAndPersistToHealth` / `discard` after they've handled HK.
     func reset() {
         points = []
         pausedAccumulatedSec = 0
@@ -168,6 +252,15 @@ final class ActiveWorkoutController: ObservableObject {
         pointCount = 0
         paceText = "--:--"
         lastError = nil
+        currentHr = 0
+        avgHr = 0
+        maxHr = 0
+        currentZone = nil
+        timeInZoneSec = [:]
+        activeEnergyKcal = 0
+        hrSampleCount = 0
+        hrSum = 0
+        lastZoneTickAt = nil
         state = .idle
     }
 
@@ -181,12 +274,50 @@ final class ActiveWorkoutController: ObservableObject {
         endedAt.map { ISO8601DateFormatter().string(from: $0) }
     }
 
-    // MARK: - Live metrics
+    /// Total time-in-zone seconds across all zones, for normalising the bar.
+    var totalZoneSec: TimeInterval {
+        timeInZoneSec.values.reduce(0, +)
+    }
+
+    // MARK: - HR + zone updates
+
+    private func handleHeartRate(_ bpm: Double) {
+        guard bpm.isFinite, bpm > 0 else { return }
+        currentHr = bpm
+        hrSampleCount += 1
+        hrSum += bpm
+        avgHr = hrSum / Double(hrSampleCount)
+        maxHr = max(maxHr, bpm)
+        currentZone = HeartRateZones.zone(for: bpm, maxHR: maxHrSetting)
+    }
+
+    /// Credit elapsed time since the last tick to whichever zone the user
+    /// is currently in. Called by the ticker every second so the summary
+    /// shows minute-resolution accuracy regardless of how often HR samples
+    /// arrive.
+    private func updateTimeInZone(now: Date) {
+        guard state == .recording, let zone = currentZone else {
+            lastZoneTickAt = now
+            return
+        }
+        if let last = lastZoneTickAt {
+            let dt = now.timeIntervalSince(last)
+            if dt > 0, dt < 5 {  // sanity-clamp on long ticker pauses
+                timeInZoneSec[zone, default: 0] += dt
+            }
+        }
+        lastZoneTickAt = now
+    }
+
+    // MARK: - Live metrics ticker
 
     private func startTicker() {
         stopTicker()
+        lastZoneTickAt = Date()
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.recomputeDuration(now: Date())
+            let now = Date()
+            self?.recomputeDuration(now: now)
+            self?.updateTimeInZone(now: now)
         }
         RunLoop.main.add(timer, forMode: .common)
         ticker = timer
@@ -209,12 +340,8 @@ final class ActiveWorkoutController: ObservableObject {
     }
 
     private func handlePoint(_ point: TrackedPoint) {
-        // Ingestion still fires while paused — but the controller decides
-        // whether to count distance or just keep the point as a breadcrumb.
-        // Matching `walkLocationTracker.ts` we credit distance even in the
-        // paused state IF a fresh point arrives, since the soft pause is a
-        // duration-only flag. Manual pause (via the UI) is hard-stop on
-        // distance, so:
+        // Manual pause is hard-stop on distance accumulation. Soft pause
+        // (auto-pause) is duration-only — we still credit incoming points.
         if state != .recording { return }
 
         let prev = points.last
