@@ -100,7 +100,7 @@ This document tracks the product roadmap for ZenRun - a mobile app for tracking 
 
 *Add new feature ideas here*
 
-1. 
+1. **True milestone recency tracking** — Achievements are currently recomputed live on each `getAchievements` call, with no record of *when* a badge was first unlocked. The Home "Milestones" strip falls back to "highest-tier badges" (tail of the `unlocked` array) as a proxy. To show actually-recent unlocks, add a `user_achievements` table (`user_id`, `achievement_id`, `unlocked_at`, unique on the pair), insert a row on each `false → true` transition inside the existing recompute path in `backend/achievements.py`, and surface `unlocked_at` on the `Achievement` schema. Then change `HomeScreen.tsx` to sort `unlocked` by `unlocked_at desc` instead of `slice(-6).reverse()`, and rename the card to "Recent milestones." Optional: a small "Just earned" toast on Home when there are unlocks newer than last-seen timestamp.
 2. 
 3. 
 
@@ -138,4 +138,4 @@ Priority Levels:
 
 ---
 
-*Last updated: January 2026*
+*Last updated: May 2026*

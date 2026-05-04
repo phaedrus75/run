@@ -33,7 +33,6 @@ import {
   GoalsProgress as GoalsProgressComponent,
   WeekSummaryCard,
   PersonalRecords,
-  Achievements,
 } from '../components';
 import { AppHeader } from '../components/AppHeader';
 import { WeeklyReflection } from '../components/WeeklyReflection';
@@ -305,62 +304,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
 
-        {/* Seasonal Markers */}
-        {seasonalMarkers.length > 0 && (
-          <View style={styles.seasonalCard}>
-            {seasonalMarkers.map((marker, i) => (
-              <View key={i} style={styles.seasonalRow}>
-                <Text style={styles.seasonalEmoji}>{marker.emoji}</Text>
-                <Text style={styles.seasonalText}>{marker.message}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-        
-        {/* Overall Stats */}
-        <View style={[styles.lifetimeCard, shadows.medium]}>
-          <Text style={styles.lifetimeTitle}>Your journey</Text>
-          <View style={styles.lifetimeRow}>
-            <View style={styles.lifetimeStat}>
-              <Text style={styles.lifetimeValue}>{stats?.total_runs || 0}</Text>
-              <Text style={styles.lifetimeLabel}>runs</Text>
-            </View>
-            <View style={styles.lifetimeDivider} />
-            <View style={styles.lifetimeStat}>
-              <Text style={styles.lifetimeValue}>{stats?.total_km?.toFixed(0) || 0}</Text>
-              <Text style={styles.lifetimeLabel}>km</Text>
-            </View>
-            <View style={styles.lifetimeDivider} />
-            <View style={styles.lifetimeStat}>
-              <Text style={styles.lifetimeValue}>{Math.floor((stats?.total_duration_seconds || 0) / 3600)}</Text>
-              <Text style={styles.lifetimeLabel}>hours</Text>
-            </View>
-          </View>
-
-          {walkStats && walkStats.total_walks > 0 && (
-            <View style={styles.combinedRow}>
-              <Text style={styles.combinedLabel}>Plus walking</Text>
-              <Text style={styles.combinedValue}>
-                {walkStats.total_walks} walks · {walkStats.total_km.toFixed(1)} km
-              </Text>
-            </View>
-          )}
-          
-          {/* Motivation Banner */}
-          {motivation && (
-            <View style={styles.motivationBanner}>
-              <Text style={styles.motivationEmoji}>{motivation.emoji}</Text>
-              <Text style={styles.motivationText}>{motivation.message}</Text>
-            </View>
-          )}
-        </View>
-        
-        {/* 📅 This Week / Month */}
-        <WeekSummaryCard
-          runsThisWeek={stats?.runs_this_week || 0}
-          kmThisWeek={stats?.km_this_week || 0}
-        />
-
         {/* 🖼️ Recent moments — newest scenic photos with link to Album */}
         {recentPhotos.length > 0 && (
           <View style={styles.momentsCard}>
@@ -436,6 +379,62 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
         
+        {/* Overall Stats */}
+        <View style={[styles.lifetimeCard, shadows.medium]}>
+          <Text style={styles.lifetimeTitle}>Your journey</Text>
+          <View style={styles.lifetimeRow}>
+            <View style={styles.lifetimeStat}>
+              <Text style={styles.lifetimeValue}>{stats?.total_runs || 0}</Text>
+              <Text style={styles.lifetimeLabel}>runs</Text>
+            </View>
+            <View style={styles.lifetimeDivider} />
+            <View style={styles.lifetimeStat}>
+              <Text style={styles.lifetimeValue}>{stats?.total_km?.toFixed(0) || 0}</Text>
+              <Text style={styles.lifetimeLabel}>km</Text>
+            </View>
+            <View style={styles.lifetimeDivider} />
+            <View style={styles.lifetimeStat}>
+              <Text style={styles.lifetimeValue}>{Math.floor((stats?.total_duration_seconds || 0) / 3600)}</Text>
+              <Text style={styles.lifetimeLabel}>hours</Text>
+            </View>
+          </View>
+
+          {walkStats && walkStats.total_walks > 0 && (
+            <View style={styles.combinedRow}>
+              <Text style={styles.combinedLabel}>Plus walking</Text>
+              <Text style={styles.combinedValue}>
+                {walkStats.total_walks} walks · {walkStats.total_km.toFixed(1)} km
+              </Text>
+            </View>
+          )}
+          
+          {/* Motivation Banner */}
+          {motivation && (
+            <View style={styles.motivationBanner}>
+              <Text style={styles.motivationEmoji}>{motivation.emoji}</Text>
+              <Text style={styles.motivationText}>{motivation.message}</Text>
+            </View>
+          )}
+        </View>
+        
+        {/* 📅 This Week / Month */}
+        <WeekSummaryCard
+          runsThisWeek={stats?.runs_this_week || 0}
+          kmThisWeek={stats?.km_this_week || 0}
+        />
+
+        {/* Seasonal Markers */}
+        {seasonalMarkers.length > 0 && (
+          <View style={styles.seasonalCard}>
+            {seasonalMarkers.map((marker, i) => (
+              <View key={i} style={styles.seasonalRow}>
+                <Text style={styles.seasonalEmoji}>{marker.emoji}</Text>
+                <Text style={styles.seasonalText}>{marker.message}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        
         {/* Weekly Reflection */}
         <WeeklyReflection
           weekComplete={streakProgress?.is_complete || false}
@@ -449,8 +448,57 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
 
         {personalRecords && <PersonalRecords records={personalRecords} />}
-        {achievementsData && <Achievements data={achievementsData} />}
-        
+
+        {/* 🏅 Milestones — compact strip linking out to the full Honors screen.
+            We slice the tail of `unlocked` because each category is declared
+            low-tier → high-tier, so the tail naturally surfaces the user's
+            highest-tier badges. (No true `unlocked_at` exists yet.) */}
+        {achievementsData && achievementsData.unlocked_count > 0 && (
+          <View style={styles.momentsCard}>
+            <View style={styles.momentsHeader}>
+              <Text style={styles.momentsTitle}>Milestones</Text>
+              <View style={styles.milestonesHeaderRight}>
+                <Text style={styles.milestonesCount}>
+                  {achievementsData.unlocked_count} earned
+                </Text>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() => navigation.navigate('Honors')}
+                >
+                  <Text style={styles.momentsSeeAll}>See all</Text>
+                </Pressable>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.momentsRow}
+            >
+              {achievementsData.unlocked
+                .slice(-6)
+                .reverse()
+                .map((a, idx, arr) => (
+                  <Pressable
+                    key={a.id}
+                    onPress={() => navigation.navigate('Honors')}
+                    style={[
+                      styles.milestoneTile,
+                      idx === arr.length - 1 && { marginRight: 0 },
+                    ]}
+                  >
+                    <Text style={styles.milestoneEmoji}>{a.emoji}</Text>
+                    <Text
+                      style={styles.milestoneName}
+                      numberOfLines={2}
+                    >
+                      {a.name}
+                    </Text>
+                  </Pressable>
+                ))}
+            </ScrollView>
+          </View>
+        )}
+
       </ScrollView>
       
       {/* 🎊 Confetti for Personal Bests! */}
@@ -852,5 +900,36 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 5,
     paddingVertical: 3,
+  },
+  milestonesHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  milestonesCount: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+    fontWeight: typography.weights.medium,
+  },
+  milestoneTile: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.md,
+    marginRight: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  milestoneEmoji: {
+    fontSize: 28,
+    marginBottom: 4,
+  },
+  milestoneName: {
+    fontSize: 11,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 14,
   },
 });
