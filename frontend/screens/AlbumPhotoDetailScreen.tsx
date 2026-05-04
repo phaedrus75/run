@@ -19,7 +19,7 @@
  *   - `index`        : starting index within `groupPhotos`
  */
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -39,7 +39,8 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { AlbumPhoto } from '../services/api';
+import { AlbumPhoto, albumApi } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, radius } from '../theme/colors';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -56,6 +57,7 @@ interface Props {
 }
 
 export function AlbumPhotoDetailScreen({ navigation, route }: Props) {
+  const { user } = useAuth();
   const initialPhoto = route?.params?.photo;
   const groupPhotos: AlbumPhoto[] = useMemo(() => {
     const list = route?.params?.groupPhotos;
@@ -126,22 +128,36 @@ export function AlbumPhotoDetailScreen({ navigation, route }: Props) {
     <ZoomablePhoto photo={item} />
   );
 
+  const displayName = user?.name || 'Runner';
+  const km = activePhoto.activity.distance_km;
+  const subtitle = `${km > 0 ? `${km.toFixed(km < 10 ? 1 : 0)} km ` : ''}${activePhoto.kind === 'run' ? 'run' : 'walk'} · ${dateLabel}`;
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={26} color={colors.text} />
+          <Ionicons name="chevron-back" size={26} color="#fff" />
         </Pressable>
-        <View style={{ alignItems: 'center', flex: 1 }}>
-          <Text style={styles.headerTitle}>{dateLabel}</Text>
-          {groupPhotos.length > 1 && (
-            <Text style={styles.headerSub}>
-              {activeIndex + 1} of {groupPhotos.length}
+        <View style={styles.headerCenter}>
+          <View style={styles.headerAvatar}>
+            <MaterialCommunityIcons
+              name={activePhoto.kind === 'run' ? 'run-fast' : 'walk'}
+              size={16}
+              color={activePhoto.kind === 'run' ? '#F97316' : '#10B981'}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerName} numberOfLines={1}>
+              {displayName}
             </Text>
-          )}
+            <Text style={styles.headerSub} numberOfLines={1}>
+              {subtitle}
+              {groupPhotos.length > 1 ? ` · ${activeIndex + 1}/${groupPhotos.length}` : ''}
+            </Text>
+          </View>
         </View>
         <Pressable onPress={onShare} hitSlop={10}>
-          <Ionicons name="share-outline" size={22} color={colors.text} />
+          <Ionicons name="paper-plane-outline" size={22} color="#fff" />
         </Pressable>
       </View>
 
@@ -164,27 +180,35 @@ export function AlbumPhotoDetailScreen({ navigation, route }: Props) {
       />
 
       <View style={styles.bottomCard}>
-        {activePhoto.caption ? (
-          <Text style={styles.caption}>{activePhoto.caption}</Text>
-        ) : null}
-        <View style={styles.metaRow}>
-          <MaterialCommunityIcons
-            name={activePhoto.kind === 'run' ? 'run-fast' : 'walk'}
-            size={18}
-            color="#fff"
-          />
-          <Text style={styles.metaTitle}>
-            {activePhoto.kind === 'run' ? 'Run' : 'Walk'} ·{' '}
-            {activePhoto.activity.distance_km.toFixed(2)} km
-          </Text>
-          <Pressable onPress={goToActivity} style={styles.viewLink}>
-            <Text style={styles.viewLinkText}>View →</Text>
+        <View style={styles.actionRow}>
+          <Pressable onPress={goToActivity} style={styles.actionBtn} hitSlop={6}>
+            <Ionicons name="map-outline" size={24} color="#fff" />
+            <Text style={styles.actionText}>View activity</Text>
           </Pressable>
+          {groupPhotos.length > 1 && (
+            <View style={styles.dots}>
+              {groupPhotos.map((_, i) => (
+                <View
+                  key={i}
+                  style={[styles.dot, i === activeIndex && styles.dotActive]}
+                />
+              ))}
+            </View>
+          )}
+          {activePhoto.distance_marker_km > 0 && (
+            <View style={styles.kmPill}>
+              <Text style={styles.kmPillText}>
+                {Math.round(activePhoto.distance_marker_km * 10) / 10}K
+              </Text>
+            </View>
+          )}
         </View>
-        <Text style={styles.metaSub}>
-          Captured at {activePhoto.distance_marker_km.toFixed(2)} km · pinch to
-          zoom · swipe for next
-        </Text>
+        {activePhoto.caption ? (
+          <Text style={styles.caption}>
+            <Text style={styles.captionAuthor}>{displayName}</Text>{' '}
+            {activePhoto.caption}
+          </Text>
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -192,8 +216,37 @@ export function AlbumPhotoDetailScreen({ navigation, route }: Props) {
 
 /** A single zoomable photo page. Reanimated shared values handle the
  *  pinch-to-zoom and pan-when-zoomed gestures. Springs back to identity
- *  on release so swiping to the next page always starts fresh. */
+ *  on release so swiping to the next page always starts fresh.
+ *
+ *  The Album feed delivers small (~360px) thumbnails so the grid loads fast.
+ *  When the user opens a photo, this view shows the thumbnail immediately
+ *  and asynchronously fetches the full-resolution image, swapping it in
+ *  once available. */
 function ZoomablePhoto({ photo }: { photo: AlbumPhoto }) {
+  const [fullData, setFullData] = useState<string | null>(
+    photo.is_thumb ? null : photo.photo_data ?? null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!photo.is_thumb) {
+      setFullData(photo.photo_data ?? null);
+      return;
+    }
+    albumApi
+      .getFull(photo.kind, photo.id)
+      .then((res) => {
+        if (!cancelled) setFullData(res.photo_data);
+      })
+      .catch(() => {
+        // Stay on the thumbnail if the upgrade fails; user still sees something.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [photo.id, photo.kind, photo.is_thumb, photo.photo_data]);
+
+  const sourceData = fullData ?? photo.photo_data ?? null;
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -263,9 +316,9 @@ function ZoomablePhoto({ photo }: { photo: AlbumPhoto }) {
     <View style={styles.page}>
       <GestureDetector gesture={composed}>
         <Animated.View style={[styles.zoomWrap, animatedStyle]}>
-          {photo.photo_data ? (
+          {sourceData ? (
             <Image
-              source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
+              source={{ uri: `data:image/jpeg;base64,${sourceData}` }}
               style={styles.image}
               resizeMode="contain"
             />
@@ -305,20 +358,34 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: '#000',
     gap: spacing.md,
   },
-  headerTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headerAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerName: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
     color: '#fff',
   },
   headerSub: {
     fontSize: typography.sizes.xs,
     color: 'rgba(255,255,255,0.6)',
+    marginTop: 1,
   },
   page: {
     width: SCREEN_W,
@@ -341,40 +408,56 @@ const styles = StyleSheet.create({
   bottomCard: {
     backgroundColor: '#000',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    gap: 6,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
   },
-  caption: {
-    fontSize: typography.sizes.md,
-    color: '#fff',
-    lineHeight: 22,
-    marginBottom: 4,
-  },
-  metaRow: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.lg,
   },
-  metaTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionText: {
     color: '#fff',
-    flex: 1,
-  },
-  metaSub: {
     fontSize: typography.sizes.xs,
-    color: 'rgba(255,255,255,0.55)',
+    fontWeight: typography.weights.semibold,
   },
-  viewLink: {
+  dots: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  dotActive: { backgroundColor: '#fff' },
+  kmPill: {
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: radius.full,
   },
-  viewLinkText: {
+  kmPillText: {
     color: '#fff',
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.semibold,
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+  },
+  caption: {
+    fontSize: typography.sizes.sm,
+    color: '#fff',
+    lineHeight: 19,
+  },
+  captionAuthor: {
+    fontWeight: typography.weights.bold,
   },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: '#fff', fontSize: typography.sizes.md },

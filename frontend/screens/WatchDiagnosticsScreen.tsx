@@ -8,7 +8,7 @@
  * native module knows the answer to.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,8 @@ import {
   resendLastWatchWorkout,
   WatchDiagnostics,
 } from '../services/watchBridge';
+import { useAuth } from '../contexts/AuthContext';
+import { isAdminUser } from '../constants/admin';
 
 interface Props {
   navigation: any;
@@ -76,6 +78,16 @@ function Row({
 }
 
 export function WatchDiagnosticsScreen({ navigation }: Props) {
+  const { user } = useAuth();
+  const adminAllowed = isAdminUser(user?.email);
+
+  useLayoutEffect(() => {
+    if (user != null && !adminAllowed) {
+      Alert.alert('Not available', 'Apple Watch sync tools are only available for administrators.');
+      navigation.goBack();
+    }
+  }, [user, adminAllowed, navigation]);
+
   const [diag, setDiag] = useState<DiagState>(null);
   const [loading, setLoading] = useState(false);
   const [draining, setDraining] = useState(false);
@@ -91,11 +103,12 @@ export function WatchDiagnosticsScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!adminAllowed) return;
     void refresh();
     // 10s is long enough to feel responsive without flickering values mid-read.
     const id = setInterval(refresh, 10000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, adminAllowed]);
 
   const [pinging, setPinging] = useState(false);
   const [resending, setResending] = useState(false);
@@ -168,6 +181,10 @@ export function WatchDiagnosticsScreen({ navigation }: Props) {
 
   const channelHealthy =
     !!diag?.isPaired && !!diag?.isWatchAppInstalled && diag?.activationState === 'activated';
+
+  if (user != null && !adminAllowed) {
+    return null;
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

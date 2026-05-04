@@ -7,9 +7,7 @@
  *   - The Neighbourhood: pseudonymous, location-based, photo-led discovery
  *   - Circles:           private, small, named groups of people you know
  *
- * For Build 35 only Circles is fully implemented; the Neighbourhood card
- * is a "coming soon" tile that explains the concept. Build 36 ships the
- * proper Neighbourhood feed (proximity, saves, "I ran this" signals).
+ * Neighbourhood: city-level feed (opt-in, @handle, saves, "I ran this").
  */
 
 import React, { useEffect, useState } from 'react';
@@ -62,7 +60,6 @@ export function CommunityHomeScreen({ navigation }: Props) {
           </Text>
         </View>
 
-        {/* The Neighbourhood — coming soon */}
         <Pressable
           onPress={() => navigation.navigate('Neighbourhood')}
           style={({ pressed }) => [
@@ -76,17 +73,20 @@ export function CommunityHomeScreen({ navigation }: Props) {
           <View style={{ flex: 1 }}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>The Neighbourhood</Text>
-              <View style={styles.comingSoonPill}>
-                <Text style={styles.comingSoonText}>SOON</Text>
-              </View>
             </View>
             <Text style={styles.cardBody}>
-              Pseudonymous album sharing with zenrunners near you.{'\n'}
-              See where others have run. Save what inspires you. Rank places,
-              never people.
+              Pseudonymous album sharing with zenrunners in your city.{'\n'}
+              Save what inspires you. “I ran this” — rank places, never people.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => navigation.navigate('Neighbourhood')}
+          style={styles.editNbLink}
+        >
+          <Text style={styles.editNbLinkText}>Edit neighbourhood settings</Text>
         </Pressable>
 
         {/* Circles — real */}
@@ -117,8 +117,6 @@ export function CommunityHomeScreen({ navigation }: Props) {
           <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
         </Pressable>
 
-        {/* Brand strap — keeps the tab from feeling sparse before the
-            Neighbourhood ships. */}
         <View style={styles.strap}>
           <Text style={styles.strapTitle}>The path and the album.</Text>
           <Text style={styles.strapBody}>
@@ -182,21 +180,20 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
   },
-  comingSoonPill: {
-    backgroundColor: '#7E57C2' + '22',
-    borderRadius: radius.full,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  comingSoonText: {
-    fontSize: 9,
-    fontWeight: typography.weights.bold,
-    color: '#7E57C2',
-    letterSpacing: 0.5,
-  },
   countBadge: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
+    fontWeight: typography.weights.semibold,
+  },
+  editNbLink: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
+  editNbLinkText: {
+    fontSize: typography.sizes.sm,
+    color: '#7E57C2',
     fontWeight: typography.weights.semibold,
   },
   strap: {

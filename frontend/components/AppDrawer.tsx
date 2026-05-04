@@ -21,6 +21,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../contexts/AuthContext';
 import { navigationRef } from '../navigationRef';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import { isAdminUser } from '../constants/admin';
 
 const DRAWER_W = Math.min(Dimensions.get('window').width * 0.86, 340);
 
@@ -103,27 +104,38 @@ export function AppDrawer({ visible, onClose }: Props) {
 
             <Text style={styles.section}>Account</Text>
             {row('person-outline', 'Profile', () => goHomeScreen('Profile'), 'Privacy, level, handle')}
-            {row('flag-outline', 'Goals', () => goHomeScreen('Profile', { scrollTo: 'goals' }), 'Running & weight targets')}
+            {row('flag-outline', 'Goals', () => goHomeScreen('Profile', { scrollTo: 'goals' }))}
             {row('ribbon-outline', 'Honors', () => goHomeScreen('Honors'), 'PRs & achievements')}
+
+            <Text style={styles.section}>Runs & walks</Text>
+            {row('bar-chart-outline', 'Run statistics', () => goHomeScreen('RunStats'), 'Charts, pace, rhythm', colors.primary)}
+            {row('analytics-outline', 'Walk statistics', () => goHomeScreen('WalkStats'), 'Averages & totals', colors.secondary)}
+
+            <Text style={styles.section}>Reviews</Text>
+            {row('calendar-outline', 'Month & quarter in review', () => goHomeScreen('Reviews'), 'Wrapped summaries', '#7BAFA6')}
 
             <Text style={styles.section}>Tools</Text>
             {row('barbell-outline', 'Gym', () => goHomeScreen('GymTab'), 'Strength sessions', '#C9907A')}
             {row('scale-outline', 'Weight', () => goHomeScreen('WeightTab'), 'Track weight', '#7BAFA6')}
             {row('footsteps-outline', 'High step days', () => goHomeScreen('StepsTab'), '15k / 20k / 25k days', '#D4BF85')}
-            {row(
-              'watch-outline',
-              'Apple Watch sync',
-              () => goHomeScreen('WatchDiagnostics'),
-              'Diagnostics & queue',
-              '#8C9EC9',
-            )}
-            {row(
-              'images-outline',
-              'Recover lost photos',
-              () => goHomeScreen('PhotoRecovery'),
-              'From app cache',
-              '#E8A87C',
-            )}
+            {isAdminUser(user?.email) ? (
+              <>
+                {row(
+                  'watch-outline',
+                  'Apple Watch sync',
+                  () => goHomeScreen('WatchDiagnostics'),
+                  'Diagnostics & queue',
+                  '#8C9EC9',
+                )}
+                {row(
+                  'images-outline',
+                  'Recover lost photos',
+                  () => goHomeScreen('PhotoRecovery'),
+                  'From app cache',
+                  '#E8A87C',
+                )}
+              </>
+            ) : null}
 
             <Text style={styles.section}>ZenRun</Text>
             {row('chatbubble-outline', 'Feedback', () => Linking.openURL('https://zenrun.featurebase.app'), 'Tell us what you think')}

@@ -1,5 +1,5 @@
 /**
- * Personal records + achievements (moved off Home for a calmer dashboard).
+ * Personal records + achievements (also on Home; this screen is a focused view from the drawer).
  */
 
 import React, { useCallback, useState } from 'react';

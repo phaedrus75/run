@@ -39,6 +39,7 @@ import {
   setBackgroundTrackingEnabled,
 } from '../services/walkBackgroundTask';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import { PhotoSessionSyncDot } from '../components/PhotoSessionSyncDot';
 
 interface Props {
   navigation: any;
@@ -212,15 +213,7 @@ export function ActiveWalkScreen({ navigation, route }: Props) {
               <View key={p.id} style={styles.thumbWrap}>
                 <Image source={{ uri: p.uri }} style={styles.thumb} />
                 <Text style={styles.thumbDist}>{p.distanceKm.toFixed(1)} km</Text>
-                <View
-                  style={[
-                    styles.thumbArchiveDot,
-                    p.archive.status === 'done'    && { backgroundColor: '#3B82F6' },
-                    p.archive.status === 'denied'  && { backgroundColor: colors.warning },
-                    p.archive.status === 'failed'  && { backgroundColor: colors.error },
-                    p.archive.status === 'pending' && { backgroundColor: colors.textLight },
-                  ]}
-                />
+                <PhotoSessionSyncDot photo={p} style={styles.thumbSyncDot} />
               </View>
             ))}
           </ScrollView>
@@ -415,15 +408,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.textSecondary,
   },
-  thumbArchiveDot: {
+  thumbSyncDot: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#fff',
+    top: 2,
+    right: 2,
   },
   // Stats
   statsRow: {

@@ -20,9 +20,11 @@ import {
   TouchableOpacity,
   Alert,
   Dimensions,
+  Image,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
@@ -30,24 +32,27 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   GoalsProgress as GoalsProgressComponent,
   WeekSummaryCard,
+  PersonalRecords,
+  Achievements,
 } from '../components';
 import { AppHeader } from '../components/AppHeader';
-import { MonthInReview } from '../components/MonthInReview';
-import { QuarterInReview } from '../components/QuarterInReview';
 import { WeeklyReflection } from '../components/WeeklyReflection';
 import { 
   statsApi,
   levelApi,
   reflectionsApi,
   walkApi,
+  albumApi,
   type Stats, 
   type MotivationalMessage, 
   type WeeklyStreakProgress, 
   type GoalsProgress,
-  type MonthInReview as MonthInReviewType,
   type DailyWisdom,
   type SeasonalMarker,
   type WalkStats,
+  type PersonalRecords as PersonalRecordsData,
+  type AchievementsData,
+  type AlbumPhoto,
 } from '../services/api';
 
 interface HomeScreenProps {
@@ -73,17 +78,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [motivation, setMotivation] = useState<MotivationalMessage | null>(null);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
   const [goals, setGoals] = useState<GoalsProgress | null>(null);
-  const [monthReview, setMonthReview] = useState<MonthInReviewType | null>(null);
-  const [showMonthReview, setShowMonthReview] = useState(false);
-  const [monthBannerVisible, setMonthBannerVisible] = useState(false);
-  const monthDismissedRef = useRef(false);
-  const [showQuarterReview, setShowQuarterReview] = useState(false);
-  const [quarterBannerVisible, setQuarterBannerVisible] = useState(false);
-  const quarterDismissedRef = useRef(false);
-  const [autoQuarter, setAutoQuarter] = useState<{ q: number; year: number } | null>(null);
+  const [personalRecords, setPersonalRecords] = useState<PersonalRecordsData | null>(null);
+  const [achievementsData, setAchievementsData] = useState<AchievementsData | null>(null);
   const [dailyWisdom, setDailyWisdom] = useState<DailyWisdom | null>(null);
   const [seasonalMarkers, setSeasonalMarkers] = useState<SeasonalMarker[]>([]);
   const [currentReflection, setCurrentReflection] = useState<{ has_reflection: boolean; reflection?: string; mood?: string } | null>(null);
+  const [recentPhotos, setRecentPhotos] = useState<AlbumPhoto[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -100,26 +100,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   // 📡 Fetch data from API
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, motivationData, streakData, goalsData] = await Promise.all([
+      const [statsData, motivationData, streakData, goalsData, prData, achData] = await Promise.all([
         statsApi.get(),
         statsApi.getMotivation(),
         statsApi.getStreakProgress(),
         statsApi.getGoals(),
+        statsApi.getPersonalRecords().catch(() => null),
+        statsApi.getAchievements().catch(() => null),
       ]);
       
       setStats(statsData);
       setMotivation(motivationData);
       setStreakProgress(streakData);
       setGoals(goalsData);
+      setPersonalRecords(prData);
+      setAchievementsData(achData);
 
       // Walk stats are non-critical — fail quietly so the home screen always
       // renders even if the walk endpoints aren't reachable.
       walkApi.getStats().then(setWalkStats).catch(() => setWalkStats(null));
+
+      // Recent scenic photos — small thumbnails, used for the "Recent moments"
+      // strip. Backend already returns ~360px thumbs by default so this is light.
+      albumApi
+        .list({ limit: 6, include_data: true })
+        .then((page) => setRecentPhotos(page.items))
+        .catch(() => setRecentPhotos([]));
       
       // Fetch secondary data (graceful failure)
       try {
-        const [monthReviewData, wisdomData, markersData, levelData, reflectionData] = await Promise.all([
-          statsApi.getMonthReview().catch(() => null),
+        const [wisdomData, markersData, levelData, reflectionData] = await Promise.all([
           statsApi.getDailyWisdom().catch(() => null),
           statsApi.getSeasonalMarkers().catch(() => ({ markers: [] })),
           levelApi.get().catch(() => null),
@@ -146,25 +156,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         } else {
           setUpgradeInfo(null);
         }
-        if (monthReviewData && monthReviewData.should_show) {
-          setMonthReview(monthReviewData);
-          if (!monthDismissedRef.current) {
-            setMonthBannerVisible(true);
-          }
-        }
-
-        const now = new Date();
-        const dayOfMonth = now.getDate();
-        const month = now.getMonth() + 1;
-        if (dayOfMonth <= 7 && [1, 4, 7, 10].includes(month)) {
-          const prevQ = month === 1 ? 4 : Math.ceil((month - 1) / 3);
-          const prevYear = month === 1 ? now.getFullYear() - 1 : now.getFullYear();
-          setAutoQuarter({ q: prevQ, year: prevYear });
-          if (!quarterDismissedRef.current) {
-            setQuarterBannerVisible(true);
-          }
-        }
-
         if (wisdomData) setDailyWisdom(wisdomData);
         setSeasonalMarkers(markersData?.markers || []);
         if (reflectionData) setCurrentReflection(reflectionData);
@@ -314,58 +305,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
 
-        {/* Review Banners */}
-        {quarterBannerVisible && autoQuarter && (
-          <TouchableOpacity
-            style={[styles.reviewBanner, { backgroundColor: '#E8756F' }]}
-            onPress={() => setShowQuarterReview(true)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.reviewBannerContent}>
-              <Text style={styles.reviewBannerEmoji}>📊</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.reviewBannerTitle}>Q{autoQuarter.q} {autoQuarter.year} in Review</Text>
-                <Text style={styles.reviewBannerSubtitle}>Tap to see your quarter wrapped</Text>
-              </View>
-              <TouchableOpacity
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  quarterDismissedRef.current = true;
-                  setQuarterBannerVisible(false);
-                }}
-              >
-                <Ionicons name="close" size={18} color="#ffffffaa" />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        )}
-        {monthBannerVisible && monthReview && (
-          <TouchableOpacity
-            style={[styles.reviewBanner, { backgroundColor: '#7BAFA6' }]}
-            onPress={() => setShowMonthReview(true)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.reviewBannerContent}>
-              <Text style={styles.reviewBannerEmoji}>📅</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.reviewBannerTitle}>{monthReview.month_name.split(' ')[0]} in Review</Text>
-                <Text style={styles.reviewBannerSubtitle}>Tap to see your month wrapped</Text>
-              </View>
-              <TouchableOpacity
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  monthDismissedRef.current = true;
-                  setMonthBannerVisible(false);
-                }}
-              >
-                <Ionicons name="close" size={18} color="#ffffffaa" />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        )}
-
         {/* Seasonal Markers */}
         {seasonalMarkers.length > 0 && (
           <View style={styles.seasonalCard}>
@@ -421,6 +360,81 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           runsThisWeek={stats?.runs_this_week || 0}
           kmThisWeek={stats?.km_this_week || 0}
         />
+
+        {/* 🖼️ Recent moments — newest scenic photos with link to Album */}
+        {recentPhotos.length > 0 && (
+          <View style={styles.momentsCard}>
+            <View style={styles.momentsHeader}>
+              <Text style={styles.momentsTitle}>Recent moments</Text>
+              <Pressable
+                hitSlop={8}
+                onPress={() =>
+                  navigation.navigate('Album', { screen: 'AlbumGrid' })
+                }
+              >
+                <Text style={styles.momentsSeeAll}>See all</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.momentsRow}
+            >
+              {recentPhotos.map((photo, idx) => {
+                const samePhotos = recentPhotos.filter(
+                  (p) =>
+                    p.kind === photo.kind && p.activity_id === photo.activity_id,
+                );
+                const startIndex = samePhotos.findIndex(
+                  (p) => p.id === photo.id,
+                );
+                return (
+                  <Pressable
+                    key={`${photo.kind}-${photo.id}`}
+                    style={[
+                      styles.momentTile,
+                      idx === recentPhotos.length - 1 && { marginRight: 0 },
+                    ]}
+                    onPress={() =>
+                      navigation.navigate('Album', {
+                        screen: 'AlbumPhoto',
+                        params: {
+                          photo,
+                          groupPhotos: samePhotos,
+                          index: Math.max(0, startIndex),
+                        },
+                      })
+                    }
+                  >
+                    {photo.photo_data ? (
+                      <Image
+                        source={{
+                          uri: `data:image/jpeg;base64,${photo.photo_data}`,
+                        }}
+                        style={styles.momentImage}
+                      />
+                    ) : (
+                      <View style={[styles.momentImage, styles.momentImagePlaceholder]}>
+                        <Ionicons
+                          name="image-outline"
+                          size={22}
+                          color={colors.textLight}
+                        />
+                      </View>
+                    )}
+                    <View style={styles.momentBadge}>
+                      <MaterialCommunityIcons
+                        name={photo.kind === 'run' ? 'run-fast' : 'walk'}
+                        size={12}
+                        color="#fff"
+                      />
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
         
         {/* Weekly Reflection */}
         <WeeklyReflection
@@ -429,39 +443,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onSaved={() => reflectionsApi.getCurrent().then(setCurrentReflection).catch(() => {})}
         />
 
-        {/* Quick Action */}
-        <TouchableOpacity
-          style={[styles.startButton, shadows.medium]}
-          onPress={() => navigation.getParent()?.navigate('Activity', { screen: 'RunScreen' })}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.startButtonText}>Log a run</Text>
-        </TouchableOpacity>
-        
         {/* 🎯 Goals Progress */}
         {goals && (
           <GoalsProgressComponent goals={goals} />
         )}
+
+        {personalRecords && <PersonalRecords records={personalRecords} />}
+        {achievementsData && <Achievements data={achievementsData} />}
         
       </ScrollView>
-      
-      {/* 📅 Month in Review Modal */}
-      {showMonthReview && monthReview && (
-        <MonthInReview 
-          data={monthReview}
-          onDismiss={() => setShowMonthReview(false)}
-        />
-      )}
-
-      {/* 📊 Quarter in Review Modal */}
-      {showQuarterReview && autoQuarter && (
-        <QuarterInReview
-          visible={showQuarterReview}
-          quarter={autoQuarter.q}
-          year={autoQuarter.year}
-          onClose={() => setShowQuarterReview(false)}
-        />
-      )}
       
       {/* 🎊 Confetti for Personal Bests! */}
       {showConfetti && (
@@ -654,18 +644,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 18,
   },
-  startButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  startButtonText: {
-    color: colors.textOnPrimary,
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-  },
   recentSection: {
     marginTop: spacing.md,
   },
@@ -740,29 +718,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     lineHeight: 20,
-    marginTop: 2,
-  },
-  reviewBanner: {
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  reviewBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reviewBannerEmoji: {
-    fontSize: 24,
-    marginRight: spacing.sm,
-  },
-  reviewBannerTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
-    color: '#fff',
-  },
-  reviewBannerSubtitle: {
-    fontSize: typography.sizes.xs,
-    color: '#ffffffbb',
     marginTop: 2,
   },
   comebackBanner: {
@@ -845,5 +800,57 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  momentsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  momentsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  momentsTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  momentsSeeAll: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.primary,
+  },
+  momentsRow: {
+    paddingHorizontal: spacing.md,
+  },
+  momentTile: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    marginRight: spacing.sm,
+    backgroundColor: colors.background,
+  },
+  momentImage: {
+    width: '100%',
+    height: '100%',
+  },
+  momentImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  momentBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
   },
 });

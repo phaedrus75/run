@@ -452,6 +452,36 @@ export function decodePolyline(encoded: string): { lat: number; lng: number }[] 
   return polyline.decode(encoded).map(([lat, lng]) => ({ lat, lng }));
 }
 
+/**
+ * Interpolate a point along the decoded route at `distanceKm` from the start
+ * (sum of segment lengths). Used to place photo pins when photos only store
+ * `distance_marker_km` without GPS exif coords.
+ */
+export function pointAlongRouteAtKm(
+  points: Array<{ lat: number; lng: number }>,
+  distanceKm: number,
+): { lat: number; lng: number } | null {
+  if (points.length === 0) return null;
+  if (points.length === 1) return points[0];
+  const target = Math.max(0, distanceKm);
+  let cumulativeKm = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const segKm = haversineMeters(a, b) / 1000;
+    if (segKm <= 0) continue;
+    if (cumulativeKm + segKm >= target) {
+      const t = Math.max(0, Math.min(1, (target - cumulativeKm) / segKm));
+      return {
+        lat: a.lat + t * (b.lat - a.lat),
+        lng: a.lng + t * (b.lng - a.lng),
+      };
+    }
+    cumulativeKm += segKm;
+  }
+  return points[points.length - 1];
+}
+
 export function formatDistanceKm(km: number): string {
   if (km < 1) {
     return `${Math.round(km * 1000)} m`;

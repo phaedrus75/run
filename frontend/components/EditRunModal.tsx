@@ -1,9 +1,10 @@
 /**
  * ✏️ EDIT RUN MODAL
  * ==================
- * 
- * A modal for editing past runs.
- * Outdoor runs can add/view/delete scenic photos tagged to distance markers.
+ *
+ * Manual / non-GPS runs: edit distance, duration, category, notes, photos.
+ * GPS runs (polyline present): read-only distance/time/category; route map
+ * with photo pins, pinch/pan; notes + add/delete photos only.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -19,16 +20,25 @@ import {
   Image,
   ActivityIndicator,
   Pressable,
+  Switch,
+  type ViewStyle,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from './RunTypeButton';
-import { WalkMap } from './WalkMap';
+import { WalkMap, type MapMarker } from './WalkMap';
 import { RetroactivePhotoPicker } from './RetroactivePhotoPicker';
 import { PhotoHeroCarousel } from './PhotoHeroCarousel';
-import { photoApi, levelApi, type Run, type RunPhoto } from '../services/api';
-import { decodePolyline } from '../services/walkLocationTracker';
+import {
+  photoApi,
+  levelApi,
+  neighbourhoodApi,
+  type Run,
+  type RunPhoto,
+  type NeighbourhoodMe,
+} from '../services/api';
+import { decodePolyline, pointAlongRouteAtKm, formatDistanceKm } from '../services/walkLocationTracker';
 import type { RouteForRetroactive } from '../services/retroactivePhotos';
 
 const ALL_RUN_TYPES = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
@@ -37,7 +47,10 @@ interface EditRunModalProps {
   visible: boolean;
   run: Run | null;
   onClose: () => void;
-  onSave: (id: number, data: { run_type?: string; duration_seconds?: number; notes?: string; category?: string }) => Promise<void>;
+  onSave: (
+    id: number,
+    data: { run_type?: string; duration_seconds?: number; notes?: string; category?: string },
+  ) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }
 
@@ -75,6 +88,16 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   // and as an upgrade path on iPhone-led runs where the user took photos
   // on their phone but didn't use the in-app camera.
   const [retroPickerVisible, setRetroPickerVisible] = useState(false);
+
+  const [nbMe, setNbMe] = useState<NeighbourhoodMe | null>(null);
+  const [nbShareBusy, setNbShareBusy] = useState(false);
+  const [localNeighbourhoodShare, setLocalNeighbourhoodShare] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !run) return;
+    neighbourhoodApi.getMe().then(setNbMe).catch(() => setNbMe(null));
+    setLocalNeighbourhoodShare((run.neighbourhood_visibility || 'off') === 'neighbourhood');
+  }, [visible, run?.id, run?.neighbourhood_visibility]);
 
   const routePoints = useMemo(
     () => (run?.route_polyline ? decodePolyline(run.route_polyline) : []),
@@ -114,6 +137,32 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
       zoom,
     };
   }, [routePoints]);
+
+  const gpsTracked = routePoints.length > 0;
+
+  const photoMarkers = useMemo((): MapMarker[] => {
+    if (!gpsTracked) return [];
+    const out: MapMarker[] = [];
+    for (const p of photos) {
+      const pt = pointAlongRouteAtKm(routePoints, p.distance_marker_km);
+      if (!pt) continue;
+      const km = Math.round(p.distance_marker_km * 10) / 10;
+      out.push({
+        id: `run-photo-${p.id}`,
+        lat: pt.lat,
+        lng: pt.lng,
+        title: `${km} km`,
+        tintColor: colors.accent,
+      });
+    }
+    return out;
+  }, [gpsTracked, photos, routePoints]);
+
+  const [mapZoom, setMapZoom] = useState(15);
+
+  useEffect(() => {
+    if (routeCamera) setMapZoom(routeCamera.zoom);
+  }, [run?.id, routeCamera?.zoom]);
 
   useEffect(() => {
     if (run) {
@@ -235,13 +284,17 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
     if (!run) return;
     setSaving(true);
     try {
-      const durationSeconds = (parseInt(minutes) || 0) * 60 + (parseInt(seconds) || 0);
-      await onSave(run.id, {
-        run_type: runType,
-        duration_seconds: durationSeconds,
-        notes: notes || undefined,
-        category: category,
-      });
+      if (gpsTracked) {
+        await onSave(run.id, { notes: notes.trim() || undefined });
+      } else {
+        const durationSeconds = (parseInt(minutes) || 0) * 60 + (parseInt(seconds) || 0);
+        await onSave(run.id, {
+          run_type: runType,
+          duration_seconds: durationSeconds,
+          notes: notes.trim() || undefined,
+          category,
+        });
+      }
       onClose();
     } catch (error) {
       Alert.alert('Error', 'Failed to save changes');
@@ -286,6 +339,13 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   const hasRouteForRetro =
     !!run.started_at && !!run.completed_at && (run.distance_km ?? 0) > 0;
 
+  const canNeighbourhoodShare =
+    isOutdoor &&
+    (!!run.route_polyline || (run.start_lat != null && run.start_lng != null)) &&
+    !!nbMe?.opted_in &&
+    !!(nbMe?.home_city || '').trim() &&
+    !!nbMe?.handle;
+
   return (
     <Modal
       visible={visible}
@@ -299,7 +359,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
           <TouchableOpacity onPress={handleClose}>
             <Text style={styles.cancelButton}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Edit Run</Text>
+          <Text style={styles.title}>{gpsTracked ? 'Run' : 'Edit Run'}</Text>
           <TouchableOpacity onPress={handleSave} disabled={saving}>
             <Text style={[styles.saveButton, saving && styles.saveButtonDisabled]}>
               {saving ? 'Saving...' : 'Save'}
@@ -308,9 +368,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          {/* 📸 Photo hero — leads the screen ("the path and the album").
-              Photos first, map second, stats third. The editor section
-              remains lower in the modal for adding/deleting. */}
+          {/* Hero carousel for all outdoor/watch runs with photos (GPS and manual). */}
           {showsPhotoSection && photos.length > 0 && (
             <PhotoHeroCarousel
               photos={photos}
@@ -318,86 +376,122 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             />
           )}
 
-          {/* Route map (outdoor GPS-tracked runs only) */}
-          {isOutdoor && routePoints.length > 0 && routeCamera && (
-            <Pressable
-              style={styles.mapWrap}
-              onPress={() => setMapFullscreen(true)}
-            >
-              <WalkMap
-                style={styles.map}
-                route={routePoints}
-                centerOn={routeCamera.center}
-                zoom={routeCamera.zoom}
-                showUserLocation={false}
-                routeColor="#F97316"
-              />
-              <View style={styles.mapExpandHint}>
-                <Text style={styles.mapExpandHintText}>⤢</Text>
-              </View>
-            </Pressable>
+          {gpsTracked && (
+            <View style={styles.readOnlyStats}>
+              <Text style={styles.readOnlyTitle}>GPS summary</Text>
+              <Text style={styles.readOnlyLine}>
+                {run.run_type} · {formatDistanceKm(run.distance_km)} · {run.formatted_duration}
+              </Text>
+              <Text style={styles.readOnlyHint}>
+                Distance, duration and category come from your GPS recording and cannot be changed here.
+              </Text>
+            </View>
           )}
 
-          {/* Run Type Selection */}
-          <Text style={styles.label}>Distance</Text>
-          <View style={styles.typeRow}>
-            {availableTypes.map(type => (
-              <RunTypeButton
-                key={type}
-                type={type}
-                size="small"
-                selected={runType === type}
-                onPress={() => setRunType(type)}
-              />
-            ))}
-          </View>
-
-          {/* Duration */}
-          <Text style={styles.label}>Duration</Text>
-          <View style={styles.durationRow}>
-            <View style={styles.durationInput}>
-              <TextInput
-                style={styles.input}
-                value={minutes}
-                onChangeText={setMinutes}
-                keyboardType="number-pad"
-                placeholder="0"
-                maxLength={3}
-              />
-              <Text style={styles.durationLabel}>min</Text>
+          {/* Route map — outdoor / watch with a polyline */}
+          {showsPhotoSection && routePoints.length > 0 && routeCamera && (
+            <View style={styles.mapSection}>
+              <Text style={styles.label}>Route</Text>
+              <View style={styles.mapWrap}>
+                <WalkMap
+                  style={styles.map}
+                  route={routePoints}
+                  markers={photoMarkers.length ? photoMarkers : undefined}
+                  centerOn={routeCamera.center}
+                  zoom={mapZoom}
+                  showUserLocation={false}
+                  routeColor="#F97316"
+                  interactive
+                />
+                <View style={styles.mapZoomBar} pointerEvents="box-none">
+                  <TouchableOpacity
+                    style={styles.mapZoomBtn}
+                    onPress={() => setMapZoom((z) => Math.min(18, z + 1))}
+                    accessibilityLabel="Zoom in"
+                  >
+                    <Text style={styles.mapZoomBtnText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.mapZoomBtn}
+                    onPress={() => setMapZoom((z) => Math.max(10, z - 1))}
+                    accessibilityLabel="Zoom out"
+                  >
+                    <Text style={styles.mapZoomBtnText}>−</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={styles.mapFsBtn}
+                  onPress={() => setMapFullscreen(true)}
+                  hitSlop={8}
+                  accessibilityLabel="Fullscreen map"
+                >
+                  <Text style={styles.mapFsBtnText}>⤢</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text style={styles.colon}>:</Text>
-            <View style={styles.durationInput}>
-              <TextInput
-                style={styles.input}
-                value={seconds}
-                onChangeText={setSeconds}
-                keyboardType="number-pad"
-                placeholder="00"
-                maxLength={2}
-              />
-              <Text style={styles.durationLabel}>sec</Text>
-            </View>
-          </View>
+          )}
 
-          {/* Category */}
-          <Text style={styles.label}>Category</Text>
-          <View style={styles.categoryRow}>
-            <TouchableOpacity
-              style={[styles.categoryButton, category === 'outdoor' && styles.categoryButtonActive]}
-              onPress={() => setCategory('outdoor')}
-            >
-              <Text style={styles.categoryEmoji}>🌳</Text>
-              <Text style={[styles.categoryText, category === 'outdoor' && styles.categoryTextActive]}>Outdoor</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.categoryButton, category === 'treadmill' && styles.categoryButtonActive]}
-              onPress={() => setCategory('treadmill')}
-            >
-              <Text style={styles.categoryEmoji}>🏃</Text>
-              <Text style={[styles.categoryText, category === 'treadmill' && styles.categoryTextActive]}>Treadmill</Text>
-            </TouchableOpacity>
-          </View>
+          {!gpsTracked && (
+            <>
+              <Text style={styles.label}>Distance</Text>
+              <View style={styles.typeRow}>
+                {availableTypes.map((type) => (
+                  <RunTypeButton
+                    key={type}
+                    type={type}
+                    size="small"
+                    selected={runType === type}
+                    onPress={() => setRunType(type)}
+                  />
+                ))}
+              </View>
+
+              <Text style={styles.label}>Duration</Text>
+              <View style={styles.durationRow}>
+                <View style={styles.durationInput}>
+                  <TextInput
+                    style={styles.input}
+                    value={minutes}
+                    onChangeText={setMinutes}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    maxLength={3}
+                  />
+                  <Text style={styles.durationLabel}>min</Text>
+                </View>
+                <Text style={styles.colon}>:</Text>
+                <View style={styles.durationInput}>
+                  <TextInput
+                    style={styles.input}
+                    value={seconds}
+                    onChangeText={setSeconds}
+                    keyboardType="number-pad"
+                    placeholder="00"
+                    maxLength={2}
+                  />
+                  <Text style={styles.durationLabel}>sec</Text>
+                </View>
+              </View>
+
+              <Text style={styles.label}>Category</Text>
+              <View style={styles.categoryRow}>
+                <TouchableOpacity
+                  style={[styles.categoryButton, category === 'outdoor' && styles.categoryButtonActive]}
+                  onPress={() => setCategory('outdoor')}
+                >
+                  <Text style={styles.categoryEmoji}>🌳</Text>
+                  <Text style={[styles.categoryText, category === 'outdoor' && styles.categoryTextActive]}>Outdoor</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.categoryButton, category === 'treadmill' && styles.categoryButtonActive]}
+                  onPress={() => setCategory('treadmill')}
+                >
+                  <Text style={styles.categoryEmoji}>🏃</Text>
+                  <Text style={[styles.categoryText, category === 'treadmill' && styles.categoryTextActive]}>Treadmill</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
 
           {/* Notes */}
           <Text style={styles.label}>Notes</Text>
@@ -410,20 +504,68 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             numberOfLines={3}
           />
 
+          {canNeighbourhoodShare && (
+            <View style={styles.nbRow}>
+              <View style={{ flex: 1, marginRight: spacing.md }}>
+                <Text style={styles.label}>Share to neighbourhood</Text>
+                <Text style={styles.nbHint}>
+                  Visible in {nbMe?.home_city} under @{nbMe?.handle}. You can turn this off anytime.
+                </Text>
+              </View>
+              <Switch
+                value={localNeighbourhoodShare}
+                disabled={nbShareBusy}
+                onValueChange={async (on) => {
+                  if (!run) return;
+                  setNbShareBusy(true);
+                  try {
+                    if (on) await neighbourhoodApi.shareRun(run.id);
+                    else await neighbourhoodApi.unshareRun(run.id);
+                    setLocalNeighbourhoodShare(on);
+                  } catch (e: any) {
+                    Alert.alert('Neighbourhood', e?.message || 'Could not update sharing');
+                  } finally {
+                    setNbShareBusy(false);
+                  }
+                }}
+              />
+            </View>
+          )}
+
           {/* Scenic Photos — shown for outdoor iPhone-led AND watch-recorded runs.
               Watch runs only get the retroactive (library) flow since the watch
               has no camera; outdoor runs get both that and the existing single-
               photo manual-marker flow. */}
           {showsPhotoSection && (
             <View style={styles.photosSection}>
-              <Text style={styles.label}>📸 Scenic Photos</Text>
+              <Text style={styles.label}>{gpsTracked ? 'Photos on route' : '📸 Scenic Photos'}</Text>
 
               {loadingPhotos ? (
                 <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
               ) : (
                 <>
-                  {/* Existing photos */}
-                  {photos.length > 0 && (
+                  {gpsTracked && photos.length > 0 && (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.photoKmRow}
+                    >
+                      {photos.map((photo) => {
+                        const km = Math.round(photo.distance_marker_km * 10) / 10;
+                        return (
+                          <TouchableOpacity
+                            key={photo.id}
+                            style={styles.photoKmChip}
+                            onPress={() => setLightboxPhoto(photo)}
+                          >
+                            <Text style={styles.photoKmChipText}>📍 {km}K</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+
+                  {!gpsTracked && photos.length > 0 && (
                     <View style={styles.photosGrid}>
                       {photos.map((photo) => {
                         const km = Math.round(photo.distance_marker_km * 10) / 10;
@@ -474,7 +616,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                           </Text>
                         </TouchableOpacity>
                       )}
-                      {isOutdoor && (
+                      {(isOutdoor || isWatch) && (
                         <TouchableOpacity
                           style={[styles.addPhotoBtn, hasRouteForRetro && styles.addPhotoBtnSecondary]}
                           onPress={pickPhoto}
@@ -574,14 +716,30 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
           <View style={styles.mapFullContainer}>
             {routeCamera && (
               <WalkMap
-                style={StyleSheet.absoluteFill}
+                style={StyleSheet.absoluteFill as ViewStyle}
                 route={routePoints}
+                markers={photoMarkers.length ? photoMarkers : undefined}
                 centerOn={routeCamera.center}
-                zoom={routeCamera.zoom}
+                zoom={mapZoom}
                 showUserLocation={false}
                 routeColor="#F97316"
+                interactive
               />
             )}
+            <View style={styles.mapFullZoomBar} pointerEvents="box-none">
+              <TouchableOpacity
+                style={styles.mapZoomBtn}
+                onPress={() => setMapZoom((z) => Math.min(18, z + 1))}
+              >
+                <Text style={styles.mapZoomBtnText}>+</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.mapZoomBtn}
+                onPress={() => setMapZoom((z) => Math.max(10, z - 1))}
+              >
+                <Text style={styles.mapZoomBtnText}>−</Text>
+              </TouchableOpacity>
+            </View>
             <Pressable
               style={styles.mapFullClose}
               onPress={() => setMapFullscreen(false)}
@@ -618,7 +776,19 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                 {lightboxPhoto.caption ? (
                   <Text style={styles.lightboxCaption}>{lightboxPhoto.caption}</Text>
                 ) : null}
-                <Text style={styles.lightboxHint}>Tap anywhere to close</Text>
+                {gpsTracked && (
+                  <TouchableOpacity
+                    style={styles.lightboxDelete}
+                    onPress={() => {
+                      const id = lightboxPhoto.id;
+                      setLightboxPhoto(null);
+                      handleDeletePhoto(id);
+                    }}
+                  >
+                    <Text style={styles.lightboxDeleteText}>Delete photo</Text>
+                  </TouchableOpacity>
+                )}
+                <Text style={styles.lightboxHint}>Tap outside the image to close</Text>
               </View>
             )}
           </Pressable>
@@ -651,6 +821,35 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+  },
+  readOnlyStats: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadows.small,
+  },
+  readOnlyTitle: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  readOnlyLine: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  readOnlyHint: {
+    fontSize: typography.sizes.xs,
+    color: colors.textLight,
+    marginTop: spacing.sm,
+    lineHeight: 18,
+  },
+  mapSection: {
+    marginBottom: spacing.md,
   },
   header: {
     flexDirection: 'row',
@@ -725,6 +924,22 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     textAlign: 'left',
   },
+  nbRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+  },
+  nbHint: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 4,
+    lineHeight: 15,
+  },
   categoryRow: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -769,28 +984,56 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
   },
 
-  // Map (outdoor GPS-tracked runs)
+  // Map (GPS-tracked runs)
   mapWrap: {
-    height: 200,
+    height: 260,
     borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.surfaceAlt,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
+    position: 'relative',
   },
   map: { flex: 1 },
-  mapExpandHint: {
+  mapZoomBar: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.md,
+    gap: 6,
+  },
+  mapZoomBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.small,
+  },
+  mapZoomBtnText: {
+    fontSize: 22,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    lineHeight: 24,
+  },
+  mapFsBtn: {
     position: 'absolute',
     top: spacing.sm,
     right: spacing.sm,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: radius.sm,
   },
-  mapExpandHintText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  mapFsBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   mapFullContainer: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  mapFullZoomBar: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: 120,
+    gap: 8,
   },
   mapFullClose: {
     position: 'absolute',
@@ -805,6 +1048,26 @@ const styles = StyleSheet.create({
     ...shadows.medium,
   },
   mapFullCloseText: { fontSize: 18, fontWeight: '700', color: colors.text },
+
+  photoKmRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  photoKmChip: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  photoKmChipText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
 
   // Scenic photo styles
   photosSection: {
@@ -889,6 +1152,20 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: spacing.xs,
     textAlign: 'center',
+  },
+  lightboxDelete: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  lightboxDeleteText: {
+    color: colors.error,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
   },
   lightboxHint: {
     color: 'rgba(255,255,255,0.4)',

@@ -9,8 +9,6 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
-  Linking,
-  Switch,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,16 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
-import {
-  levelApi,
-  weightApi,
-  stepsApi,
-  type WeightProgress,
-  type WeightChartData,
-  type StepsSummary,
-} from '../services/api';
-import { WeightTracker } from '../components/WeightTracker';
-import { StepsTracker } from '../components/StepsTracker';
+import { levelApi } from '../services/api';
 
 import { API_BASE_URL } from '../services/config';
 
@@ -74,25 +63,16 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
   const [currentLevel, setCurrentLevel] = useState('breath');
   const [showLevelPicker, setShowLevelPicker] = useState(false);
 
-  const [weightProgress, setWeightProgress] = useState<WeightProgress | null>(null);
-  const [weightChart, setWeightChart] = useState<WeightChartData[]>([]);
-  const [stepsSummary, setStepsSummary] = useState<StepsSummary | null>(null);
   const [profilePrivacy, setProfilePrivacy] = useState<'private' | 'circles' | 'public'>('private');
 
   const fetchAll = useCallback(async () => {
     try {
-      const [, , levelData, wpData, wcData, stData] = await Promise.all([
+      const [, , levelData] = await Promise.all([
         fetchGoals(),
         fetchHandle(),
         levelApi.get().catch(() => null),
-        weightApi.getProgress().catch(() => null),
-        weightApi.getChartData().catch(() => []),
-        stepsApi.getSummary().catch(() => null),
       ]);
       if (levelData?.level) setCurrentLevel(levelData.level);
-      if (wpData) setWeightProgress(wpData);
-      setWeightChart(wcData || []);
-      if (stData) setStepsSummary(stData);
     } catch {} finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -381,6 +361,20 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           )}
         </View>
 
+        <View style={[styles.section, shadows.small]}>
+          <Text style={styles.sectionTitle}>The Neighbourhood</Text>
+          <Text style={styles.privacyDesc}>
+            Share runs to a city-level feed under your @handle. Set your home city, opt in, and choose how far to
+            include nearby areas — from Community → The Neighbourhood.
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => navigation.getParent()?.navigate('Community', { screen: 'Neighbourhood' })}
+          >
+            <Text style={styles.primaryButtonText}>Open neighbourhood settings</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Runner Level */}
         <View style={[styles.section, shadows.small]}>
           <Text style={styles.sectionTitle}>Runner Level</Text>
@@ -421,58 +415,6 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           )}
         </View>
 
-        {/* Beta Features */}
-        <View style={[styles.section, shadows.small]}>
-          <Text style={styles.sectionTitle}>Beta Features</Text>
-          <Text style={styles.betaHint}>Experimental features you can try out</Text>
-          <View style={styles.betaRow}>
-            <Ionicons name="footsteps-outline" size={20} color={colors.secondary} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.betaLabel}>High Step Days</Text>
-              <Text style={styles.betaDesc}>Track daily step count</Text>
-            </View>
-            <Switch
-              value={!!user?.beta_steps_enabled}
-              onValueChange={async (val) => {
-                try {
-                  const token = await getToken();
-                  await fetch(`${API_BASE_URL}/user/beta-preferences`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ steps_enabled: val }),
-                  });
-                  await refreshUser();
-                } catch { Alert.alert('Error', 'Failed to update preference'); }
-              }}
-              trackColor={{ false: colors.border, true: colors.secondary }}
-              thumbColor="#fff"
-            />
-          </View>
-          <View style={styles.betaRow}>
-            <Ionicons name="scale-outline" size={20} color={colors.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.betaLabel}>Weight Tracking</Text>
-              <Text style={styles.betaDesc}>Log weight and track trends</Text>
-            </View>
-            <Switch
-              value={!!user?.beta_weight_enabled}
-              onValueChange={async (val) => {
-                try {
-                  const token = await getToken();
-                  await fetch(`${API_BASE_URL}/user/beta-preferences`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ weight_enabled: val }),
-                  });
-                  await refreshUser();
-                } catch { Alert.alert('Error', 'Failed to update preference'); }
-              }}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor="#fff"
-            />
-          </View>
-        </View>
-
         {/* Handle */}
         {!existingHandle && (
           <View style={[styles.section, shadows.small]}>
@@ -506,75 +448,13 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           </View>
         )}
 
-        {/* Log Section Header — only show if any beta feature is enabled */}
-        {(user?.beta_steps_enabled || user?.beta_weight_enabled) && (
-          <Text style={styles.groupTitle}>Log & Track</Text>
-        )}
-
-        {/* High Step Days */}
-        {user?.beta_steps_enabled && (
-          <StepsTracker summary={stepsSummary} onUpdate={fetchAll} />
-        )}
-
-        {/* Weight */}
-        {user?.beta_weight_enabled && (
-          weightProgress ? (
-            <WeightTracker
-              progress={weightProgress}
-              chartData={weightChart}
-              onUpdate={fetchAll}
-              showChart={true}
-            />
-          ) : (
-            <View style={[styles.section, shadows.small]}>
-              <Text style={styles.sectionTitle}>⚖️ Weight</Text>
-              <Text style={styles.emptyText}>Set your start and goal weight below to begin tracking.</Text>
-            </View>
-          )
-        )}
-
         <View
           onLayout={(e) => {
             goalsLayoutY.current = e.nativeEvent.layout.y;
           }}
         >
-        {/* Goals Section Header */}
-        <Text style={styles.groupTitle}>Goals</Text>
-
-        {/* Weight Goals */}
-        {user?.beta_weight_enabled && (
-          <View style={[styles.section, shadows.small]}>
-            <Text style={styles.sectionTitle}>Weight Goals</Text>
-            <View style={styles.inputRow}>
-              <View style={styles.inputHalf}>
-                <Text style={styles.label}>Start (lbs)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={startWeight}
-                  onChangeText={setStartWeight}
-                  keyboardType="numeric"
-                  placeholder="e.g. 200"
-                  placeholderTextColor={colors.textLight}
-                />
-              </View>
-              <View style={styles.inputHalf}>
-                <Text style={styles.label}>Goal (lbs)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={goalWeight}
-                  onChangeText={setGoalWeight}
-                  keyboardType="numeric"
-                  placeholder="e.g. 180"
-                  placeholderTextColor={colors.textLight}
-                />
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Running Goals */}
         <View style={[styles.section, shadows.small]}>
-          <Text style={styles.sectionTitle}>Running Goals</Text>
+          <Text style={styles.sectionTitle}>Goals</Text>
           <View style={styles.inputRow}>
             <View style={styles.inputHalf}>
               <Text style={styles.label}>Yearly (km)</Text>
@@ -614,19 +494,6 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           )}
         </TouchableOpacity>
         </View>
-
-        {/* Feedback */}
-        <TouchableOpacity
-          style={styles.feedbackButton}
-          onPress={() => Linking.openURL('https://zenrun.featurebase.app')}
-        >
-          <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.feedbackText}>Feedback &amp; Feature Requests</Text>
-            <Text style={styles.feedbackSubtext}>Help shape what ZenRun becomes</Text>
-          </View>
-          <Ionicons name="open-outline" size={16} color={colors.textLight} />
-        </TouchableOpacity>
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -699,16 +566,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     color: colors.text,
     marginBottom: spacing.md,
-  },
-  groupTitle: {
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.semibold,
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
   },
   avatarRow: {
     flexDirection: 'row',
@@ -842,28 +699,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontStyle: 'italic',
   },
-  betaHint: {
-    fontSize: typography.sizes.sm,
-    color: colors.textLight,
-    marginBottom: spacing.md,
-  },
-  betaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  betaLabel: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.medium,
-    color: colors.text,
-  },
-  betaDesc: {
-    fontSize: typography.sizes.xs,
-    color: colors.textSecondary,
-  },
   primaryButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
@@ -876,27 +711,6 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
-  },
-  feedbackButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.primary + '30',
-  },
-  feedbackText: {
-    color: colors.text,
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-  },
-  feedbackSubtext: {
-    color: colors.textLight,
-    fontSize: typography.sizes.xs,
-    marginTop: 2,
   },
   logoutButton: {
     flexDirection: 'row',

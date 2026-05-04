@@ -92,6 +92,8 @@ export interface Run {
   end_lng?: number | null;
   elevation_gain_m?: number | null;
   started_at?: string | null;
+  neighbourhood_visibility?: string | null;
+  neighbourhood_published_at?: string | null;
 }
 
 export interface RunPhoto {
@@ -813,7 +815,14 @@ export interface AlbumPhoto {
   lng: number | null;
   caption: string | null;
   created_at: string;
+  /**
+   * Base64 image. By default this is a small (~360px) thumbnail — enough
+   * for grids and feed cards. Use `albumApi.getFull(kind, id)` to fetch the
+   * full-resolution image when needed (e.g. in the detail viewer).
+   */
   photo_data?: string;
+  /** True when `photo_data` is the small thumbnail rather than full size. */
+  is_thumb?: boolean;
   activity: AlbumPhotoActivity;
 }
 
@@ -826,20 +835,33 @@ export const albumApi = {
   /**
    * 📸 List the current user's photos across runs and walks, newest first.
    * Cursor-based pagination — pass `next_cursor` from a previous response.
-   * `include_data` controls whether the response carries the base64 image
-   * data (heavier; on by default for grid use).
+   * Returns small thumbnails by default; set `full: true` for full-res JPEGs
+   * (much heavier — only use for export tools).
    */
   list: (params?: {
     cursor?: string | null;
     limit?: number;
     include_data?: boolean;
+    full?: boolean;
   }): Promise<AlbumPage> => {
     const qs = new URLSearchParams();
     if (params?.cursor) qs.set('cursor', params.cursor);
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.include_data === false) qs.set('include_data', 'false');
+    if (params?.full) qs.set('full', 'true');
     const query = qs.toString();
     return apiFetch(`/me/photos${query ? `?${query}` : ''}`);
+  },
+
+  /**
+   * 📸 Fetch the full-resolution base64 image for a single album photo.
+   * The detail viewer calls this to upgrade the thumbnail it already has.
+   */
+  getFull: (
+    kind: 'run' | 'walk',
+    photoId: number,
+  ): Promise<{ id: number; kind: 'run' | 'walk'; photo_data: string }> => {
+    return apiFetch(`/me/photos/${kind}/${photoId}/full`);
   },
 };
 
@@ -986,6 +1008,130 @@ export const walkPhotoApi = {
       body: JSON.stringify({ caption: caption ?? null }),
     });
   },
+};
+
+// ==========================================
+// 🌳 NEIGHBOURHOOD
+// ==========================================
+
+export interface NeighbourhoodMe {
+  opted_in: boolean;
+  handle: string | null;
+  home_city: string | null;
+  home_country: string | null;
+  home_lat: number | null;
+  home_lng: number | null;
+  widen_radius_km: number;
+  latest_run_centroid_lat: number | null;
+  latest_run_centroid_lng: number | null;
+}
+
+export interface NeighbourhoodSearchHit {
+  city: string;
+  country: string | null;
+  lat: number;
+  lng: number;
+  label: string;
+}
+
+export interface NeighbourhoodFeedItem {
+  run_id: number;
+  handle: string;
+  city: string | null;
+  distance_km: number;
+  duration_seconds: number;
+  completed_at: string | null;
+  photo_thumb_data: string | null;
+  saves_count: number;
+  i_ran_this_count: number;
+  viewer_has_saved: boolean;
+  viewer_has_run_this: boolean;
+}
+
+export interface NeighbourhoodFeedResponse {
+  items: NeighbourhoodFeedItem[];
+  next_cursor: { published_before: string | null; before_run_id: number } | null;
+}
+
+export interface NeighbourhoodRunDetail {
+  run_id: number;
+  handle: string;
+  city: string | null;
+  distance_km: number;
+  duration_seconds: number;
+  completed_at: string | null;
+  route_polyline: string | null;
+  notes: string | null;
+  photos: Array<{
+    id: number;
+    distance_marker_km: number;
+    caption: string | null;
+    photo_data: string;
+  }>;
+  saves_count: number;
+  i_ran_this_count: number;
+  viewer_has_saved: boolean;
+  viewer_has_run_this: boolean;
+}
+
+export const neighbourhoodApi = {
+  getMe: (): Promise<NeighbourhoodMe> => apiFetch('/me/neighbourhood'),
+
+  patchMe: (body: {
+    opted_in?: boolean;
+    home_city?: string | null;
+    home_country?: string | null;
+    home_lat?: number | null;
+    home_lng?: number | null;
+    widen_radius_km?: number;
+  }): Promise<NeighbourhoodMe> =>
+    apiFetch('/me/neighbourhood', { method: 'PATCH', body: JSON.stringify(body) }),
+
+  suggestFromLatLng: (lat: number, lng: number): Promise<{ city: string; country: string | null; lat: number; lng: number; cached: boolean }> =>
+    apiFetch('/me/neighbourhood/suggest', { method: 'POST', body: JSON.stringify({ lat, lng }) }),
+
+  searchPlaces: (q: string): Promise<{ results: NeighbourhoodSearchHit[] }> =>
+    apiFetch(`/me/neighbourhood/search?q=${encodeURIComponent(q)}`),
+
+  getFeed: (params?: {
+    limit?: number;
+    include_widen?: boolean;
+    published_before?: string | null;
+    before_run_id?: number | null;
+  }): Promise<NeighbourhoodFeedResponse> => {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.append('limit', String(params.limit));
+    if (params?.include_widen) qs.append('include_widen', 'true');
+    if (params?.published_before) qs.append('published_before', params.published_before);
+    if (params?.before_run_id != null) qs.append('before_run_id', String(params.before_run_id));
+    const s = qs.toString();
+    return apiFetch(`/neighbourhood/feed${s ? `?${s}` : ''}`);
+  },
+
+  getSaved: (): Promise<{ items: NeighbourhoodFeedItem[] }> => apiFetch('/neighbourhood/saved'),
+
+  getRun: (runId: number): Promise<NeighbourhoodRunDetail> => apiFetch(`/neighbourhood/runs/${runId}`),
+
+  shareRun: (runId: number): Promise<Run> =>
+    apiFetch(`/runs/${runId}/share-neighbourhood`, { method: 'POST', body: JSON.stringify({}) }),
+
+  unshareRun: (runId: number): Promise<Run> =>
+    apiFetch(`/runs/${runId}/share-neighbourhood`, { method: 'DELETE' }),
+
+  saveAdd: (runId: number): Promise<{ status: string }> =>
+    apiFetch(`/neighbourhood/runs/${runId}/save`, { method: 'POST', body: JSON.stringify({}) }),
+
+  saveRemove: (runId: number): Promise<{ status: string }> =>
+    apiFetch(`/neighbourhood/runs/${runId}/save`, { method: 'DELETE' }),
+
+  iranAdd: (runId: number): Promise<{ status: string }> =>
+    apiFetch(`/neighbourhood/runs/${runId}/i-ran-this`, { method: 'POST', body: JSON.stringify({}) }),
+
+  iranRemove: (runId: number): Promise<{ status: string }> =>
+    apiFetch(`/neighbourhood/runs/${runId}/i-ran-this`, { method: 'DELETE' }),
+
+  reportRun: (runId: number, reason?: string): Promise<{ status: string }> =>
+    apiFetch(`/neighbourhood/runs/${runId}/report`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
 };
 
 export const publicWalkApi = {

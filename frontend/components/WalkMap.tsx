@@ -47,6 +47,8 @@ export interface WalkMapProps {
   followUser?: boolean;
   routeColor?: string;
   routeWidth?: number;
+  /** Enable pinch / pan / rotate on the map (default false for backward compatibility). */
+  interactive?: boolean;
 }
 
 export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
@@ -59,6 +61,7 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
     showUserLocation = true,
     routeColor = colors.primary,
     routeWidth = 6,
+    interactive = false,
   },
   ref,
 ) {
@@ -103,6 +106,16 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
       tintColor: m.tintColor || colors.primary,
       systemImage: 'mappin.circle.fill',
     }));
+    const appleUi = interactive
+      ? {
+          compassEnabled: true,
+          scaleBarEnabled: true,
+          rotationGesturesEnabled: true,
+          scrollGesturesEnabled: true,
+          zoomGesturesEnabled: true,
+          tiltGesturesEnabled: true,
+        }
+      : { compassEnabled: true, scaleBarEnabled: true };
     return (
       <AppleMaps.View
         ref={ref}
@@ -111,7 +124,7 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
         polylines={polylines}
         markers={appleMarkers.length ? appleMarkers : undefined}
         properties={{ isMyLocationEnabled: showUserLocation }}
-        uiSettings={{ compassEnabled: true, scaleBarEnabled: true }}
+        uiSettings={appleUi}
       />
     );
   }
@@ -133,6 +146,17 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
       coordinates: { latitude: m.lat, longitude: m.lng },
       title: m.title,
     }));
+    const googleUi = interactive
+      ? {
+          compassEnabled: true,
+          scaleBarEnabled: true,
+          rotationGesturesEnabled: true,
+          scrollGesturesEnabled: true,
+          zoomGesturesEnabled: true,
+          tiltGesturesEnabled: true,
+          zoomControlsEnabled: true,
+        }
+      : undefined;
     return (
       <GoogleMaps.View
         ref={ref}
@@ -141,6 +165,7 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
         polylines={polylines}
         markers={googleMarkers.length ? googleMarkers : undefined}
         properties={{ isMyLocationEnabled: showUserLocation }}
+        uiSettings={googleUi}
       />
     );
   }

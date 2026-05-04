@@ -1,27 +1,13 @@
 /**
- * 📸 ALBUM SCREEN
- * ===============
+ * ALBUM — Instagram-style.
  *
- * Top-level surface for every photo the user has taken on every run and
- * every walk, in one timeline. Mirrors the brand's "the album" pillar —
- * "the path and the album."
+ * Two view modes:
+ *   - Grid (default): tight 3-column square thumbnails. Photos lead.
+ *   - Feed: per-activity post cards with handle row, full-bleed photo,
+ *           action row (View activity, Share), caption + km marker.
  *
- * Build 35 layout: photos are grouped into **activity cards** rather than
- * a flat grid. Each card shows the activity's date + headline stat,
- * followed by a horizontal photo strip. Tap a photo to open the viewer
- * (pinch-zoom + horizontal swipe between photos in the same activity).
- *
- * Implementation notes:
- *   - The backend feed is still a flat photo timeline — we group on the
- *     client by `${kind}-${activity_id}`. As long as the server returns
- *     photos in newest-first order (it does), grouping preserves chronology
- *     because all photos from the same activity arrive contiguously enough
- *     for a single sweep.
- *   - When pagination loads more photos, we re-group the entire list so
- *     trailing photos from the previous page can fold into the next page's
- *     activity card.
- *   - Pull-to-refresh resets pagination. Reaching the bottom auto-loads
- *     the next page.
+ * Server returns a flat reverse-chronological photo timeline; grouping for
+ * the feed view is done on the client. Pagination is shared across modes.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -34,19 +20,22 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
-  ScrollView,
   Dimensions,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { albumApi, AlbumPhoto, AlbumPhotoActivity } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { AppHeader } from '../components/AppHeader';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PAGE_SIZE = 24;
-const STRIP_TILE = 96;
-const STRIP_GAP = 6;
+
+const GRID_COLS = 3;
+const GRID_GAP = 2;
+const GRID_TILE = Math.floor((SCREEN_W - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
 
 interface Group {
   key: string;
@@ -60,7 +49,10 @@ interface Props {
   navigation: any;
 }
 
+type Mode = 'grid' | 'feed';
+
 export function AlbumScreen({ navigation }: Props) {
+  const { user } = useAuth();
   const [photos, setPhotos] = useState<AlbumPhoto[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -68,6 +60,7 @@ export function AlbumScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [firstLoaded, setFirstLoaded] = useState(false);
+  const [mode, setMode] = useState<Mode>('grid');
 
   const fetchPage = useCallback(
     async (reset: boolean) => {
@@ -99,8 +92,6 @@ export function AlbumScreen({ navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refetch when the screen regains focus (so newly-uploaded photos show
-  // up promptly).
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => {
       if (firstLoaded) void fetchPage(true);
@@ -108,9 +99,17 @@ export function AlbumScreen({ navigation }: Props) {
     return unsub;
   }, [navigation, fetchPage, firstLoaded]);
 
-  // Group photos by activity in memory. Preserves the server's reverse-
-  // chronological order: the first activity card is the most recent.
   const groups = useMemo<Group[]>(() => groupByActivity(photos), [photos]);
+
+  const counts = useMemo(() => {
+    const runIds = new Set<number>();
+    const walkIds = new Set<number>();
+    for (const p of photos) {
+      if (p.kind === 'run') runIds.add(p.activity_id);
+      else walkIds.add(p.activity_id);
+    }
+    return { photos: photos.length, runs: runIds.size, walks: walkIds.size };
+  }, [photos]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -146,77 +145,46 @@ export function AlbumScreen({ navigation }: Props) {
     }
   };
 
-  const renderGroup = ({ item: group }: { item: Group }) => {
-    const date = group.activity.started_at || group.activity.completed_at;
-    return (
-      <View style={styles.card}>
-        <Pressable
-          onPress={() => onActivityPress(group)}
-          style={({ pressed }) => [
-            styles.cardHeader,
-            { opacity: pressed ? 0.7 : 1 },
-          ]}
-        >
-          <View style={styles.cardHeaderIcon}>
-            <MaterialCommunityIcons
-              name={group.kind === 'run' ? 'run-fast' : 'walk'}
-              size={18}
-              color={group.kind === 'run' ? '#F97316' : '#10B981'}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardDate}>{formatDate(date)}</Text>
-            <Text style={styles.cardSub}>
-              {labelForActivity(group)} · {group.photos.length} photo
-              {group.photos.length === 1 ? '' : 's'}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
-        </Pressable>
+  /* ───────────── Header (profile-style) ───────────── */
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.stripContent}
-          decelerationRate="fast"
-          snapToInterval={STRIP_TILE + STRIP_GAP}
-        >
-          {group.photos.map((p, idx) => (
-            <Pressable
-              key={`${p.kind}-${p.id}`}
-              onPress={() => onPhotoPress(group, p, idx)}
-              style={({ pressed }) => [
-                styles.stripTile,
-                { transform: [{ scale: pressed ? 0.96 : 1 }] },
-              ]}
-            >
-              {p.photo_data ? (
-                <Image
-                  source={{ uri: `data:image/jpeg;base64,${p.photo_data}` }}
-                  style={styles.stripImage}
-                />
-              ) : (
-                <View style={[styles.stripImage, styles.tilePlaceholder]} />
-              )}
-              {p.distance_marker_km != null && p.distance_marker_km > 0 && (
-                <View style={styles.markerPill}>
-                  <Text style={styles.markerPillText}>
-                    {Math.round(p.distance_marker_km * 10) / 10}K
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
-        </ScrollView>
+  const profileHeader = (
+    <View style={styles.profileHeader}>
+      <View style={styles.profileTopRow}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {(user?.name?.[0] ?? user?.email?.[0] ?? 'Z').toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.statRow}>
+          <Stat value={counts.photos} label="photos" />
+          <Stat value={counts.runs} label="runs" />
+          <Stat value={counts.walks} label="walks" />
+        </View>
       </View>
-    );
-  };
+      <Text style={styles.profileName}>{user?.name || 'Runner'}</Text>
+      <Text style={styles.profileBio}>The path and the album.</Text>
+
+      <View style={styles.modeBar}>
+        <ModeButton
+          active={mode === 'grid'}
+          onPress={() => setMode('grid')}
+          icon="grid-outline"
+        />
+        <ModeButton
+          active={mode === 'feed'}
+          onPress={() => setMode('feed')}
+          icon="reader-outline"
+        />
+      </View>
+    </View>
+  );
+
+  /* ───────────── Empty / loading states ───────────── */
 
   if (!firstLoaded && loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <AppHeader />
-        <Header />
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
         </View>
@@ -228,40 +196,108 @@ export function AlbumScreen({ navigation }: Props) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <AppHeader />
-        <Header />
+        {profileHeader}
         <View style={styles.center}>
-          <Ionicons name="images-outline" size={56} color={colors.textLight} />
+          <View style={styles.emptyIcon}>
+            <Ionicons name="camera-outline" size={32} color={colors.textLight} />
+          </View>
           <Text style={styles.emptyTitle}>Your album is waiting.</Text>
           <Text style={styles.emptyBody}>
-            Photos you take on a run or walk land here, grouped by the path
-            you took.
+            Photos you take on a run or walk land here.
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  /* ───────────── Grid mode ───────────── */
+
+  if (mode === 'grid') {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <AppHeader />
+        {error && <ErrorBanner message={error} />}
+        <FlatList
+          data={photos}
+          key="grid"
+          numColumns={GRID_COLS}
+          keyExtractor={(p) => `${p.kind}-${p.id}`}
+          renderItem={({ item, index }) => {
+            const isRightEdge = (index + 1) % GRID_COLS === 0;
+            return (
+              <Pressable
+                onPress={() => {
+                  const group = findGroupForPhoto(groups, item);
+                  if (group) {
+                    const idx = group.photos.findIndex(
+                      (gp) => gp.kind === item.kind && gp.id === item.id,
+                    );
+                    onPhotoPress(group, item, Math.max(0, idx));
+                  }
+                }}
+                style={[
+                  styles.gridTile,
+                  { marginRight: isRightEdge ? 0 : GRID_GAP, marginBottom: GRID_GAP },
+                ]}
+              >
+                {item.photo_data ? (
+                  <Image
+                    source={{ uri: `data:image/jpeg;base64,${item.photo_data}` }}
+                    style={styles.gridImage}
+                  />
+                ) : (
+                  <View style={[styles.gridImage, styles.tilePlaceholder]} />
+                )}
+                <View style={styles.gridKindDot}>
+                  <MaterialCommunityIcons
+                    name={item.kind === 'run' ? 'run-fast' : 'walk'}
+                    size={11}
+                    color="#fff"
+                  />
+                </View>
+              </Pressable>
+            );
+          }}
+          ListHeaderComponent={profileHeader}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loading && photos.length > 0 ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+            ) : !hasMore && photos.length >= 12 ? (
+              <Text style={styles.footerEnd}>That&apos;s everything ✦</Text>
+            ) : null
+          }
+        />
+      </SafeAreaView>
+    );
+  }
+
+  /* ───────────── Feed mode ───────────── */
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <AppHeader />
-      <Header />
-      {error && (
-        <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={14} color="#fff" />
-          <Text style={styles.errorBannerText}>{error}</Text>
-        </View>
-      )}
+      {error && <ErrorBanner message={error} />}
       <FlatList
         data={groups}
+        key="feed"
         keyExtractor={(g) => g.key}
-        renderItem={renderGroup}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
+        renderItem={({ item: group }) => (
+          <FeedCard
+            group={group}
+            displayName={user?.name || 'Runner'}
+            onPhotoPress={(photo, idx) => onPhotoPress(group, photo, idx)}
+            onActivityPress={() => onActivityPress(group)}
           />
+        )}
+        ListHeaderComponent={profileHeader}
+        ItemSeparatorComponent={() => <View style={{ height: spacing.lg }} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         onEndReached={onEndReached}
         onEndReachedThreshold={0.4}
@@ -269,7 +305,7 @@ export function AlbumScreen({ navigation }: Props) {
           loading && groups.length > 0 ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
           ) : !hasMore && groups.length >= 3 ? (
-            <Text style={styles.footerEnd}>That's everything ✦</Text>
+            <Text style={styles.footerEnd}>That&apos;s everything ✦</Text>
           ) : null
         }
       />
@@ -277,17 +313,190 @@ export function AlbumScreen({ navigation }: Props) {
   );
 }
 
-function Header() {
+/* ───────────── Sub-components ───────────── */
+
+function Stat({ value, label }: { value: number; label: string }) {
   return (
-    <View style={styles.header}>
-      <Text style={styles.headerTitle}>Album</Text>
-      <Text style={styles.headerSubtitle}>The moments from your paths</Text>
+    <View style={styles.stat}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
+function ModeButton({
+  active,
+  onPress,
+  icon,
+}: {
+  active: boolean;
+  onPress: () => void;
+  icon: keyof typeof Ionicons.glyphMap;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.modeBtn, active && styles.modeBtnActive]}
+      hitSlop={8}
+    >
+      <Ionicons name={icon} size={22} color={active ? colors.text : colors.textLight} />
+    </Pressable>
+  );
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <View style={styles.errorBanner}>
+      <Ionicons name="alert-circle" size={14} color="#fff" />
+      <Text style={styles.errorBannerText}>{message}</Text>
+    </View>
+  );
+}
+
+const FEED_PHOTO_SIZE = SCREEN_W; // square, edge to edge
+
+function FeedCard({
+  group,
+  displayName,
+  onPhotoPress,
+  onActivityPress,
+}: {
+  group: Group;
+  displayName: string;
+  onPhotoPress: (photo: AlbumPhoto, index: number) => void;
+  onActivityPress: () => void;
+}) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const photos = group.photos;
+  const lead = photos[activeIdx] ?? photos[0];
+  const dateLabel = formatDate(group.activity.started_at || group.activity.completed_at);
+  const subtitle = labelForActivity(group);
+
+  const onShare = async () => {
+    const km = group.activity.distance_km;
+    const distance = km > 0 ? `${km.toFixed(km < 10 ? 1 : 0)} km` : '';
+    const kind = group.kind === 'run' ? 'run' : 'walk';
+    try {
+      await Share.share({
+        message: `${distance} ${kind} on ${dateLabel.toLowerCase()} · #zenrun`,
+      });
+    } catch {
+      // user dismissed
+    }
+  };
+
+  return (
+    <View style={styles.feedCard}>
+      <View style={styles.feedHeaderRow}>
+        <View style={styles.feedAvatar}>
+          <MaterialCommunityIcons
+            name={group.kind === 'run' ? 'run-fast' : 'walk'}
+            size={18}
+            color={group.kind === 'run' ? '#F97316' : '#10B981'}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.feedAuthor}>{displayName}</Text>
+          <Text style={styles.feedSub}>
+            {subtitle} · {dateLabel}
+          </Text>
+        </View>
+        <Pressable onPress={onActivityPress} hitSlop={8}>
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+        </Pressable>
+      </View>
+
+      <View style={styles.feedPhotoWrap}>
+        <FlatList
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          data={photos}
+          keyExtractor={(p) => `${p.kind}-${p.id}`}
+          onMomentumScrollEnd={(e) => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / FEED_PHOTO_SIZE);
+            setActiveIdx(Math.max(0, Math.min(photos.length - 1, idx)));
+          }}
+          renderItem={({ item, index }) => (
+            <Pressable onPress={() => onPhotoPress(item, index)}>
+              {item.photo_data ? (
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${item.photo_data}` }}
+                  style={styles.feedPhoto}
+                />
+              ) : (
+                <View style={[styles.feedPhoto, styles.tilePlaceholder]} />
+              )}
+            </Pressable>
+          )}
+        />
+        {photos.length > 1 && (
+          <View style={styles.feedCountPill}>
+            <Text style={styles.feedCountPillText}>
+              {activeIdx + 1}/{photos.length}
+            </Text>
+          </View>
+        )}
+        {lead?.distance_marker_km != null && lead.distance_marker_km > 0 && (
+          <View style={styles.feedKmPill}>
+            <Text style={styles.feedKmText}>
+              {Math.round(lead.distance_marker_km * 10) / 10}K
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.feedActions}>
+        <Pressable onPress={onActivityPress} style={styles.feedActionBtn} hitSlop={6}>
+          <Ionicons name="map-outline" size={22} color={colors.text} />
+          <Text style={styles.feedActionText}>View activity</Text>
+        </Pressable>
+        <Pressable onPress={onShare} style={styles.feedActionBtn} hitSlop={6}>
+          <Ionicons name="paper-plane-outline" size={22} color={colors.text} />
+        </Pressable>
+        {photos.length > 1 && (
+          <View style={styles.feedDots}>
+            {photos.map((_, i) => (
+              <View
+                key={i}
+                style={[styles.feedDot, i === activeIdx && styles.feedDotActive]}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+
+      {lead?.caption ? (
+        <Text style={styles.feedCaption} numberOfLines={3}>
+          <Text style={styles.feedCaptionAuthor}>{displayName}</Text> {lead.caption}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/* ───────────── Helpers ───────────── */
+
+function findGroupForPhoto(groups: Group[], photo: AlbumPhoto): Group | null {
+  const key = `${photo.kind}-${photo.activity_id}`;
+  return groups.find((g) => g.key === key) ?? null;
+}
+
+function markerSortKey(km: number | null | undefined): number {
+  if (km == null || !Number.isFinite(km)) return Number.POSITIVE_INFINITY;
+  return km;
+}
+
+function sortPhotosByMarkerDistance(photos: AlbumPhoto[]): AlbumPhoto[] {
+  return [...photos].sort((a, b) => {
+    const da = markerSortKey(a.distance_marker_km);
+    const db = markerSortKey(b.distance_marker_km);
+    if (da !== db) return da - db;
+    return a.id - b.id;
+  });
+}
+
 function groupByActivity(photos: AlbumPhoto[]): Group[] {
-  // Preserve insertion order so the most recent activity surfaces first.
   const map = new Map<string, Group>();
   for (const p of photos) {
     const key = `${p.kind}-${p.activity_id}`;
@@ -303,6 +512,9 @@ function groupByActivity(photos: AlbumPhoto[]): Group[] {
       map.set(key, g);
     }
     g.photos.push(p);
+  }
+  for (const g of map.values()) {
+    g.photos = sortPhotosByMarkerDistance(g.photos);
   }
   return Array.from(map.values());
 }
@@ -326,7 +538,6 @@ function formatDate(iso: string | null | undefined): string {
     d.getDate() === yesterday.getDate();
   if (isYesterday) return 'Yesterday';
 
-  // Within the last week → weekday name. Otherwise: day month.
   const diffMs = now.getTime() - d.getTime();
   const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
   if (diffMs < ONE_WEEK) {
@@ -342,8 +553,7 @@ function formatDate(iso: string | null | undefined): string {
 function labelForActivity(group: Group): string {
   const km = group.activity.distance_km;
   const kind = group.kind === 'run' ? 'run' : 'walk';
-  const distance =
-    km > 0 ? `${km.toFixed(km < 10 ? 1 : 0)} km ${kind}` : kind;
+  const distance = km > 0 ? `${km.toFixed(km < 10 ? 1 : 0)} km ${kind}` : kind;
   return capitalise(distance);
 }
 
@@ -351,87 +561,212 @@ function capitalise(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
+/* ───────────── Styles ───────────── */
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
+
+  // Profile-style header
+  profileHeader: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.xs,
+    backgroundColor: colors.background,
   },
-  headerTitle: {
-    fontSize: typography.sizes.xxl,
+  profileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  avatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.small,
+  },
+  avatarText: {
+    fontSize: 28,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
+  statRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  stat: { alignItems: 'center' },
+  statValue: {
+    fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  headerSubtitle: {
-    fontSize: typography.sizes.sm,
+  statLabel: {
+    fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 2,
   },
-  listContent: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.md,
-    ...shadows.small,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  cardHeaderIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardDate: {
+  profileName: {
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  cardSub: {
+  profileBio: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  modeBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+  },
+  modeBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  modeBtnActive: {
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.text,
+  },
+
+  // Grid
+  gridTile: {
+    width: GRID_TILE,
+    height: GRID_TILE,
+    backgroundColor: colors.surfaceAlt,
+    overflow: 'hidden',
+  },
+  gridImage: { width: '100%', height: '100%' },
+  tilePlaceholder: { backgroundColor: colors.surfaceAlt },
+  gridKindDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Feed
+  feedCard: {
+    backgroundColor: colors.background,
+  },
+  feedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  feedAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.small,
+  },
+  feedAuthor: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  feedSub: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
     marginTop: 1,
   },
-  stripContent: {
-    paddingHorizontal: spacing.md,
-    gap: STRIP_GAP,
-  },
-  stripTile: {
-    width: STRIP_TILE,
-    height: STRIP_TILE,
-    borderRadius: radius.md,
-    overflow: 'hidden',
+  feedPhotoWrap: {
+    width: SCREEN_W,
+    height: FEED_PHOTO_SIZE,
     backgroundColor: colors.surfaceAlt,
   },
-  stripImage: { width: '100%', height: '100%' },
-  tilePlaceholder: { backgroundColor: colors.surfaceAlt },
-  markerPill: {
+  feedPhoto: {
+    width: SCREEN_W,
+    height: FEED_PHOTO_SIZE,
+  },
+  feedCountPill: {
     position: 'absolute',
-    top: 4,
-    left: 4,
+    top: 10,
+    right: 10,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: radius.full,
   },
-  markerPillText: {
+  feedCountPillText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 11,
+    fontWeight: typography.weights.semibold,
+  },
+  feedKmPill: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+  },
+  feedKmText: {
+    color: '#fff',
+    fontSize: 11,
     fontWeight: typography.weights.bold,
   },
+  feedActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.lg,
+  },
+  feedActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  feedActionText: {
+    fontSize: typography.sizes.xs,
+    color: colors.text,
+    fontWeight: typography.weights.semibold,
+  },
+  feedDots: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  feedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+  },
+  feedDotActive: { backgroundColor: colors.primary },
+  feedCaption: {
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    paddingHorizontal: spacing.md,
+    lineHeight: 19,
+  },
+  feedCaptionAuthor: {
+    fontWeight: typography.weights.bold,
+  },
+
+  // Empty / errors
   center: {
     flex: 1,
     alignItems: 'center',
@@ -439,11 +774,20 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.md,
   },
+  emptyIcon: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
   emptyTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.text,
-    marginTop: spacing.md,
     textAlign: 'center',
   },
   emptyBody: {

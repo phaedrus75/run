@@ -19,7 +19,7 @@
  * library by `photoArchiver` (writeOnly permission).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -89,6 +89,25 @@ export function useActivityPhotoCapture(
     const photos = await readPhotos(id);
     setPendingPhotos(photos);
   }, []);
+
+  const allFullySynced =
+    pendingPhotos.length > 0 &&
+    pendingPhotos.every((p) => p.archive.status === 'done' && p.upload.status === 'done');
+
+  const syncSignature = useMemo(
+    () =>
+      pendingPhotos.map((p) => `${p.id}:${p.archive.status}:${p.upload.status}`).join('|'),
+    [pendingPhotos],
+  );
+
+  /** Re-read manifest while photos are still syncing (Photos library + server). */
+  useEffect(() => {
+    if (pendingPhotos.length === 0 || allFullySynced) return;
+    const iv = setInterval(() => {
+      void refresh();
+    }, 1500);
+    return () => clearInterval(iv);
+  }, [syncSignature, allFullySynced, refresh, pendingPhotos.length]);
 
   // Clean up: if the screen unmounts with no captures and no in-flight
   // session, do nothing. If the screen unmounts mid-recording, the session

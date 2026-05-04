@@ -5,8 +5,8 @@
  * Entry point for the Walk feature:
  * - Big "Start a Walk" CTA that opens ActiveWalkScreen
  * - Recent walks list (tap to open detail)
- * - Quick stats summary
- * - "Discover walks" link (Phase 3 - DiscoverWalksScreen)
+ * - Quick stats summary (full walk statistics live in the drawer)
+ * - "Discover walks" link (DiscoverWalksScreen)
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -39,10 +39,7 @@ import {
   requestAlwaysLocationPermission,
   setBackgroundTrackingEnabled,
 } from '../services/walkBackgroundTask';
-import { WalkStatsSection } from '../components/WalkStatsSection';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
-
-type InnerTab = 'history' | 'stats';
 
 // Background location tasks are not supported in Expo Go — they require a
 // standalone build with the UIBackgroundModes entitlement baked in.
@@ -56,7 +53,6 @@ interface Props {
 }
 
 export function WalkScreen({ navigation, embedded }: Props) {
-  const [tab, setTab] = useState<InnerTab>('history');
   const [walks, setWalks] = useState<Walk[]>([]);
   const [stats, setStats] = useState<WalkStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,23 +162,6 @@ export function WalkScreen({ navigation, embedded }: Props) {
           </View>
         )}
 
-        {/* Inner tab switcher */}
-        <View style={styles.innerTabRow}>
-          {(['history', 'stats'] as InnerTab[]).map(t => (
-            <Pressable
-              key={t}
-              style={[styles.innerTab, tab === t && styles.innerTabActive]}
-              onPress={() => setTab(t)}
-            >
-              <Text style={[styles.innerTabText, tab === t && styles.innerTabTextActive]}>
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {tab === 'history' && (
-          <>
         <Pressable
           onPress={startWalk}
           style={({ pressed }) => [
@@ -270,12 +249,6 @@ export function WalkScreen({ navigation, embedded }: Props) {
             ))
           )}
         </View>
-          </>
-        )}
-
-        {tab === 'stats' && (
-          <WalkStatsSection stats={stats} />
-        )}
       </ScrollView>
     </Shell>
   );
@@ -350,29 +323,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
-  },
-  innerTabRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    padding: 3,
-  },
-  innerTab: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    borderRadius: radius.full,
-  },
-  innerTabActive: { backgroundColor: colors.text },
-  innerTabText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.textSecondary,
-  },
-  innerTabTextActive: {
-    color: colors.textOnPrimary,
-    fontWeight: typography.weights.semibold,
   },
   header: {
     paddingTop: spacing.md,

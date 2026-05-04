@@ -13,7 +13,7 @@
  * Lives under Labs → "Recover Lost Photos".
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,8 @@ import {
   type ScanResult,
 } from '../services/photoRecovery';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import { useAuth } from '../contexts/AuthContext';
+import { isAdminUser } from '../constants/admin';
 
 interface Props {
   navigation: any;
@@ -43,6 +45,16 @@ interface Props {
 const TILE_SIZE = 96;
 
 export function PhotoRecoveryScreen({ navigation }: Props) {
+  const { user } = useAuth();
+  const adminAllowed = isAdminUser(user?.email);
+
+  useLayoutEffect(() => {
+    if (user != null && !adminAllowed) {
+      Alert.alert('Not available', 'Photo recovery is only available for administrators.');
+      navigation.goBack();
+    }
+  }, [user, adminAllowed, navigation]);
+
   const [scanning, setScanning] = useState(true);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -65,8 +77,9 @@ export function PhotoRecoveryScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!adminAllowed) return;
     runScan();
-  }, [runScan]);
+  }, [runScan, adminAllowed]);
 
   const photos = result?.photos ?? [];
   const selectedPhotos = useMemo(
@@ -119,6 +132,10 @@ export function PhotoRecoveryScreen({ navigation }: Props) {
       setSaving(false);
     }
   };
+
+  if (user != null && !adminAllowed) {
+    return null;
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

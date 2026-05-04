@@ -1,19 +1,8 @@
 /**
- * 🌳 NEIGHBOURHOOD — placeholder
- * ==============================
- *
- * Build 35 doesn't ship the Neighbourhood feed yet. This screen explains
- * what's coming, in the brand voice, and gives the user something to
- * engage with so the Community tab doesn't feel half-baked.
- *
- * Build 36 will replace this with the real feed:
- *   - Pseudonymous identity (zenrun-handle, not real name)
- *   - Photos from runs in the user's area
- *   - "Saves" and "I ran this" — never likes / leaderboards
- *   - Rank places, never people
+ * The Neighbourhood — city-level feed, saves, and settings.
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,33 +11,410 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  Image,
+  ActivityIndicator,
+  RefreshControl,
+  Modal,
+  Switch,
+  FlatList,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import {
+  neighbourhoodApi,
+  type NeighbourhoodFeedItem,
+  type NeighbourhoodMe,
+  type NeighbourhoodRunDetail,
+  type NeighbourhoodSearchHit,
+} from '../services/api';
+import { WalkMap } from '../components/WalkMap';
+import { decodePolyline } from '../services/walkLocationTracker';
 
-interface Props {
-  navigation: any;
+const PURPLE = '#7E57C2';
+const WIDEN_OPTIONS = [0, 25, 50, 100] as const;
+
+function thumbUri(data: string | null | undefined): string | null {
+  if (!data) return null;
+  if (data.startsWith('data:')) return data;
+  return `data:image/jpeg;base64,${data}`;
 }
 
-export function NeighbourhoodScreen({ navigation }: Props) {
-  const [interestedPressed, setInterestedPressed] = useState(false);
-  const [pseudonym, setPseudonym] = useState('');
+export function NeighbourhoodScreen({ navigation }: { navigation: any }) {
+  const [me, setMe] = useState<NeighbourhoodMe | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState<'feed' | 'saved'>('feed');
+  const [includeWiden, setIncludeWiden] = useState(false);
+  const [feedItems, setFeedItems] = useState<NeighbourhoodFeedItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<{
+    published_before: string | null;
+    before_run_id: number;
+  } | null>(null);
+  const nextCursorRef = useRef(nextCursor);
+  useEffect(() => {
+    nextCursorRef.current = nextCursor;
+  }, [nextCursor]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+  const [searchHits, setSearchHits] = useState<NeighbourhoodSearchHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<NeighbourhoodRunDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  const onInterested = () => {
-    if (!pseudonym.trim()) {
-      Alert.alert(
-        'Pick a pseudonym first',
-        'Your neighbourhood handle keeps things friendly without going public.',
-      );
+  const ready =
+    !!me?.opted_in &&
+    !!(me?.home_city || '').trim() &&
+    !!me?.handle &&
+    me.home_lat != null &&
+    me.home_lng != null;
+
+  const loadMe = useCallback(async () => {
+    try {
+      const m = await neighbourhoodApi.getMe();
+      setMe(m);
+    } catch {
+      setMe(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void loadMe();
+    }, [loadMe]),
+  );
+
+  const fetchFeedPage = useCallback(
+    async (reset: boolean) => {
+      if (!ready || tab !== 'feed') return;
+      setFeedLoading(true);
+      try {
+        const cur = reset ? null : nextCursorRef.current;
+        const res = await neighbourhoodApi.getFeed({
+          limit: 20,
+          include_widen: includeWiden,
+          published_before: cur?.published_before ?? undefined,
+          before_run_id: cur?.before_run_id ?? undefined,
+        });
+        if (reset) setFeedItems(res.items);
+        else setFeedItems((prev) => [...prev, ...res.items]);
+        setNextCursor(res.next_cursor);
+      } catch (e: any) {
+        Alert.alert('Feed', e?.message || 'Could not load neighbourhood feed');
+      } finally {
+        setFeedLoading(false);
+      }
+    },
+    [ready, tab, includeWiden],
+  );
+
+  useEffect(() => {
+    if (!ready || tab !== 'feed') return;
+    setNextCursor(null);
+    nextCursorRef.current = null;
+    setFeedItems([]);
+    void fetchFeedPage(true);
+  }, [ready, tab, includeWiden, fetchFeedPage]);
+
+  const loadSaved = useCallback(async () => {
+    if (!ready) return;
+    setFeedLoading(true);
+    try {
+      const res = await neighbourhoodApi.getSaved();
+      setFeedItems(res.items);
+      setNextCursor(null);
+    } catch (e: any) {
+      Alert.alert('Saved', e?.message || 'Could not load saved runs');
+    } finally {
+      setFeedLoading(false);
+    }
+  }, [ready]);
+
+  useEffect(() => {
+    if (ready && tab === 'saved') void loadSaved();
+  }, [ready, tab, loadSaved]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    void loadMe().then(() => {
+      if (tab === 'feed') {
+        setNextCursor(null);
+        nextCursorRef.current = null;
+        void fetchFeedPage(true);
+      } else void loadSaved();
+    });
+  };
+
+  useEffect(() => {
+    if (searchQ.trim().length < 2) {
+      setSearchHits([]);
       return;
     }
-    setInterestedPressed(true);
-    Alert.alert(
-      'Saved',
-      `We'll let you know when ${pseudonym.trim()} can join the neighbourhood.`,
-    );
+    const t = setTimeout(() => {
+      setSearching(true);
+      neighbourhoodApi
+        .searchPlaces(searchQ.trim())
+        .then((r) => setSearchHits(r.results || []))
+        .catch(() => setSearchHits([]))
+        .finally(() => setSearching(false));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchQ]);
+
+  const applySearchHit = async (hit: NeighbourhoodSearchHit) => {
+    try {
+      await neighbourhoodApi.patchMe({
+        home_city: hit.city,
+        home_country: hit.country || undefined,
+        home_lat: hit.lat,
+        home_lng: hit.lng,
+        opted_in: true,
+      });
+      setSearchQ('');
+      setSearchHits([]);
+      await loadMe();
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not save city');
+    }
   };
+
+  const useLatestRunLocation = async () => {
+    if (me?.latest_run_centroid_lat == null || me?.latest_run_centroid_lng == null) {
+      Alert.alert('No GPS run', 'Log an outdoor run with GPS first, or search for your city below.');
+      return;
+    }
+    try {
+      const s = await neighbourhoodApi.suggestFromLatLng(
+        me.latest_run_centroid_lat,
+        me.latest_run_centroid_lng,
+      );
+      await neighbourhoodApi.patchMe({
+        home_city: s.city,
+        home_country: s.country || undefined,
+        home_lat: s.lat,
+        home_lng: s.lng,
+        opted_in: true,
+      });
+      await loadMe();
+      Alert.alert('Home city set', `${s.city}${s.country ? `, ${s.country}` : ''}`);
+    } catch (e: any) {
+      Alert.alert('Geocoding', e?.message || 'Could not resolve city from your last run.');
+    }
+  };
+
+  const openDetail = async (runId: number) => {
+    setDetailId(runId);
+    setDetailLoading(true);
+    setDetail(null);
+    try {
+      const d = await neighbourhoodApi.getRun(runId);
+      setDetail(d);
+    } catch (e: any) {
+      Alert.alert('Run', e?.message || 'Could not open this run');
+      setDetailId(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const patchWiden = async (km: number) => {
+    try {
+      await neighbourhoodApi.patchMe({ widen_radius_km: km });
+      await loadMe();
+      if (km === 0) setIncludeWiden(false);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not update');
+    }
+  };
+
+  const renderFeedCard = ({ item }: { item: NeighbourhoodFeedItem }) => (
+    <Pressable style={styles.card} onPress={() => void openDetail(item.run_id)}>
+      <View style={styles.cardRow}>
+        {thumbUri(item.photo_thumb_data) ? (
+          <Image source={{ uri: thumbUri(item.photo_thumb_data)! }} style={styles.thumb} />
+        ) : (
+          <View style={[styles.thumb, styles.thumbPlaceholder]}>
+            <Ionicons name="image-outline" size={22} color={colors.textLight} />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.handle}>@{item.handle}</Text>
+          <Text style={styles.meta}>
+            {item.distance_km?.toFixed(1)} km · {item.saves_count} saves · {item.i_ran_this_count} ran this
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+      </View>
+      <View style={styles.cardActions}>
+        <Pressable
+          style={styles.smallBtn}
+          onPress={async (e) => {
+            e.stopPropagation?.();
+            try {
+              if (item.viewer_has_saved) {
+                await neighbourhoodApi.saveRemove(item.run_id);
+              } else {
+                await neighbourhoodApi.saveAdd(item.run_id);
+              }
+              setFeedItems((rows) =>
+                rows.map((r) =>
+                  r.run_id === item.run_id
+                    ? {
+                        ...r,
+                        viewer_has_saved: !r.viewer_has_saved,
+                        saves_count: r.viewer_has_saved ? r.saves_count - 1 : r.saves_count + 1,
+                      }
+                    : r,
+                ),
+              );
+            } catch (err: any) {
+              Alert.alert('Save', err?.message || 'Failed');
+            }
+          }}
+        >
+          <Ionicons name={item.viewer_has_saved ? 'bookmark' : 'bookmark-outline'} size={18} color={PURPLE} />
+          <Text style={styles.smallBtnText}>{item.viewer_has_saved ? 'Saved' : 'Save'}</Text>
+        </Pressable>
+        <Pressable
+          style={styles.smallBtn}
+          onPress={async (e) => {
+            e.stopPropagation?.();
+            try {
+              if (item.viewer_has_run_this) {
+                await neighbourhoodApi.iranRemove(item.run_id);
+              } else {
+                await neighbourhoodApi.iranAdd(item.run_id);
+              }
+              setFeedItems((rows) =>
+                rows.map((r) =>
+                  r.run_id === item.run_id
+                    ? {
+                        ...r,
+                        viewer_has_run_this: !r.viewer_has_run_this,
+                        i_ran_this_count: r.viewer_has_run_this ? r.i_ran_this_count - 1 : r.i_ran_this_count + 1,
+                      }
+                    : r,
+                ),
+              );
+            } catch (err: any) {
+              Alert.alert('I ran this', err?.message || 'Failed');
+            }
+          }}
+        >
+          <Ionicons name="checkmark-done-outline" size={18} color={colors.primary} />
+          <Text style={styles.smallBtnText}>I ran this</Text>
+        </Pressable>
+        <Pressable
+          style={styles.smallBtn}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            Alert.alert('Report this run?', 'You will stop seeing posts from this runner in your feed.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Report',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await neighbourhoodApi.reportRun(item.run_id);
+                    setFeedItems((rows) => rows.filter((r) => r.run_id !== item.run_id));
+                  } catch (err: any) {
+                    Alert.alert('Report', err?.message || 'Failed');
+                  }
+                },
+              },
+            ]);
+          }}
+        >
+          <Ionicons name="flag-outline" size={18} color={colors.textSecondary} />
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+
+  const settingsBlock = (
+    <View style={styles.settingsCard}>
+      <Text style={styles.settingsTitle}>Neighbourhood settings</Text>
+      <Text style={styles.settingsHint}>
+        Your @{me?.handle || '…'} is shown on shared albums. Profile privacy still applies when someone opens your
+        profile.
+      </Text>
+
+      <View style={styles.rowBetween}>
+        <Text style={styles.rowLabel}>Join the neighbourhood</Text>
+        <Switch
+          value={!!me?.opted_in}
+          onValueChange={async (v) => {
+            try {
+              if (v && !me?.handle) {
+                Alert.alert('Set a handle first', 'Profile → ZenRun handle, then come back.', [
+                  { text: 'OK', onPress: () => navigation.getParent()?.navigate('Home', { screen: 'Profile' }) },
+                ]);
+                return;
+              }
+              await neighbourhoodApi.patchMe({ opted_in: v });
+              await loadMe();
+            } catch (e: any) {
+              const msg = String(e?.message || '');
+              if (msg.includes('HANDLE_REQUIRED')) {
+                Alert.alert('Handle required', 'Set your handle on your profile first.');
+              } else {
+                Alert.alert('Error', msg || 'Could not update');
+              }
+            }
+          }}
+        />
+      </View>
+
+      <Text style={styles.label}>Search your city</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. Lisbon, Portland…"
+        placeholderTextColor={colors.textLight}
+        value={searchQ}
+        onChangeText={setSearchQ}
+        autoCapitalize="words"
+      />
+      {searching ? <ActivityIndicator size="small" color={PURPLE} style={{ marginVertical: 6 }} /> : null}
+      {searchHits.length > 0 && (
+        <View style={styles.hitList}>
+          {searchHits.map((h) => (
+            <Pressable key={`${h.lat}-${h.lng}-${h.label}`} style={styles.hitRow} onPress={() => void applySearchHit(h)}>
+              <Text style={styles.hitText} numberOfLines={2}>
+                {h.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      <Pressable style={styles.primaryBtn} onPress={() => void useLatestRunLocation()}>
+        <Ionicons name="navigate-outline" size={18} color="#fff" />
+        <Text style={styles.primaryBtnText}>Use my latest run location</Text>
+      </Pressable>
+
+      <Text style={styles.label}>Include nearby cities (radius from home)</Text>
+      <View style={styles.chipRow}>
+        {WIDEN_OPTIONS.map((km) => (
+          <Pressable
+            key={km}
+            style={[styles.chip, (me?.widen_radius_km ?? 0) === km && styles.chipOn]}
+            onPress={() => void patchWiden(km)}
+          >
+            <Text style={[styles.chipText, (me?.widen_radius_km ?? 0) === km && styles.chipTextOn]}>
+              {km === 0 ? 'Off' : `${km} km`}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -60,115 +426,173 @@ export function NeighbourhoodScreen({ navigation }: Props) {
         <View style={{ width: 26 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.heroIcon}>
-          <Ionicons name="leaf-outline" size={36} color="#7E57C2" />
+      {loading ? (
+        <ActivityIndicator color={PURPLE} style={{ marginTop: spacing.xl }} />
+      ) : (
+        <View style={{ flex: 1 }}>
+          {!ready ? (
+            <ScrollView
+              contentContainerStyle={styles.scroll}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
+              <Text style={styles.lede}>
+                Discover runs and albums from zenrunners in your city — pseudonymous, no leaderboards on people.
+              </Text>
+              {settingsBlock}
+            </ScrollView>
+          ) : (
+            <>
+              <View style={styles.segment}>
+                <Pressable style={[styles.segBtn, tab === 'feed' && styles.segBtnOn]} onPress={() => setTab('feed')}>
+                  <Text style={[styles.segText, tab === 'feed' && styles.segTextOn]}>Feed</Text>
+                </Pressable>
+                <Pressable style={[styles.segBtn, tab === 'saved' && styles.segBtnOn]} onPress={() => setTab('saved')}>
+                  <Text style={[styles.segText, tab === 'saved' && styles.segTextOn]}>Saved</Text>
+                </Pressable>
+              </View>
+
+              {tab === 'feed' && (me?.widen_radius_km ?? 0) > 0 && (
+                <View style={styles.widenRow}>
+                  <Text style={styles.widenLabel}>Include nearby ({me?.widen_radius_km} km)</Text>
+                  <Switch value={includeWiden} onValueChange={setIncludeWiden} />
+                </View>
+              )}
+              {tab === 'feed' && (
+                <Text style={styles.showingChip}>
+                  Showing {me?.home_city || 'your city'}
+                  {includeWiden && (me?.widen_radius_km ?? 0) > 0 ? ' + nearby' : ''}
+                </Text>
+              )}
+
+              <FlatList
+                data={feedItems}
+                keyExtractor={(it) => String(it.run_id)}
+                renderItem={renderFeedCard}
+                contentContainerStyle={styles.listContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                ListHeaderComponent={<View style={{ marginBottom: spacing.md }}>{settingsBlock}</View>}
+                ListEmptyComponent={
+                  feedLoading ? (
+                    <ActivityIndicator color={PURPLE} style={{ marginTop: spacing.lg }} />
+                  ) : (
+                    <Text style={styles.empty}>Nothing here yet. Check back later or widen nearby cities.</Text>
+                  )
+                }
+                onEndReached={() => {
+                  if (tab !== 'feed' || !nextCursorRef.current || feedLoading) return;
+                  void fetchFeedPage(false);
+                }}
+                onEndReachedThreshold={0.3}
+              />
+            </>
+          )}
         </View>
+      )}
 
-        <Text style={styles.title}>Coming soon.</Text>
-        <Text style={styles.lede}>
-          A way to discover the runs of zenrunners near you, share what
-          inspired you, and find new paths to walk and run — without the
-          performance anxiety of a leaderboard.
-        </Text>
-
-        <View style={styles.principlesCard}>
-          <Principle
-            icon="person-outline"
-            title="Pseudonymous by default"
-            body="Pick a handle for your neighbourhood. Real names only inside circles you've chosen."
-          />
-          <Divider />
-          <Principle
-            icon="bookmark-outline"
-            title="Saves, not likes"
-            body="If a path moves you, save it. We don't count likes."
-          />
-          <Divider />
-          <Principle
-            icon="checkmark-done-outline"
-            title="“I ran this”"
-            body="A small tap to mark a saved place once you've actually run there. Discovery, then doing."
-          />
-          <Divider />
-          <Principle
-            icon="location-outline"
-            title="Rank places, never people"
-            body="The neighbourhood ranks parks, paths, and viewpoints — never runners."
-          />
-        </View>
-
-        <View style={styles.holdingCard}>
-          <Text style={styles.holdingLabel}>Reserve your handle</Text>
-          <Text style={styles.holdingHint}>
-            We'll save it for when the neighbourhood opens.
-          </Text>
-          <View style={styles.inputRow}>
-            <Text style={styles.atSign}>@</Text>
-            <TextInput
-              value={pseudonym}
-              onChangeText={setPseudonym}
-              placeholder="zenrunner"
-              placeholderTextColor={colors.textLight}
-              autoCapitalize="none"
-              maxLength={20}
-              style={styles.input}
-              editable={!interestedPressed}
-            />
+      <Modal visible={detailId != null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetailId(null)}>
+        <SafeAreaView style={styles.detailContainer} edges={['top']}>
+          <View style={styles.detailHeader}>
+            <Pressable onPress={() => setDetailId(null)} hitSlop={10}>
+              <Text style={styles.detailClose}>Close</Text>
+            </Pressable>
+            <Text style={styles.detailTitle}>Album</Text>
+            <View style={{ width: 48 }} />
           </View>
-          <Pressable
-            onPress={onInterested}
-            disabled={interestedPressed}
-            style={({ pressed }) => [
-              styles.interestedBtn,
-              interestedPressed && styles.interestedBtnDone,
-              { transform: [{ scale: pressed && !interestedPressed ? 0.97 : 1 }] },
-            ]}
-          >
-            {interestedPressed ? (
-              <>
-                <Ionicons name="checkmark" size={16} color="#fff" />
-                <Text style={styles.interestedBtnText}>Saved</Text>
-              </>
-            ) : (
-              <Text style={styles.interestedBtnText}>I want in</Text>
-            )}
-          </Pressable>
-        </View>
-
-        <Text style={styles.brandStrap}>
-          Where you ran. What you saw. Never who's faster.
-        </Text>
-      </ScrollView>
+          {detailLoading || !detail ? (
+            <ActivityIndicator color={PURPLE} style={{ marginTop: spacing.xl }} />
+          ) : (
+            <ScrollView contentContainerStyle={styles.detailScroll}>
+              <Text style={styles.handle}>@{detail.handle}</Text>
+              <Text style={styles.meta}>
+                {detail.distance_km?.toFixed(1)} km · {detail.saves_count} saves · {detail.i_ran_this_count} ran this
+              </Text>
+              {detail.route_polyline ? (
+                <View style={styles.detailMap}>
+                  {(() => {
+                    const pts = decodePolyline(detail.route_polyline);
+                    const center =
+                      pts.length > 0
+                        ? {
+                            lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length,
+                            lng: pts.reduce((s, p) => s + p.lng, 0) / pts.length,
+                          }
+                        : undefined;
+                    return (
+                      <WalkMap
+                        style={styles.map}
+                        route={pts}
+                        centerOn={center}
+                        zoom={13}
+                        showUserLocation={false}
+                        routeColor="#F97316"
+                        interactive
+                      />
+                    );
+                  })()}
+                </View>
+              ) : null}
+              {detail.photos?.map((p) => (
+                <View key={p.id} style={styles.photoBlock}>
+                  {p.photo_data ? (
+                    <Image
+                      source={{ uri: p.photo_data.startsWith('data:') ? p.photo_data : `data:image/jpeg;base64,${p.photo_data}` }}
+                      style={styles.detailPhoto}
+                    />
+                  ) : null}
+                  {p.caption ? <Text style={styles.caption}>{p.caption}</Text> : null}
+                </View>
+              ))}
+              <View style={styles.cardActions}>
+                <Pressable
+                  style={styles.smallBtn}
+                  onPress={async () => {
+                    if (!detail) return;
+                    try {
+                      if (detail.viewer_has_saved) await neighbourhoodApi.saveRemove(detail.run_id);
+                      else await neighbourhoodApi.saveAdd(detail.run_id);
+                      setDetail({
+                        ...detail,
+                        viewer_has_saved: !detail.viewer_has_saved,
+                        saves_count: detail.viewer_has_saved ? detail.saves_count - 1 : detail.saves_count + 1,
+                      });
+                    } catch (e: any) {
+                      Alert.alert('Save', e?.message);
+                    }
+                  }}
+                >
+                  <Ionicons name={detail.viewer_has_saved ? 'bookmark' : 'bookmark-outline'} size={20} color={PURPLE} />
+                  <Text style={styles.smallBtnText}>{detail.viewer_has_saved ? 'Saved' : 'Save'}</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.smallBtn}
+                  onPress={async () => {
+                    if (!detail) return;
+                    try {
+                      if (detail.viewer_has_run_this) await neighbourhoodApi.iranRemove(detail.run_id);
+                      else await neighbourhoodApi.iranAdd(detail.run_id);
+                      setDetail({
+                        ...detail,
+                        viewer_has_run_this: !detail.viewer_has_run_this,
+                        i_ran_this_count: detail.viewer_has_run_this
+                          ? detail.i_ran_this_count - 1
+                          : detail.i_ran_this_count + 1,
+                      });
+                    } catch (e: any) {
+                      Alert.alert('I ran this', e?.message);
+                    }
+                  }}
+                >
+                  <Ionicons name="checkmark-done-outline" size={20} color={colors.primary} />
+                  <Text style={styles.smallBtnText}>I ran this</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
-
-function Principle({
-  icon,
-  title,
-  body,
-}: {
-  icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
-  title: string;
-  body: string;
-}) {
-  return (
-    <View style={styles.principleRow}>
-      <Ionicons name={icon} size={18} color="#7E57C2" />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.principleTitle}>{title}</Text>
-        <Text style={styles.principleBody}>{body}</Text>
-      </View>
-    </View>
-  );
-}
-
-function Divider() {
-  return <View style={styles.divider} />;
-}
-
-const PURPLE = '#7E57C2';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -187,121 +611,144 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  heroIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: PURPLE + '18',
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.md,
+  lede: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
     marginBottom: spacing.lg,
   },
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-    textAlign: 'center',
-  },
-  lede: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-    marginHorizontal: spacing.md,
-    lineHeight: 22,
-  },
-  principlesCard: {
+  settingsCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
-    marginTop: spacing.xl,
     ...shadows.small,
   },
-  principleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  principleTitle: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-  },
-  principleBody: {
-    fontSize: 12,
+  settingsTitle: { fontSize: typography.sizes.md, fontWeight: typography.weights.bold, color: colors.text },
+  settingsHint: {
+    fontSize: 11,
     color: colors.textSecondary,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginLeft: 30,
-  },
-  holdingCard: {
-    marginTop: spacing.xl,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    backgroundColor: PURPLE + '0E',
-    borderWidth: 1,
-    borderColor: PURPLE + '22',
-  },
-  holdingLabel: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
-  },
-  holdingHint: {
-    fontSize: typography.sizes.xs,
-    color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
     marginBottom: spacing.md,
+    lineHeight: 16,
   },
-  inputRow: {
+  rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    height: 44,
-    borderWidth: 1,
-    borderColor: colors.border,
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
   },
-  atSign: {
-    fontSize: typography.sizes.md,
-    color: colors.textSecondary,
+  rowLabel: { fontSize: typography.sizes.sm, color: colors.text, flex: 1, marginRight: spacing.sm },
+  label: {
+    fontSize: typography.sizes.xs,
     fontWeight: typography.weights.semibold,
-    marginRight: 6,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    marginBottom: 4,
   },
   input: {
-    flex: 1,
-    fontSize: typography.sizes.md,
-    color: colors.text,
-  },
-  interestedBtn: {
-    marginTop: spacing.md,
-    backgroundColor: PURPLE,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radius.md,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    backgroundColor: colors.background,
+  },
+  hitList: { marginTop: 4, borderRadius: radius.md, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
+  hitRow: { padding: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  hitText: { fontSize: typography.sizes.sm, color: colors.text },
+  primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
+    backgroundColor: PURPLE,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    marginTop: spacing.md,
   },
-  interestedBtnDone: { backgroundColor: colors.success },
-  interestedBtnText: {
-    color: '#fff',
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
+  primaryBtnText: { color: '#fff', fontWeight: typography.weights.bold, fontSize: typography.sizes.sm },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  brandStrap: {
-    marginTop: spacing.xl,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    fontSize: typography.sizes.sm,
+  chipOn: { backgroundColor: PURPLE + '22', borderColor: PURPLE },
+  chipText: { fontSize: 12, color: colors.textSecondary },
+  chipTextOn: { color: PURPLE, fontWeight: typography.weights.bold },
+  segment: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: 4,
   },
+  segBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: radius.sm },
+  segBtnOn: { backgroundColor: colors.background },
+  segText: { fontSize: typography.sizes.sm, color: colors.textSecondary },
+  segTextOn: { fontWeight: typography.weights.bold, color: colors.text },
+  widenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  widenLabel: { fontSize: typography.sizes.xs, color: colors.textSecondary, flex: 1 },
+  showingChip: {
+    marginHorizontal: spacing.lg,
+    marginTop: 4,
+    fontSize: 11,
+    color: PURPLE,
+    fontWeight: typography.weights.semibold,
+  },
+  listContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    ...shadows.small,
+  },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  thumb: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  thumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  handle: { fontSize: typography.sizes.md, fontWeight: typography.weights.bold, color: colors.text },
+  meta: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    gap: spacing.md,
+  },
+  smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  smallBtnText: { fontSize: 12, color: colors.textSecondary },
+  empty: { textAlign: 'center', color: colors.textSecondary, marginTop: spacing.xl, paddingHorizontal: spacing.lg },
+  detailContainer: { flex: 1, backgroundColor: colors.background },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  detailClose: { fontSize: typography.sizes.md, color: colors.primary, fontWeight: typography.weights.semibold },
+  detailTitle: { fontSize: typography.sizes.md, fontWeight: typography.weights.bold, color: colors.text },
+  detailScroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  detailMap: { height: 200, marginVertical: spacing.md, borderRadius: radius.lg, overflow: 'hidden' },
+  map: { flex: 1 },
+  detailPhoto: { width: '100%', height: 220, borderRadius: radius.md, marginBottom: spacing.sm, resizeMode: 'cover' },
+  photoBlock: { marginBottom: spacing.lg },
+  caption: { fontSize: typography.sizes.sm, color: colors.textSecondary },
 });
