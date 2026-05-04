@@ -82,13 +82,6 @@ export function CommunityHomeScreen({ navigation }: Props) {
           <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
         </Pressable>
 
-        <Pressable
-          onPress={() => navigation.navigate('Neighbourhood')}
-          style={styles.editNbLink}
-        >
-          <Text style={styles.editNbLinkText}>Edit neighbourhood settings</Text>
-        </Pressable>
-
         {/* Circles — real */}
         <Pressable
           onPress={() => navigation.navigate('CirclesList')}
@@ -183,17 +176,6 @@ const styles = StyleSheet.create({
   countBadge: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
-    fontWeight: typography.weights.semibold,
-  },
-  editNbLink: {
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-  },
-  editNbLinkText: {
-    fontSize: typography.sizes.sm,
-    color: '#7E57C2',
     fontWeight: typography.weights.semibold,
   },
   strap: {

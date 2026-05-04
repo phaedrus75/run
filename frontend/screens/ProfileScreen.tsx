@@ -369,7 +369,14 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           </Text>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => navigation.getParent()?.navigate('Community', { screen: 'Neighbourhood' })}
+            onPress={() =>
+              navigation
+                .getParent()
+                ?.navigate('Community', {
+                  screen: 'Neighbourhood',
+                  params: { openSettings: true },
+                })
+            }
           >
             <Text style={styles.primaryButtonText}>Open neighbourhood settings</Text>
           </TouchableOpacity>

@@ -35,6 +35,11 @@ function goHomeScreen(screen: string, params?: Record<string, unknown>) {
   navigationRef.navigate('Home', { screen, params });
 }
 
+function goCommunityScreen(screen: string, params?: Record<string, unknown>) {
+  if (!navigationRef.isReady()) return;
+  navigationRef.navigate('Community', { screen, params });
+}
+
 export function AppDrawer({ visible, onClose }: Props) {
   const { user, logout, deleteAccount } = useAuth();
   const slide = useRef(new Animated.Value(-DRAWER_W)).current;
@@ -106,6 +111,13 @@ export function AppDrawer({ visible, onClose }: Props) {
             {row('person-outline', 'Profile', () => goHomeScreen('Profile'), 'Privacy, level, handle')}
             {row('flag-outline', 'Goals', () => goHomeScreen('Profile', { scrollTo: 'goals' }))}
             {row('ribbon-outline', 'Honors', () => goHomeScreen('Honors'), 'PRs & achievements')}
+            {row(
+              'leaf-outline',
+              'Neighbourhood settings',
+              () => goCommunityScreen('Neighbourhood', { openSettings: true }),
+              'City, radius, opt-in',
+              '#7E57C2',
+            )}
 
             <Text style={styles.section}>Runs & walks</Text>
             {row('bar-chart-outline', 'Run statistics', () => goHomeScreen('RunStats'), 'Charts, pace, rhythm', colors.primary)}

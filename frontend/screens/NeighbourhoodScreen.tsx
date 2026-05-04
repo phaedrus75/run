@@ -42,8 +42,23 @@ function thumbUri(data: string | null | undefined): string | null {
   return `data:image/jpeg;base64,${data}`;
 }
 
-export function NeighbourhoodScreen({ navigation }: { navigation: any }) {
+interface NeighbourhoodRouteParams {
+  openSettings?: boolean;
+}
+
+export function NeighbourhoodScreen({
+  navigation,
+  route,
+}: {
+  navigation: any;
+  route?: { params?: NeighbourhoodRouteParams };
+}) {
   const [me, setMe] = useState<NeighbourhoodMe | null>(null);
+  // Settings used to live as a card at the top of the feed. Now it lives
+  // in a sheet you open from the header gear or from the drawer entry.
+  // For new users (not yet "ready"), it stays inline — they need to
+  // complete setup before there's anything else to show.
+  const [settingsOpen, setSettingsOpen] = useState(!!route?.params?.openSettings);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<'feed' | 'saved'>('feed');
@@ -71,6 +86,16 @@ export function NeighbourhoodScreen({ navigation }: { navigation: any }) {
     !!me?.handle &&
     me.home_lat != null &&
     me.home_lng != null;
+
+  // Re-open settings if the route param changes (drawer → already-mounted
+  // screen). We also clear the param once we've consumed it so a back +
+  // re-enter doesn't immediately re-open the sheet.
+  useEffect(() => {
+    if (route?.params?.openSettings) {
+      setSettingsOpen(true);
+      navigation.setParams?.({ openSettings: undefined });
+    }
+  }, [route?.params?.openSettings, navigation]);
 
   const loadMe = useCallback(async () => {
     try {
@@ -423,7 +448,13 @@ export function NeighbourhoodScreen({ navigation }: { navigation: any }) {
           <Ionicons name="chevron-back" size={26} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>The Neighbourhood</Text>
-        <View style={{ width: 26 }} />
+        {ready ? (
+          <Pressable onPress={() => setSettingsOpen(true)} hitSlop={10}>
+            <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 26 }} />
+        )}
       </View>
 
       {loading ? (
@@ -470,7 +501,6 @@ export function NeighbourhoodScreen({ navigation }: { navigation: any }) {
                 renderItem={renderFeedCard}
                 contentContainerStyle={styles.listContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                ListHeaderComponent={<View style={{ marginBottom: spacing.md }}>{settingsBlock}</View>}
                 ListEmptyComponent={
                   feedLoading ? (
                     <ActivityIndicator color={PURPLE} style={{ marginTop: spacing.lg }} />
@@ -488,6 +518,26 @@ export function NeighbourhoodScreen({ navigation }: { navigation: any }) {
           )}
         </View>
       )}
+
+      <Modal
+        visible={settingsOpen && ready}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSettingsOpen(false)}
+      >
+        <SafeAreaView style={styles.detailContainer} edges={['top']}>
+          <View style={styles.detailHeader}>
+            <Pressable onPress={() => setSettingsOpen(false)} hitSlop={10}>
+              <Text style={styles.detailClose}>Close</Text>
+            </Pressable>
+            <Text style={styles.detailTitle}>Settings</Text>
+            <View style={{ width: 48 }} />
+          </View>
+          <ScrollView contentContainerStyle={styles.detailScroll}>
+            {settingsBlock}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       <Modal visible={detailId != null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetailId(null)}>
         <SafeAreaView style={styles.detailContainer} edges={['top']}>
