@@ -60,6 +60,7 @@ from models import (
     NeighbourhoodIRanThis,
     NeighbourhoodBlockedHandle,
     NeighbourhoodReport,
+    RunReaction,
 )
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
@@ -2438,6 +2439,42 @@ def post_me_neighbourhood_suggest(
     }
 
 
+# Standardised public reaction emojis on a Neighbourhood run. Love is
+# kept as the existing NeighbourhoodIRanThis "I want to run this" signal;
+# Like and Zen go through the generic RunReaction table.
+NBH_LIKE_EMOJI = "👏"
+NBH_LOVE_EMOJI = "💚"
+NBH_ZEN_EMOJI = "🌿"
+
+
+def _run_reaction_state(db: Session, run_id: int, viewer_id: int) -> dict:
+    """Return per-emoji {count, viewer_reacted} for the standardised set."""
+    iran_count = db.query(func.count(NeighbourhoodIRanThis.id)).filter(
+        NeighbourhoodIRanThis.run_id == run_id
+    ).scalar() or 0
+    viewer_loved = db.query(NeighbourhoodIRanThis).filter(
+        NeighbourhoodIRanThis.run_id == run_id,
+        NeighbourhoodIRanThis.user_id == viewer_id,
+    ).first()
+
+    rr_rows = db.query(RunReaction).filter(RunReaction.run_id == run_id).all()
+    counts: dict[str, int] = {}
+    viewer_set: set[str] = set()
+    for r in rr_rows:
+        counts[r.emoji] = counts.get(r.emoji, 0) + 1
+        if r.user_id == viewer_id:
+            viewer_set.add(r.emoji)
+
+    return {
+        "like_count": int(counts.get(NBH_LIKE_EMOJI, 0)),
+        "love_count": int(iran_count),
+        "zen_count": int(counts.get(NBH_ZEN_EMOJI, 0)),
+        "viewer_has_liked": NBH_LIKE_EMOJI in viewer_set,
+        "viewer_has_loved": viewer_loved is not None,
+        "viewer_has_zenned": NBH_ZEN_EMOJI in viewer_set,
+    }
+
+
 def _neighbourhood_feed_item(
     db: Session,
     run: Run,
@@ -2446,13 +2483,10 @@ def _neighbourhood_feed_item(
     thumb_b64: Optional[str],
 ):
     saves = db.query(func.count(NeighbourhoodSave.id)).filter(NeighbourhoodSave.run_id == run.id).scalar() or 0
-    iran = db.query(func.count(NeighbourhoodIRanThis.id)).filter(NeighbourhoodIRanThis.run_id == run.id).scalar() or 0
     vs = db.query(NeighbourhoodSave).filter(
         NeighbourhoodSave.run_id == run.id, NeighbourhoodSave.user_id == viewer_id
     ).first()
-    vi = db.query(NeighbourhoodIRanThis).filter(
-        NeighbourhoodIRanThis.run_id == run.id, NeighbourhoodIRanThis.user_id == viewer_id
-    ).first()
+    rx = _run_reaction_state(db, run.id, viewer_id)
     return {
         "run_id": run.id,
         "handle": author_handle,
@@ -2462,9 +2496,12 @@ def _neighbourhood_feed_item(
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "photo_thumb_data": thumb_b64,
         "saves_count": int(saves),
-        "i_ran_this_count": int(iran),
+        # Legacy field name preserved for any older client; new clients
+        # read love_count from the reaction state below.
+        "i_ran_this_count": rx["love_count"],
         "viewer_has_saved": vs is not None,
-        "viewer_has_run_this": vi is not None,
+        "viewer_has_run_this": rx["viewer_has_loved"],
+        **rx,
     }
 
 
@@ -2720,13 +2757,10 @@ def neighbourhood_run_detail(
         for p in photos
     ]
     saves = db.query(func.count(NeighbourhoodSave.id)).filter(NeighbourhoodSave.run_id == run.id).scalar() or 0
-    iran = db.query(func.count(NeighbourhoodIRanThis.id)).filter(NeighbourhoodIRanThis.run_id == run.id).scalar() or 0
     vs = db.query(NeighbourhoodSave).filter(
         NeighbourhoodSave.run_id == run.id, NeighbourhoodSave.user_id == current_user.id
     ).first()
-    vi = db.query(NeighbourhoodIRanThis).filter(
-        NeighbourhoodIRanThis.run_id == run.id, NeighbourhoodIRanThis.user_id == current_user.id
-    ).first()
+    rx = _run_reaction_state(db, run.id, current_user.id)
 
     return {
         "run_id": run.id,
@@ -2739,9 +2773,10 @@ def neighbourhood_run_detail(
         "notes": run.notes,
         "photos": photo_payload,
         "saves_count": int(saves),
-        "i_ran_this_count": int(iran),
+        "i_ran_this_count": rx["love_count"],
         "viewer_has_saved": vs is not None,
-        "viewer_has_run_this": vi is not None,
+        "viewer_has_run_this": rx["viewer_has_loved"],
+        **rx,
     }
 
 
@@ -2861,6 +2896,62 @@ def neighbourhood_iran_remove(
     ).delete()
     db.commit()
     return {"status": "removed"}
+
+
+@app.post("/neighbourhood/runs/{run_id}/react")
+@app.post("/neighborhood/runs/{run_id}/react", include_in_schema=False)
+def neighbourhood_toggle_reaction(
+    run_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Toggle one of the standardised public reactions on a Neighbourhood run.
+
+    Love (💚) is dispatched to NeighbourhoodIRanThis (which doubles as the
+    "I want to run this" signal). Like (👏) and Zen (🌿) go to the
+    generic RunReaction table. Returns the post-toggle reaction state so
+    the client can update without a refetch."""
+    _get_neighbourhood_run_or_404(db, run_id, current_user)
+
+    emoji = body.get("emoji", "")
+    if emoji not in ALLOWED_REACTION_EMOJIS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Emoji not allowed. Use one of: {ALLOWED_REACTION_EMOJIS}",
+        )
+
+    if emoji == NBH_LOVE_EMOJI:
+        existing = (
+            db.query(NeighbourhoodIRanThis)
+            .filter(
+                NeighbourhoodIRanThis.run_id == run_id,
+                NeighbourhoodIRanThis.user_id == current_user.id,
+            )
+            .first()
+        )
+        if existing:
+            db.delete(existing)
+        else:
+            db.add(NeighbourhoodIRanThis(run_id=run_id, user_id=current_user.id))
+        db.commit()
+    else:
+        existing_rx = (
+            db.query(RunReaction)
+            .filter(
+                RunReaction.run_id == run_id,
+                RunReaction.user_id == current_user.id,
+                RunReaction.emoji == emoji,
+            )
+            .first()
+        )
+        if existing_rx:
+            db.delete(existing_rx)
+        else:
+            db.add(RunReaction(run_id=run_id, user_id=current_user.id, emoji=emoji))
+        db.commit()
+
+    return _run_reaction_state(db, run_id, current_user.id)
 
 
 @app.post("/neighbourhood/runs/{run_id}/report")
@@ -3360,7 +3451,12 @@ def get_all_reflections(
 # CIRCLE FEED, PHOTOS & REACTIONS
 # ==========================================
 
-ALLOWED_REACTION_EMOJIS = ["🌿", "👋", "🌊", "☀️", "🏔️"]
+# Standardised reaction set used across Circle and Neighbourhood feeds.
+# Public reactions only (Like / Love / Zen). The Save bookmark is a
+# separate personal action stored in NeighbourhoodSave (now used for
+# both surfaces). Frontend mirrors this list in
+# `frontend/constants/reactions.ts`. If you change one, change the other.
+ALLOWED_REACTION_EMOJIS = ["👏", "💚", "🌿"]
 
 
 def _verify_circle_membership(db: Session, circle_id: int, user_id: int):
@@ -3374,13 +3470,17 @@ def _verify_circle_membership(db: Session, circle_id: int, user_id: int):
 
 
 def _get_reactions_for_items(db: Session, circle_id: int, target_type: str, target_ids: list, current_user_id: int):
-    """Build a dict of target_id -> [{ emoji, count, reacted }]"""
+    """Build a dict of target_id -> [{ emoji, count, reacted }] for the
+    standardised reaction set. Legacy emojis (the old 🌊 ☀️ 🏔️ 👋 set)
+    still exist in the table but are filtered out so they never reach the
+    UI; the new bar only ever shows Like / Love / Zen."""
     if not target_ids:
         return {}
     reactions = db.query(CircleFeedReaction).filter(
         CircleFeedReaction.circle_id == circle_id,
         CircleFeedReaction.target_type == target_type,
         CircleFeedReaction.target_id.in_(target_ids),
+        CircleFeedReaction.emoji.in_(ALLOWED_REACTION_EMOJIS),
     ).all()
     from collections import defaultdict
     grouped = defaultdict(lambda: defaultdict(lambda: {"count": 0, "reacted": False}))
@@ -3423,6 +3523,21 @@ def get_circle_feed(
     run_reactions = _get_reactions_for_items(db, circle_id, "run", [r.id for r in runs], current_user.id)
     checkin_reactions = _get_reactions_for_items(db, circle_id, "checkin", [c.id for c in checkins], current_user.id)
 
+    # Saves are stored in NeighbourhoodSave (one table for "saved runs"
+    # regardless of where the user found them — Circle or Neighbourhood).
+    run_ids = [r.id for r in runs]
+    saved_run_ids: set[int] = set()
+    if run_ids:
+        saved_run_ids = {
+            row.run_id
+            for row in db.query(NeighbourhoodSave)
+            .filter(
+                NeighbourhoodSave.user_id == current_user.id,
+                NeighbourhoodSave.run_id.in_(run_ids),
+            )
+            .all()
+        }
+
     user_cache = {}
     def get_user(uid):
         if uid not in user_cache:
@@ -3432,10 +3547,34 @@ def get_circle_feed(
 
     feed_items = []
 
+    # Cap thumbnails per feed item; the user can tap into the run for the
+    # full set. 4 keeps the payload light while showing enough to entice.
+    THUMBS_PER_RUN = 4
+
+    dirty_thumbs = False
     for r in runs:
         u = get_user(r.user_id)
-        photos = db.query(RunPhoto).filter(RunPhoto.run_id == r.id).all()
-        photo_list = [{"id": p.id, "photo_data": p.photo_data[:100] + "..." if len(p.photo_data) > 100 else p.photo_data, "caption": p.caption, "distance_marker_km": p.distance_marker_km} for p in photos]
+        photos = (
+            db.query(RunPhoto)
+            .filter(RunPhoto.run_id == r.id)
+            .order_by(RunPhoto.distance_marker_km.asc())
+            .all()
+        )
+        photo_thumbs: list[dict] = []
+        for p in photos[:THUMBS_PER_RUN]:
+            thumb = getattr(p, "thumb_data", None)
+            if thumb is None and p.photo_data:
+                thumb = _make_thumbnail_b64(p.photo_data)
+                if thumb:
+                    p.thumb_data = thumb
+                    dirty_thumbs = True
+            if thumb:
+                photo_thumbs.append({
+                    "id": p.id,
+                    "thumb_data": thumb,
+                    "caption": p.caption,
+                    "distance_marker_km": p.distance_marker_km,
+                })
         has_photos = len(photos) > 0
         pace_sec = r.duration_seconds / r.distance_km if r.distance_km > 0 else 0
         pace_str = f"{int(pace_sec // 60)}:{int(pace_sec % 60):02d}"
@@ -3455,10 +3594,18 @@ def get_circle_feed(
                 "mood": r.mood,
                 "has_photos": has_photos,
                 "photo_count": len(photos),
+                "photos": photo_thumbs,
             },
             "reactions": run_reactions.get(r.id, []),
+            "viewer_has_saved": r.id in saved_run_ids,
             "created_at": r.completed_at.isoformat() if r.completed_at else None,
         })
+
+    if dirty_thumbs:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
 
     for c in checkins:
         u = get_user(c.user_id)
@@ -3579,6 +3726,51 @@ def get_circle_photo_full(
         "caption": p.caption,
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
+
+
+@app.post("/circles/{circle_id}/runs/{run_id}/save")
+def circle_save_add(
+    circle_id: int,
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Bookmark a run seen in the circle feed. Stored in the same table as
+    Neighbourhood saves so a single 'saved runs' surface can list either."""
+    _verify_circle_membership(db, circle_id, current_user.id)
+    # Only allow saving runs by circle members (anti-leak guard).
+    member_ids = {
+        m.user_id
+        for m in db.query(CircleMembership).filter(CircleMembership.circle_id == circle_id).all()
+    }
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.user_id not in member_ids:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    existing = (
+        db.query(NeighbourhoodSave)
+        .filter(NeighbourhoodSave.run_id == run_id, NeighbourhoodSave.user_id == current_user.id)
+        .first()
+    )
+    if not existing:
+        db.add(NeighbourhoodSave(run_id=run_id, user_id=current_user.id))
+        db.commit()
+    return {"status": "saved"}
+
+
+@app.delete("/circles/{circle_id}/runs/{run_id}/save")
+def circle_save_remove(
+    circle_id: int,
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    _verify_circle_membership(db, circle_id, current_user.id)
+    db.query(NeighbourhoodSave).filter(
+        NeighbourhoodSave.run_id == run_id, NeighbourhoodSave.user_id == current_user.id
+    ).delete()
+    db.commit()
+    return {"status": "removed"}
 
 
 @app.post("/circles/{circle_id}/feed/{item_type}/{item_id}/react")

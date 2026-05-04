@@ -19,7 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { getToken } from '../services/auth';
-import { CircleFeedItem, type FeedItem } from '../components/CircleFeedItem';
+import { CircleFeedItem, type FeedItem, type FeedItemPhoto } from '../components/CircleFeedItem';
 
 import { API_BASE_URL } from '../services/config';
 const CHECKIN_EMOJIS = ['👋', '🏃', '🌱', '😊', '🍃', '✌️', '🌿', '☀️'];
@@ -204,10 +204,57 @@ export function CircleSpaceScreen({ route, navigation }: any) {
         body: JSON.stringify({ emoji }),
       });
       const feedRes = await authFetch(`${API_BASE_URL}/circles/${circleId}/feed`);
-      if (feedRes.ok) setFeed(await feedRes.json());
+      if (feedRes.ok) {
+        const data = await feedRes.json();
+        setFeed(data);
+        writeCache({ feed: data });
+      }
     } catch (e) {
       console.error('Reaction failed:', e);
     }
+  };
+
+  const handleToggleSave = async (runId: number, currentlySaved: boolean) => {
+    // Optimistic update so the bookmark feels instant.
+    setFeed(prev =>
+      prev.map(it =>
+        it.type === 'run' && it.id === runId
+          ? { ...it, viewer_has_saved: !currentlySaved }
+          : it
+      )
+    );
+    try {
+      await authFetch(`${API_BASE_URL}/circles/${circleId}/runs/${runId}/save`, {
+        method: currentlySaved ? 'DELETE' : 'POST',
+      });
+    } catch (e) {
+      console.error('Save toggle failed:', e);
+      // Roll back on failure.
+      setFeed(prev =>
+        prev.map(it =>
+          it.type === 'run' && it.id === runId
+            ? { ...it, viewer_has_saved: currentlySaved }
+            : it
+        )
+      );
+    }
+  };
+
+  // Tapping a photo thumb in the feed opens the same lightbox the Photos
+  // tab uses. We reuse the CirclePhoto shape via a synthetic record built
+  // from the feed item's photo info; the lightbox will fetch full-res.
+  const handleFeedPhotoPress = (p: FeedItemPhoto) => {
+    setSelectedPhoto({
+      id: p.id,
+      thumb_data: p.thumb_data,
+      is_thumb: true,
+      caption: p.caption,
+      distance_marker_km: p.distance_marker_km,
+      user_name: '',
+      run_distance: '',
+      run_date: null,
+      created_at: null,
+    });
   };
 
   const handleCheckin = async () => {
@@ -299,7 +346,13 @@ export function CircleSpaceScreen({ route, navigation }: any) {
         </View>
       ) : (
         feed.map(item => (
-          <CircleFeedItem key={`${item.type}-${item.id}`} item={item} onReact={handleReact} />
+          <CircleFeedItem
+            key={`${item.type}-${item.id}`}
+            item={item}
+            onReact={handleReact}
+            onToggleSave={handleToggleSave}
+            onPhotoPress={handleFeedPhotoPress}
+          />
         ))
       )}
     </View>

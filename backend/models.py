@@ -534,6 +534,26 @@ class NeighbourhoodReport(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class RunReaction(Base):
+    """Public, count-displayed reactions on a run from the Neighbourhood
+    feed. Like / Zen are stored here; Love is intentionally kept in
+    NeighbourhoodIRanThis (it doubles as the "I want to run this" signal
+    used by the existing share + map experience). One row per
+    (user, run, emoji)."""
+
+    __tablename__ = "run_reactions"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    run_id = Column(Integer, nullable=False, index=True)
+    emoji = Column(String, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "run_id", "emoji", name="uq_run_reaction"),
+    )
+
+
 class UserAchievement(Base):
     """Records the moment a user first transitioned a badge from locked
     to unlocked. Used to show genuinely "recent" milestones on Home and

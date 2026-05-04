@@ -32,6 +32,30 @@ import {
 } from '../services/api';
 import { WalkMap, type MapMarker } from '../components/WalkMap';
 import { decodePolyline, pointAlongRouteAtKm } from '../services/walkLocationTracker';
+import { ReactionBar, type ReactionState } from '../components/ReactionBar';
+import { REACTIONS, type ReactionId } from '../constants/reactions';
+
+// Map a NeighbourhoodReactionState (counts + viewer flags from backend)
+// into the ReactionState[] shape <ReactionBar /> consumes.
+function reactionStateFromBackend(s: {
+  like_count: number;
+  love_count: number;
+  zen_count: number;
+  viewer_has_liked: boolean;
+  viewer_has_loved: boolean;
+  viewer_has_zenned: boolean;
+}): ReactionState[] {
+  const byId: Record<ReactionId, { count: number; reacted: boolean }> = {
+    like: { count: s.like_count, reacted: s.viewer_has_liked },
+    love: { count: s.love_count, reacted: s.viewer_has_loved },
+    zen: { count: s.zen_count, reacted: s.viewer_has_zenned },
+  };
+  return REACTIONS.map(r => ({
+    emoji: r.emoji,
+    count: byId[r.id].count,
+    reacted: byId[r.id].reacted,
+  }));
+}
 
 const PURPLE = '#7E57C2';
 const WIDEN_OPTIONS = [0, 25, 50, 100] as const;
@@ -275,6 +299,61 @@ export function NeighbourhoodScreen({
     }
   };
 
+  // Optimistic toggle on a feed-card reaction. Backend returns the
+  // post-toggle state so we patch only the affected row.
+  const handleFeedReact = async (item: NeighbourhoodFeedItem, emoji: string) => {
+    try {
+      const next = await neighbourhoodApi.toggleReaction(item.run_id, emoji);
+      setFeedItems((rows) =>
+        rows.map((r) =>
+          r.run_id === item.run_id
+            ? {
+                ...r,
+                ...next,
+                i_ran_this_count: next.love_count,
+                viewer_has_run_this: next.viewer_has_loved,
+              }
+            : r,
+        ),
+      );
+    } catch (err: any) {
+      Alert.alert('Reaction', err?.message || 'Failed');
+    }
+  };
+
+  const handleFeedSave = async (item: NeighbourhoodFeedItem) => {
+    const wasSaved = item.viewer_has_saved;
+    setFeedItems((rows) =>
+      rows.map((r) =>
+        r.run_id === item.run_id
+          ? {
+              ...r,
+              viewer_has_saved: !wasSaved,
+              saves_count: wasSaved ? r.saves_count - 1 : r.saves_count + 1,
+            }
+          : r,
+      ),
+    );
+    try {
+      if (wasSaved) await neighbourhoodApi.saveRemove(item.run_id);
+      else await neighbourhoodApi.saveAdd(item.run_id);
+    } catch (err: any) {
+      // Roll back.
+      setFeedItems((rows) =>
+        rows.map((r) =>
+          r.run_id === item.run_id
+            ? {
+                ...r,
+                viewer_has_saved: wasSaved,
+                saves_count: wasSaved ? r.saves_count + 1 : r.saves_count - 1,
+              }
+            : r,
+        ),
+      );
+      Alert.alert('Save', err?.message || 'Failed');
+    }
+  };
+
   const openDetail = async (runId: number) => {
     setDetailId(runId);
     setDetailLoading(true);
@@ -301,7 +380,8 @@ export function NeighbourhoodScreen({
   };
 
   const renderFeedCard = ({ item }: { item: NeighbourhoodFeedItem }) => (
-    <Pressable style={styles.card} onPress={() => void openDetail(item.run_id)}>
+    <View style={styles.card}>
+      <Pressable onPress={() => void openDetail(item.run_id)}>
       <View style={styles.cardRow}>
         {thumbUri(item.photo_thumb_data) ? (
           <Image source={{ uri: thumbUri(item.photo_thumb_data)! }} style={styles.thumb} />
@@ -318,73 +398,18 @@ export function NeighbourhoodScreen({
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
       </View>
-      <View style={styles.cardActions}>
-        <Pressable
-          style={styles.smallBtn}
-          onPress={async (e) => {
-            e.stopPropagation?.();
-            try {
-              if (item.viewer_has_saved) {
-                await neighbourhoodApi.saveRemove(item.run_id);
-              } else {
-                await neighbourhoodApi.saveAdd(item.run_id);
-              }
-              setFeedItems((rows) =>
-                rows.map((r) =>
-                  r.run_id === item.run_id
-                    ? {
-                        ...r,
-                        viewer_has_saved: !r.viewer_has_saved,
-                        saves_count: r.viewer_has_saved ? r.saves_count - 1 : r.saves_count + 1,
-                      }
-                    : r,
-                ),
-              );
-            } catch (err: any) {
-              Alert.alert('Save', err?.message || 'Failed');
-            }
-          }}
-        >
-          <Ionicons name={item.viewer_has_saved ? 'bookmark' : 'bookmark-outline'} size={18} color={PURPLE} />
-          <Text style={styles.smallBtnText}>{item.viewer_has_saved ? 'Saved' : 'Save'}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.smallBtn}
-          onPress={async (e) => {
-            e.stopPropagation?.();
-            try {
-              if (item.viewer_has_run_this) {
-                await neighbourhoodApi.iranRemove(item.run_id);
-              } else {
-                await neighbourhoodApi.iranAdd(item.run_id);
-              }
-              setFeedItems((rows) =>
-                rows.map((r) =>
-                  r.run_id === item.run_id
-                    ? {
-                        ...r,
-                        viewer_has_run_this: !r.viewer_has_run_this,
-                        i_ran_this_count: r.viewer_has_run_this ? r.i_ran_this_count - 1 : r.i_ran_this_count + 1,
-                      }
-                    : r,
-                ),
-              );
-            } catch (err: any) {
-              Alert.alert('Love', err?.message || 'Failed');
-            }
-          }}
-        >
-          <Ionicons
-            name={item.viewer_has_run_this ? 'heart' : 'heart-outline'}
-            size={18}
-            color="#E25C5C"
+      </Pressable>
+      <View style={styles.cardActionsRow}>
+        <View style={{ flex: 1 }}>
+          <ReactionBar
+            reactions={reactionStateFromBackend(item)}
+            onToggleReaction={(_id, emoji) => void handleFeedReact(item, emoji)}
+            saved={item.viewer_has_saved}
+            onToggleSave={() => void handleFeedSave(item)}
           />
-          <Text style={styles.smallBtnText}>
-            {item.viewer_has_run_this ? 'Loved' : 'Love'}
-          </Text>
-        </Pressable>
+        </View>
         <Pressable
-          style={styles.smallBtn}
+          style={styles.reportBtn}
           onPress={(e) => {
             e.stopPropagation?.();
             Alert.alert('Report this run?', 'You will stop seeing posts from this runner in your feed.', [
@@ -407,7 +432,7 @@ export function NeighbourhoodScreen({
           <Ionicons name="flag-outline" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 
   const settingsBlock = (
@@ -642,55 +667,46 @@ export function NeighbourhoodScreen({
                   {p.caption ? <Text style={styles.caption}>{p.caption}</Text> : null}
                 </Pressable>
               ))}
-              <View style={styles.cardActions}>
-                <Pressable
-                  style={styles.smallBtn}
-                  onPress={async () => {
+              <View style={styles.detailActions}>
+                <ReactionBar
+                  reactions={reactionStateFromBackend(detail)}
+                  onToggleReaction={async (_id, emoji) => {
                     if (!detail) return;
                     try {
-                      if (detail.viewer_has_saved) await neighbourhoodApi.saveRemove(detail.run_id);
-                      else await neighbourhoodApi.saveAdd(detail.run_id);
+                      const next = await neighbourhoodApi.toggleReaction(detail.run_id, emoji);
                       setDetail({
                         ...detail,
-                        viewer_has_saved: !detail.viewer_has_saved,
-                        saves_count: detail.viewer_has_saved ? detail.saves_count - 1 : detail.saves_count + 1,
+                        ...next,
+                        i_ran_this_count: next.love_count,
+                        viewer_has_run_this: next.viewer_has_loved,
                       });
                     } catch (e: any) {
+                      Alert.alert('Reaction', e?.message);
+                    }
+                  }}
+                  saved={detail.viewer_has_saved}
+                  onToggleSave={async () => {
+                    if (!detail) return;
+                    const wasSaved = detail.viewer_has_saved;
+                    setDetail({
+                      ...detail,
+                      viewer_has_saved: !wasSaved,
+                      saves_count: wasSaved ? detail.saves_count - 1 : detail.saves_count + 1,
+                    });
+                    try {
+                      if (wasSaved) await neighbourhoodApi.saveRemove(detail.run_id);
+                      else await neighbourhoodApi.saveAdd(detail.run_id);
+                    } catch (e: any) {
+                      // Roll back on failure.
+                      setDetail((d) => (d ? {
+                        ...d,
+                        viewer_has_saved: wasSaved,
+                        saves_count: wasSaved ? d.saves_count + 1 : d.saves_count - 1,
+                      } : d));
                       Alert.alert('Save', e?.message);
                     }
                   }}
-                >
-                  <Ionicons name={detail.viewer_has_saved ? 'bookmark' : 'bookmark-outline'} size={20} color={PURPLE} />
-                  <Text style={styles.smallBtnText}>{detail.viewer_has_saved ? 'Saved' : 'Save'}</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.smallBtn}
-                  onPress={async () => {
-                    if (!detail) return;
-                    try {
-                      if (detail.viewer_has_run_this) await neighbourhoodApi.iranRemove(detail.run_id);
-                      else await neighbourhoodApi.iranAdd(detail.run_id);
-                      setDetail({
-                        ...detail,
-                        viewer_has_run_this: !detail.viewer_has_run_this,
-                        i_ran_this_count: detail.viewer_has_run_this
-                          ? detail.i_ran_this_count - 1
-                          : detail.i_ran_this_count + 1,
-                      });
-                    } catch (e: any) {
-                      Alert.alert('Love', e?.message);
-                    }
-                  }}
-                >
-                  <Ionicons
-                    name={detail.viewer_has_run_this ? 'heart' : 'heart-outline'}
-                    size={20}
-                    color="#E25C5C"
-                  />
-                  <Text style={styles.smallBtnText}>
-                    {detail.viewer_has_run_this ? 'Loved' : 'Love'}
-                  </Text>
-                </Pressable>
+                />
               </View>
             </ScrollView>
           )}
@@ -864,6 +880,20 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     gap: spacing.md,
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  detailActions: {
+    marginTop: spacing.lg,
+  },
+  reportBtn: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    alignSelf: 'center',
   },
   smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   smallBtnText: { fontSize: 12, color: colors.textSecondary },

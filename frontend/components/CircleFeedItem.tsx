@@ -1,8 +1,15 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
+import { ReactionBar, type ReactionState } from './ReactionBar';
+import { type ReactionId } from '../constants/reactions';
 
-const REACTION_EMOJIS = ['🌿', '👋', '🌊', '☀️', '🏔️'];
+export interface FeedItemPhoto {
+  id: number;
+  thumb_data: string;
+  caption: string | null;
+  distance_marker_km: number;
+}
 
 interface Reaction {
   emoji: string;
@@ -18,12 +25,15 @@ export interface FeedItem {
   is_you: boolean;
   data: any;
   reactions: Reaction[];
+  viewer_has_saved?: boolean;
   created_at: string | null;
 }
 
 interface CircleFeedItemProps {
   item: FeedItem;
   onReact: (itemType: string, itemId: number, emoji: string) => void;
+  onToggleSave?: (runId: number, currentlySaved: boolean) => void;
+  onPhotoPress?: (photo: FeedItemPhoto) => void;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -39,8 +49,20 @@ function timeAgo(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function CircleFeedItem({ item, onReact }: CircleFeedItemProps) {
+export function CircleFeedItem({ item, onReact, onToggleSave, onPhotoPress }: CircleFeedItemProps) {
   const isRun = item.type === 'run';
+  const photos: FeedItemPhoto[] = (item.data?.photos as FeedItemPhoto[]) || [];
+  const photoCount: number = item.data?.photo_count ?? photos.length;
+  const moreCount = photoCount - photos.length;
+  const reactionStates: ReactionState[] = item.reactions.map(r => ({
+    emoji: r.emoji,
+    count: r.count,
+    reacted: r.reacted,
+  }));
+
+  const handleReact = (_id: ReactionId, emoji: string) => {
+    onReact(item.type, item.id, emoji);
+  };
 
   return (
     <View style={[styles.card, shadows.small]}>
@@ -72,9 +94,41 @@ export function CircleFeedItem({ item, onReact }: CircleFeedItemProps) {
               </Text>
             )}
           </View>
-          {item.data.has_photos && (
-            <Text style={styles.photoIndicator}>📷 {item.data.photo_count} photo{item.data.photo_count !== 1 ? 's' : ''}</Text>
-          )}
+
+          {photos.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoStrip}
+              contentContainerStyle={styles.photoStripContent}
+            >
+              {photos.map(p => (
+                <TouchableOpacity
+                  key={p.id}
+                  activeOpacity={0.85}
+                  onPress={() => onPhotoPress?.(p)}
+                  style={styles.photoThumbWrap}
+                >
+                  <Image
+                    source={{ uri: `data:image/jpeg;base64,${p.thumb_data}` }}
+                    style={styles.photoThumb}
+                  />
+                  {p.distance_marker_km != null && (
+                    <View style={styles.kmBadge}>
+                      <Text style={styles.kmBadgeText}>{p.distance_marker_km}K</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+              {moreCount > 0 && (
+                <View style={[styles.photoThumbWrap, styles.moreTile]}>
+                  <Text style={styles.moreTileText}>+{moreCount}</Text>
+                </View>
+              )}
+            </ScrollView>
+          ) : item.data.has_photos ? (
+            <Text style={styles.photoIndicator}>📷 {photoCount} photo{photoCount !== 1 ? 's' : ''}</Text>
+          ) : null}
         </View>
       ) : (
         <View style={styles.checkinBody}>
@@ -85,23 +139,13 @@ export function CircleFeedItem({ item, onReact }: CircleFeedItemProps) {
         </View>
       )}
 
-      <View style={styles.reactionBar}>
-        {REACTION_EMOJIS.map(emoji => {
-          const existing = item.reactions.find(r => r.emoji === emoji);
-          const count = existing?.count || 0;
-          const reacted = existing?.reacted || false;
-          return (
-            <TouchableOpacity
-              key={emoji}
-              style={[styles.reactionButton, reacted && styles.reactionButtonActive]}
-              onPress={() => onReact(item.type, item.id, emoji)}
-            >
-              <Text style={styles.reactionEmoji}>{emoji}</Text>
-              {count > 0 && <Text style={[styles.reactionCount, reacted && styles.reactionCountActive]}>{count}</Text>}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <ReactionBar
+        reactions={reactionStates}
+        onToggleReaction={handleReact}
+        showSave={isRun && !!onToggleSave}
+        saved={!!item.viewer_has_saved}
+        onToggleSave={isRun && onToggleSave ? () => onToggleSave(item.id, !!item.viewer_has_saved) : undefined}
+      />
     </View>
   );
 }
@@ -184,6 +228,49 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
+  photoStrip: {
+    marginTop: spacing.sm,
+  },
+  photoStripContent: {
+    gap: spacing.xs,
+    paddingRight: spacing.xs,
+  },
+  photoThumbWrap: {
+    width: 84,
+    height: 84,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    backgroundColor: colors.background,
+    position: 'relative',
+  },
+  photoThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  kmBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  kmBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+  },
+  moreTile: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '15',
+  },
+  moreTileText: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
   checkinBody: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -199,37 +286,5 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
     fontStyle: 'italic',
-  },
-  reactionBar: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingTop: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  reactionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    backgroundColor: colors.background,
-  },
-  reactionButtonActive: {
-    backgroundColor: colors.primary + '15',
-    borderWidth: 1,
-    borderColor: colors.primary + '30',
-  },
-  reactionEmoji: {
-    fontSize: 14,
-  },
-  reactionCount: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginLeft: 3,
-    fontWeight: typography.weights.medium,
-  },
-  reactionCountActive: {
-    color: colors.primary,
   },
 });

@@ -1077,7 +1077,16 @@ export interface NeighbourhoodSearchHit {
   label: string;
 }
 
-export interface NeighbourhoodFeedItem {
+export interface NeighbourhoodReactionState {
+  like_count: number;
+  love_count: number;
+  zen_count: number;
+  viewer_has_liked: boolean;
+  viewer_has_loved: boolean;
+  viewer_has_zenned: boolean;
+}
+
+export interface NeighbourhoodFeedItem extends NeighbourhoodReactionState {
   run_id: number;
   handle: string;
   city: string | null;
@@ -1096,7 +1105,7 @@ export interface NeighbourhoodFeedResponse {
   next_cursor: { published_before: string | null; before_run_id: number } | null;
 }
 
-export interface NeighbourhoodRunDetail {
+export interface NeighbourhoodRunDetail extends NeighbourhoodReactionState {
   run_id: number;
   handle: string;
   city: string | null;
@@ -1172,6 +1181,15 @@ export const neighbourhoodApi = {
 
   iranRemove: (runId: number): Promise<{ status: string }> =>
     apiFetch(`/neighbourhood/runs/${runId}/i-ran-this`, { method: 'DELETE' }),
+
+  // Toggle one of the standardised public reactions (👏 Like / 💚 Love /
+  // 🌿 Zen). Backend dispatches Love → i-ran-this, Like+Zen → run_reactions.
+  // Returns the post-toggle reaction state so the UI can update locally.
+  toggleReaction: (runId: number, emoji: string): Promise<NeighbourhoodReactionState> =>
+    apiFetch(`/neighbourhood/runs/${runId}/react`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji }),
+    }),
 
   reportRun: (runId: number, reason?: string): Promise<{ status: string }> =>
     apiFetch(`/neighbourhood/runs/${runId}/report`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
