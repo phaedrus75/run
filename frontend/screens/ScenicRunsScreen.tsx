@@ -5,7 +5,7 @@
  * Photo album for outdoor runs — immersive cards and journey timelines.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { photoApi, type ScenicRun, type RunPhoto } from '../services/api';
+import { WalkMap, type MapMarker } from '../components/WalkMap';
+import { decodePolyline, pointAlongRouteAtKm } from '../services/walkLocationTracker';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.45;
@@ -128,6 +130,41 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
     </TouchableOpacity>
   );
 
+  // Decode the selected run's route + place a marker for each photo at the
+  // route point closest to its distance_marker_km. Empty for non-GPS runs.
+  const journeyRoutePoints = useMemo(
+    () =>
+      selectedRun?.route_polyline ? decodePolyline(selectedRun.route_polyline) : [],
+    [selectedRun?.route_polyline],
+  );
+  const journeyPhotoMarkers = useMemo((): MapMarker[] => {
+    if (journeyRoutePoints.length === 0 || runPhotos.length === 0) return [];
+    const out: MapMarker[] = [];
+    for (const p of runPhotos) {
+      const pt = pointAlongRouteAtKm(journeyRoutePoints, p.distance_marker_km);
+      if (!pt) continue;
+      const km = Math.round(p.distance_marker_km * 10) / 10;
+      out.push({
+        id: `scenic-photo-${p.id}`,
+        lat: pt.lat,
+        lng: pt.lng,
+        title: p.caption ?? `${km} km`,
+        tintColor: colors.accent,
+      });
+    }
+    return out;
+  }, [journeyRoutePoints, runPhotos]);
+
+  const handleJourneyMarkerPress = useCallback(
+    (markerId: string) => {
+      if (!markerId.startsWith('scenic-photo-')) return;
+      const photoId = Number(markerId.slice('scenic-photo-'.length));
+      const found = runPhotos.find((p) => p.id === photoId);
+      if (found) setFullScreenPhoto(found);
+    },
+    [runPhotos],
+  );
+
   const renderJourneyView = () => {
     if (!selectedRun) return null;
     const maxDistance = selectedRun.distance_km;
@@ -177,6 +214,33 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
           <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
         ) : (
           <ScrollView style={styles.journeyScroll} showsVerticalScrollIndicator={false}>
+            {/* Route map with photo pins. Only present for GPS-tracked runs;
+                manual runs jump straight to the timeline below. Tapping a
+                pin opens the same full-screen viewer the timeline uses. */}
+            {journeyRoutePoints.length > 0 && (
+              <View style={styles.journeyMap}>
+                <WalkMap
+                  style={styles.journeyMapInner}
+                  route={journeyRoutePoints}
+                  markers={
+                    journeyPhotoMarkers.length ? journeyPhotoMarkers : undefined
+                  }
+                  centerOn={{
+                    lat:
+                      journeyRoutePoints.reduce((s, p) => s + p.lat, 0) /
+                      journeyRoutePoints.length,
+                    lng:
+                      journeyRoutePoints.reduce((s, p) => s + p.lng, 0) /
+                      journeyRoutePoints.length,
+                  }}
+                  zoom={14}
+                  showUserLocation={false}
+                  routeColor="#F97316"
+                  interactive
+                  onMarkerPress={handleJourneyMarkerPress}
+                />
+              </View>
+            )}
             <View style={styles.timeline}>
               {/* Start marker */}
               <View style={styles.timelineNode}>
@@ -506,6 +570,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
   },
+  journeyMap: {
+    height: 220,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginBottom: spacing.lg,
+    backgroundColor: colors.surfaceAlt,
+  },
+  journeyMapInner: { flex: 1 },
 
   // Timeline
   timeline: {

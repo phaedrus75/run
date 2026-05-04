@@ -122,6 +122,9 @@ export interface ScenicRun {
   mood: string | null;
   photo_count: number;
   cover_photo: string | null;
+  /** Encoded polyline of the recorded route. Null for non-GPS runs;
+   *  used by the journey view to render the route map + photo pins. */
+  route_polyline?: string | null;
 }
 
 // 🚶 Walk types

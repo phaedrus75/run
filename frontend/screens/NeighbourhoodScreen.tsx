@@ -2,7 +2,7 @@
  * The Neighbourhood — city-level feed, saves, and settings.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -30,8 +30,8 @@ import {
   type NeighbourhoodRunDetail,
   type NeighbourhoodSearchHit,
 } from '../services/api';
-import { WalkMap } from '../components/WalkMap';
-import { decodePolyline } from '../services/walkLocationTracker';
+import { WalkMap, type MapMarker } from '../components/WalkMap';
+import { decodePolyline, pointAlongRouteAtKm } from '../services/walkLocationTracker';
 
 const PURPLE = '#7E57C2';
 const WIDEN_OPTIONS = [0, 25, 50, 100] as const;
@@ -79,6 +79,47 @@ export function NeighbourhoodScreen({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [detail, setDetail] = useState<NeighbourhoodRunDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  /** Photo currently shown in the detail-modal lightbox (tapped from the
+   *  route map or the inline photo list). */
+  const [detailLightbox, setDetailLightbox] = useState<
+    NeighbourhoodRunDetail['photos'][number] | null
+  >(null);
+
+  // Decode + memoise the route polyline and corresponding photo markers
+  // for the detail map. Each photo gets pinned to the route point closest
+  // to its `distance_marker_km`.
+  const detailRoutePoints = useMemo(
+    () => (detail?.route_polyline ? decodePolyline(detail.route_polyline) : []),
+    [detail?.route_polyline],
+  );
+  const detailPhotoMarkers = useMemo((): MapMarker[] => {
+    if (!detail?.photos?.length || detailRoutePoints.length === 0) return [];
+    const out: MapMarker[] = [];
+    for (const p of detail.photos) {
+      const pt = pointAlongRouteAtKm(detailRoutePoints, p.distance_marker_km);
+      if (!pt) continue;
+      const km = Math.round(p.distance_marker_km * 10) / 10;
+      out.push({
+        id: `nb-photo-${p.id}`,
+        lat: pt.lat,
+        lng: pt.lng,
+        title: p.caption ?? `${km} km`,
+        tintColor: PURPLE,
+      });
+    }
+    return out;
+  }, [detail?.photos, detailRoutePoints]);
+
+  /** Open the lightbox when a photo pin on the map is tapped. */
+  const handleDetailMarkerPress = useCallback(
+    (markerId: string) => {
+      if (!markerId.startsWith('nb-photo-')) return;
+      const photoId = Number(markerId.slice('nb-photo-'.length));
+      const found = detail?.photos.find((p) => p.id === photoId);
+      if (found) setDetailLightbox(found);
+    },
+    [detail?.photos],
+  );
 
   const ready =
     !!me?.opted_in &&
@@ -562,33 +603,36 @@ export function NeighbourhoodScreen({
               <Text style={styles.meta}>
                 {detail.distance_km?.toFixed(1)} km · {detail.saves_count} saves · {detail.i_ran_this_count} loves
               </Text>
-              {detail.route_polyline ? (
+              {detailRoutePoints.length > 0 ? (
                 <View style={styles.detailMap}>
-                  {(() => {
-                    const pts = decodePolyline(detail.route_polyline);
-                    const center =
-                      pts.length > 0
-                        ? {
-                            lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length,
-                            lng: pts.reduce((s, p) => s + p.lng, 0) / pts.length,
-                          }
-                        : undefined;
-                    return (
-                      <WalkMap
-                        style={styles.map}
-                        route={pts}
-                        centerOn={center}
-                        zoom={13}
-                        showUserLocation={false}
-                        routeColor="#F97316"
-                        interactive
-                      />
-                    );
-                  })()}
+                  <WalkMap
+                    style={styles.map}
+                    route={detailRoutePoints}
+                    markers={
+                      detailPhotoMarkers.length ? detailPhotoMarkers : undefined
+                    }
+                    centerOn={{
+                      lat:
+                        detailRoutePoints.reduce((s, p) => s + p.lat, 0) /
+                        detailRoutePoints.length,
+                      lng:
+                        detailRoutePoints.reduce((s, p) => s + p.lng, 0) /
+                        detailRoutePoints.length,
+                    }}
+                    zoom={13}
+                    showUserLocation={false}
+                    routeColor="#F97316"
+                    interactive
+                    onMarkerPress={handleDetailMarkerPress}
+                  />
                 </View>
               ) : null}
               {detail.photos?.map((p) => (
-                <View key={p.id} style={styles.photoBlock}>
+                <Pressable
+                  key={p.id}
+                  style={styles.photoBlock}
+                  onPress={() => setDetailLightbox(p)}
+                >
                   {p.photo_data ? (
                     <Image
                       source={{ uri: p.photo_data.startsWith('data:') ? p.photo_data : `data:image/jpeg;base64,${p.photo_data}` }}
@@ -596,7 +640,7 @@ export function NeighbourhoodScreen({
                     />
                   ) : null}
                   {p.caption ? <Text style={styles.caption}>{p.caption}</Text> : null}
-                </View>
+                </Pressable>
               ))}
               <View style={styles.cardActions}>
                 <Pressable
@@ -651,6 +695,35 @@ export function NeighbourhoodScreen({
             </ScrollView>
           )}
         </SafeAreaView>
+
+        {/* Lightbox for tapped photos (from the route map or the inline list).
+            Nested inside the detail modal so it visually layers above it. */}
+        <Modal
+          visible={detailLightbox !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDetailLightbox(null)}
+        >
+          <Pressable
+            style={styles.lightboxOverlay}
+            onPress={() => setDetailLightbox(null)}
+          >
+            {detailLightbox?.photo_data ? (
+              <Image
+                source={{
+                  uri: detailLightbox.photo_data.startsWith('data:')
+                    ? detailLightbox.photo_data
+                    : `data:image/jpeg;base64,${detailLightbox.photo_data}`,
+                }}
+                style={styles.lightboxImage}
+                resizeMode="contain"
+              />
+            ) : null}
+            {detailLightbox?.caption ? (
+              <Text style={styles.lightboxCaption}>{detailLightbox.caption}</Text>
+            ) : null}
+          </Pressable>
+        </Modal>
       </Modal>
     </SafeAreaView>
   );
@@ -813,4 +886,21 @@ const styles = StyleSheet.create({
   detailPhoto: { width: '100%', height: 220, borderRadius: radius.md, marginBottom: spacing.sm, resizeMode: 'cover' },
   photoBlock: { marginBottom: spacing.lg },
   caption: { fontSize: typography.sizes.sm, color: colors.textSecondary },
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  lightboxImage: { width: '100%', height: '85%' },
+  lightboxCaption: {
+    position: 'absolute',
+    bottom: spacing.xxl,
+    left: spacing.lg,
+    right: spacing.lg,
+    color: '#fff',
+    textAlign: 'center',
+    fontSize: typography.sizes.sm,
+  },
 });

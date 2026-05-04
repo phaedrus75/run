@@ -4038,6 +4038,9 @@ def get_scenic_runs(
             "mood": getattr(run, 'mood', None),
             "photo_count": run_photo_map.get(run.id, 0),
             "cover_photo": first_photo.photo_data if first_photo else None,
+            # Polyline lets the journey view render the actual route + drop
+            # photo markers along it. Null for runs without GPS.
+            "route_polyline": getattr(run, 'route_polyline', None),
         })
     
     return result
