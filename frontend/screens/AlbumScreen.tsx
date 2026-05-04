@@ -26,6 +26,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { albumApi, AlbumPhoto, AlbumPhotoActivity } from '../services/api';
+import { albumCache } from '../services/albumCache';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { AppHeader } from '../components/AppHeader';
@@ -53,19 +54,26 @@ type Mode = 'grid' | 'feed';
 
 export function AlbumScreen({ navigation }: Props) {
   const { user } = useAuth();
-  const [photos, setPhotos] = useState<AlbumPhoto[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
+
+  // Hydrate from the module-level cache so re-opening the tab is instant
+  // and we don't pay for a full refetch every time.
+  const cached = albumCache.read();
+  const [photos, setPhotos] = useState<AlbumPhoto[]>(cached?.items ?? []);
+  const [cursor, setCursor] = useState<string | null>(cached?.cursor ?? null);
+  const [hasMore, setHasMore] = useState<boolean>(cached?.hasMore ?? true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [firstLoaded, setFirstLoaded] = useState(false);
+  const [firstLoaded, setFirstLoaded] = useState<boolean>(!!cached);
   const [mode, setMode] = useState<Mode>('grid');
 
   const fetchPage = useCallback(
-    async (reset: boolean) => {
-      if (loading) return;
-      setLoading(true);
+    async (reset: boolean, opts: { silent?: boolean } = {}) => {
+      // Allow concurrent silent revalidate to skip if a foreground load
+      // is already in flight — the foreground load will refresh state.
+      if (loading && opts.silent) return;
+      if (loading && !opts.silent) return;
+      if (!opts.silent) setLoading(true);
       setError(null);
       try {
         const page = await albumApi.list({
@@ -73,13 +81,19 @@ export function AlbumScreen({ navigation }: Props) {
           limit: PAGE_SIZE,
           include_data: true,
         });
-        setPhotos((prev) => (reset ? page.items : [...prev, ...page.items]));
+        if (reset) {
+          setPhotos(page.items);
+          albumCache.writeFirstPage(page.items, page.next_cursor);
+        } else {
+          setPhotos((prev) => [...prev, ...page.items]);
+          albumCache.appendPage(page.items, page.next_cursor);
+        }
         setCursor(page.next_cursor);
         setHasMore(page.next_cursor !== null);
       } catch (e: any) {
-        setError(e?.message ?? 'Could not load album.');
+        if (!opts.silent) setError(e?.message ?? 'Could not load album.');
       } finally {
-        setLoading(false);
+        if (!opts.silent) setLoading(false);
         setRefreshing(false);
         setFirstLoaded(true);
       }
@@ -87,17 +101,26 @@ export function AlbumScreen({ navigation }: Props) {
     [cursor, loading],
   );
 
+  // Initial mount: only hit the network if we have no cache, or the
+  // cache is older than the TTL. Either way we render whatever we have
+  // immediately (see hydration above).
   useEffect(() => {
-    void fetchPage(true);
+    if (!cached) {
+      void fetchPage(true);
+    } else if (albumCache.isStale()) {
+      // Fresh data in the background, no spinner.
+      void fetchPage(true, { silent: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Re-focus: revalidate silently if stale, never blow away the list.
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => {
-      if (firstLoaded) void fetchPage(true);
+      if (albumCache.isStale()) void fetchPage(true, { silent: true });
     });
     return unsub;
-  }, [navigation, fetchPage, firstLoaded]);
+  }, [navigation, fetchPage]);
 
   const groups = useMemo<Group[]>(() => groupByActivity(photos), [photos]);
 

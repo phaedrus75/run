@@ -29,6 +29,7 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 import { photoApi, walkPhotoApi } from './api';
+import { albumCache } from './albumCache';
 import {
   loadManifest,
   listSessions,
@@ -212,6 +213,7 @@ async function uploadOne(
           serverPhotoId: res.id,
         },
       });
+      albumCache.invalidate();
     } else {
       const res = await walkPhotoApi.upload(manifest.serverActivityId!, {
         photo_data: base64,
@@ -227,6 +229,7 @@ async function uploadOne(
           serverPhotoId: res.id,
         },
       });
+      albumCache.invalidate();
     }
     return 'done';
   } catch (e) {

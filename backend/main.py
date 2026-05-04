@@ -3763,22 +3763,22 @@ def list_my_photos(
         walk_q = walk_q.filter(WalkPhoto.created_at < cursor_dt)
     walk_rows = walk_q.order_by(WalkPhoto.created_at.desc()).limit(window).all()
 
-    # Cap how many missing thumbnails we'll generate during a single page load
-    # so the first request after deploy doesn't spike CPU. Remaining rows
-    # gracefully fall back to full data and will be backfilled on later pages.
-    backfill_budget = 4
-
+    # Backfill missing thumbnails for *all* rows in the page rather than
+    # capping. With a previous cap of 4, older photos kept falling back to
+    # the full-resolution base64 — which defeats the point and made the
+    # album feel "uncached" because every refetch shipped the same fat
+    # payload. Pillow takes ~50–100 ms per image; even at 24 thumbs that's
+    # ~1–2 s on first load only. Subsequent loads are instant because the
+    # thumbs are now in the DB.
     def _resolve_thumb(p) -> Optional[str]:
-        nonlocal backfill_budget
         if getattr(p, "thumb_data", None):
             return p.thumb_data
         if full:
             return None  # caller wanted full data anyway
-        if backfill_budget > 0 and p.photo_data:
+        if p.photo_data:
             t = _make_thumbnail_b64(p.photo_data)
             if t:
                 p.thumb_data = t
-                backfill_budget -= 1
                 return t
         return None
 
