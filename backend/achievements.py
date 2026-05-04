@@ -14,7 +14,7 @@ from collections import defaultdict
 from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session
 
-from models import Run
+from models import Run, RunPhoto
 
 # ==========================================
 # 🎯 GOALS CONFIGURATION
