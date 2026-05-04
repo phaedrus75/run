@@ -361,26 +361,22 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           )}
         </View>
 
-        <View style={[styles.section, shadows.small]}>
-          <Text style={styles.sectionTitle}>The Neighbourhood</Text>
-          <Text style={styles.privacyDesc}>
-            Share runs to a city-level feed under your @handle. Set your home city, opt in, and choose how far to
-            include nearby areas — from Community → The Neighbourhood.
-          </Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() =>
-              navigation
-                .getParent()
-                ?.navigate('Community', {
-                  screen: 'Neighbourhood',
-                  params: { openSettings: true },
-                })
-            }
-          >
-            <Text style={styles.primaryButtonText}>Open neighbourhood settings</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[styles.linkRow, shadows.small]}
+          onPress={() =>
+            navigation
+              .getParent()
+              ?.navigate('Community', {
+                screen: 'Neighbourhood',
+                params: { openSettings: true },
+              })
+          }
+          activeOpacity={0.7}
+        >
+          <Ionicons name="location-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkRowText}>Neighbourhood settings</Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
 
         {/* Runner Level */}
         <View style={[styles.section, shadows.small]}>
@@ -567,6 +563,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.lg,
     marginBottom: spacing.md,
+  },
+  linkRow: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  linkRowText: {
+    flex: 1,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
   },
   sectionTitle: {
     fontSize: typography.sizes.md,
