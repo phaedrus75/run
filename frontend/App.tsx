@@ -171,17 +171,24 @@ function MainTabs() {
           height: 85,
           paddingBottom: 25,
           paddingTop: 10,
-          // Outer gutter so the leftmost (Home) and rightmost (Community)
-          // tab labels don't crash against the screen edges.
-          paddingHorizontal: 10,
+          // Light outer gutter pulls Home / Community in from the edges
+          // without squeezing the cells. Per-item padding intentionally
+          // stays at 0 so each label has the full cell width to render in.
+          paddingHorizontal: 6,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-        // A little breathing room between every tab item, on top of the
-        // outer gutter on tabBarStyle.
-        tabBarItemStyle: { paddingHorizontal: 4 },
+        // 10pt + numberOfLines:1 keeps the longest label ("Community")
+        // single-line and untruncated on every iPhone width we ship to.
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '600',
+          marginTop: 2,
+          includeFontPadding: false,
+        },
+        tabBarItemStyle: { paddingHorizontal: 0 },
         tabBarIconStyle: { marginBottom: -2 },
+        tabBarLabelPosition: 'below-icon',
         tabBarIcon: ({ focused, color, size }) => {
           if (route.name === 'Activity') {
             return <MaterialCommunityIcons name="routes" size={size + 2} color={color} />;
