@@ -272,7 +272,7 @@ export function NeighbourhoodScreen({
         <View style={{ flex: 1 }}>
           <Text style={styles.handle}>@{item.handle}</Text>
           <Text style={styles.meta}>
-            {item.distance_km?.toFixed(1)} km · {item.saves_count} saves · {item.i_ran_this_count} ran this
+            {item.distance_km?.toFixed(1)} km · {item.saves_count} saves · {item.i_ran_this_count} loves
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
@@ -329,12 +329,18 @@ export function NeighbourhoodScreen({
                 ),
               );
             } catch (err: any) {
-              Alert.alert('I ran this', err?.message || 'Failed');
+              Alert.alert('Love', err?.message || 'Failed');
             }
           }}
         >
-          <Ionicons name="checkmark-done-outline" size={18} color={colors.primary} />
-          <Text style={styles.smallBtnText}>I ran this</Text>
+          <Ionicons
+            name={item.viewer_has_run_this ? 'heart' : 'heart-outline'}
+            size={18}
+            color="#E25C5C"
+          />
+          <Text style={styles.smallBtnText}>
+            {item.viewer_has_run_this ? 'Loved' : 'Love'}
+          </Text>
         </Pressable>
         <Pressable
           style={styles.smallBtn}
@@ -554,7 +560,7 @@ export function NeighbourhoodScreen({
             <ScrollView contentContainerStyle={styles.detailScroll}>
               <Text style={styles.handle}>@{detail.handle}</Text>
               <Text style={styles.meta}>
-                {detail.distance_km?.toFixed(1)} km · {detail.saves_count} saves · {detail.i_ran_this_count} ran this
+                {detail.distance_km?.toFixed(1)} km · {detail.saves_count} saves · {detail.i_ran_this_count} loves
               </Text>
               {detail.route_polyline ? (
                 <View style={styles.detailMap}>
@@ -628,12 +634,18 @@ export function NeighbourhoodScreen({
                           : detail.i_ran_this_count + 1,
                       });
                     } catch (e: any) {
-                      Alert.alert('I ran this', e?.message);
+                      Alert.alert('Love', e?.message);
                     }
                   }}
                 >
-                  <Ionicons name="checkmark-done-outline" size={20} color={colors.primary} />
-                  <Text style={styles.smallBtnText}>I ran this</Text>
+                  <Ionicons
+                    name={detail.viewer_has_run_this ? 'heart' : 'heart-outline'}
+                    size={20}
+                    color="#E25C5C"
+                  />
+                  <Text style={styles.smallBtnText}>
+                    {detail.viewer_has_run_this ? 'Loved' : 'Love'}
+                  </Text>
                 </Pressable>
               </View>
             </ScrollView>

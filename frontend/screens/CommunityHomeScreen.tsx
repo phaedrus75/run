@@ -7,7 +7,7 @@
  *   - The Neighbourhood: pseudonymous, location-based, photo-led discovery
  *   - Circles:           private, small, named groups of people you know
  *
- * Neighbourhood: city-level feed (opt-in, @handle, saves, "I ran this").
+ * Neighbourhood: city-level feed (opt-in, @handle, saves, loves).
  */
 
 import React, { useEffect, useState } from 'react';
@@ -75,8 +75,8 @@ export function CommunityHomeScreen({ navigation }: Props) {
               <Text style={styles.cardTitle}>The Neighbourhood</Text>
             </View>
             <Text style={styles.cardBody}>
-              Pseudonymous album sharing with zenrunners in your city.{'\n'}
-              Save what inspires you. “I ran this” — rank places, never people.
+              See scenic runs in your city from fellow zenrunners.{'\n'}
+              Save them for later or love the ones that move you.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
@@ -103,8 +103,8 @@ export function CommunityHomeScreen({ navigation }: Props) {
               )}
             </View>
             <Text style={styles.cardBody}>
-              Private groups of people you know. Share runs, photos, and
-              progress without going public.
+              Share runs, photos, and progress with your friends — small
+              private groups, no leaderboards.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
