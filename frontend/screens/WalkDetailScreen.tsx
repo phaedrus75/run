@@ -27,6 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 
 import { WalkMap, MapMarker } from '../components/WalkMap';
@@ -39,6 +40,7 @@ import {
   WalkPhoto,
 } from '../services/api';
 import { albumCache } from '../services/albumCache';
+import { MAX_PHOTOS_PER_ACTIVITY } from '../constants/photos';
 import {
   decodePolyline,
   formatDistanceKm,
@@ -70,6 +72,10 @@ export function WalkDetailScreen({ navigation, route }: Props) {
 
   // Lightbox
   const [lightbox, setLightbox] = useState<WalkPhoto | null>(null);
+  /** Full-resolution base64 for the photo currently in the lightbox. The
+   *  list response only carries thumbnails; we fetch the full version when
+   *  the lightbox opens and upgrade the image source seamlessly. */
+  const [lightboxFull, setLightboxFull] = useState<string | null>(null);
 
   // Full-screen map
   const [mapFullscreen, setMapFullscreen] = useState(false);
@@ -95,6 +101,26 @@ export function WalkDetailScreen({ navigation, route }: Props) {
     void load();
   }, [load]);
 
+  // When the lightbox opens, fetch the full-res photo. Until it lands, the
+  // thumb is shown (slightly soft) so the user gets an instant response.
+  useEffect(() => {
+    setLightboxFull(null);
+    if (!lightbox || !walkId) return;
+    let cancelled = false;
+    walkPhotoApi
+      .getWalkPhotoFull(walkId, lightbox.id)
+      .then((p) => {
+        if (cancelled) return;
+        if (p?.photo_data) setLightboxFull(p.photo_data);
+      })
+      .catch(() => {
+        // Non-fatal — the thumb stays visible.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lightbox, walkId]);
+
   const routePoints = useMemo(
     () => (walk?.route_polyline ? decodePolyline(walk.route_polyline) : []),
     [walk?.route_polyline],
@@ -114,6 +140,19 @@ export function WalkDetailScreen({ navigation, route }: Props) {
       title: p.caption ?? `Photo ${idx + 1}`,
       tintColor: colors.accent,
     }));
+
+  /** Open the matching photo's lightbox when the user taps its map marker.
+   *  The marker id is `photo-<id>` (set above), so we strip the prefix and
+   *  look up the photo. Falls back silently if the marker isn't a photo. */
+  const handleMarkerPress = useCallback(
+    (markerId: string) => {
+      if (!markerId.startsWith('photo-')) return;
+      const photoId = Number(markerId.slice('photo-'.length));
+      const found = photos.find((p) => p.id === photoId);
+      if (found) setLightbox(found);
+    },
+    [photos],
+  );
 
   /** Compute center + zoom that fits all route points in one view. */
   const routeCamera = useMemo(() => {
@@ -161,37 +200,63 @@ export function WalkDetailScreen({ navigation, route }: Props) {
   };
 
   const startPhotoFlow = async () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
+    if (photos.length >= MAX_PHOTOS_PER_ACTIVITY) {
       Alert.alert(
-        'Photo access needed',
-        'ZenRun needs permission to attach photos to this walk.',
+        'Photo limit reached',
+        `${MAX_PHOTOS_PER_ACTIVITY} photos is the limit per walk. Remove one or start another walk to add more.`,
       );
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.7,
-      allowsEditing: false,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
+    // Wrap the entire pick + manipulate path so any unhandled rejection
+    // (permission denial, picker failure, manipulator OOM on a large HEIC,
+    // etc.) surfaces as a friendly alert instead of crashing the app.
+    try {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch {}
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          'Photo access needed',
+          'ZenRun needs permission to attach photos to this walk.',
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+        allowsEditing: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
 
-    const manipulated = await ImageManipulator.manipulateAsync(
-      result.assets[0].uri,
-      [{ resize: { width: 800 } }],
-      {
-        compress: 0.7,
-        format: ImageManipulator.SaveFormat.JPEG,
-        base64: true,
-      },
-    );
+      // Resize to 1600px (matches what the backend stores cleanly under the
+      // 10 MB photo cap) and read base64 from disk afterwards rather than
+      // asking the manipulator to materialise it inline. The inline
+      // `base64: true` path has been observed to OOM on large HEIC sources
+      // because both the decoded original and the encoded base64 sit in
+      // memory simultaneously.
+      const manipulated = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 1600 } }],
+        {
+          compress: 0.7,
+          format: ImageManipulator.SaveFormat.JPEG,
+        },
+      );
+      const base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
-    setPendingUri(manipulated.uri);
-    setPendingBase64(manipulated.base64 ?? null);
-    setPhotoStep('caption');
+      setPendingUri(manipulated.uri);
+      setPendingBase64(base64);
+      setPhotoStep('caption');
+    } catch (e: any) {
+      console.warn('Photo pick failed', e);
+      Alert.alert(
+        'Could not attach photo',
+        e?.message ?? 'Try a different photo, or take one with the camera.',
+      );
+    }
   };
 
   const cancelPhotoFlow = () => {
@@ -318,6 +383,7 @@ export function WalkDetailScreen({ navigation, route }: Props) {
           <PhotoHeroCarousel
             photos={photos.map((p) => ({
               id: p.id,
+              thumb_data: p.thumb_data,
               photo_data: p.photo_data,
               distance_marker_km: p.distance_marker_km,
               caption: p.caption,
@@ -337,6 +403,7 @@ export function WalkDetailScreen({ navigation, route }: Props) {
             centerOn={routeCamera?.center ?? center}
             zoom={routeCamera?.zoom ?? 15}
             showUserLocation={false}
+            onMarkerPress={handleMarkerPress}
           />
           <View style={styles.mapExpandHint}>
             <Ionicons name="expand-outline" size={16} color="#fff" />
@@ -353,6 +420,12 @@ export function WalkDetailScreen({ navigation, route }: Props) {
               centerOn={routeCamera?.center ?? center}
               zoom={routeCamera?.zoom ?? 15}
               showUserLocation={false}
+              onMarkerPress={(id) => {
+                // Close the fullscreen map first so the lightbox isn't
+                // hidden behind it on iOS, then surface the photo.
+                setMapFullscreen(false);
+                handleMarkerPress(id);
+              }}
             />
             <Pressable
               style={styles.mapFullClose}
@@ -411,32 +484,39 @@ export function WalkDetailScreen({ navigation, route }: Props) {
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {photos.map((p) => (
-              <Pressable
-                key={p.id}
-                onPress={() => setLightbox(p)}
-                style={styles.photoTile}
-              >
-                <Image
-                  source={{
-                    uri: p.photo_data.startsWith('data:')
-                      ? p.photo_data
-                      : `data:image/jpeg;base64,${p.photo_data}`,
-                  }}
-                  style={styles.photoImage}
-                />
-                {p.caption ? (
-                  <Text style={styles.photoCaption} numberOfLines={2}>
-                    {p.caption}
-                  </Text>
-                ) : null}
-                {p.distance_marker_km != null ? (
-                  <Text style={styles.photoMarker}>
-                    {p.distance_marker_km.toFixed(2)} km
-                  </Text>
-                ) : null}
-              </Pressable>
-            ))}
+            {photos.map((p) => {
+              const src = p.thumb_data ?? p.photo_data;
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setLightbox(p)}
+                  style={styles.photoTile}
+                >
+                  {src ? (
+                    <Image
+                      source={{
+                        uri: src.startsWith('data:')
+                          ? src
+                          : `data:image/jpeg;base64,${src}`,
+                      }}
+                      style={styles.photoImage}
+                    />
+                  ) : (
+                    <View style={[styles.photoImage, { backgroundColor: colors.background }]} />
+                  )}
+                  {p.caption ? (
+                    <Text style={styles.photoCaption} numberOfLines={2}>
+                      {p.caption}
+                    </Text>
+                  ) : null}
+                  {p.distance_marker_km != null ? (
+                    <Text style={styles.photoMarker}>
+                      {p.distance_marker_km.toFixed(2)} km
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
 
             <Pressable onPress={startPhotoFlow} style={styles.addPhotoTile}>
               <Ionicons name="add" size={28} color={colors.primary} />
@@ -505,15 +585,24 @@ export function WalkDetailScreen({ navigation, route }: Props) {
         <View style={styles.lightboxOverlay}>
           {lightbox && (
             <>
-              <Image
-                source={{
-                  uri: lightbox.photo_data.startsWith('data:')
-                    ? lightbox.photo_data
-                    : `data:image/jpeg;base64,${lightbox.photo_data}`,
-                }}
-                style={styles.lightboxImage}
-                resizeMode="contain"
-              />
+              {(() => {
+                // Full-res once it lands; otherwise the thumb (slightly soft
+                // but instant). `data:` prefix tolerated for legacy rows.
+                const src = lightboxFull ?? lightbox.photo_data ?? lightbox.thumb_data ?? null;
+                return src ? (
+                  <Image
+                    source={{
+                      uri: src.startsWith('data:')
+                        ? src
+                        : `data:image/jpeg;base64,${src}`,
+                    }}
+                    style={styles.lightboxImage}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={[styles.lightboxImage, { backgroundColor: '#000' }]} />
+                );
+              })()}
               {lightbox.caption ? (
                 <Text style={styles.lightboxCaption}>{lightbox.caption}</Text>
               ) : null}

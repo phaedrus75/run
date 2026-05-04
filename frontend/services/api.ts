@@ -99,8 +99,14 @@ export interface Run {
 export interface RunPhoto {
   id: number;
   run_id: number;
-  /** Base64 JPEG. Omitted by the server when `thumbnails_only=true` is requested. */
-  photo_data?: string;
+  /** Full-resolution base64 JPEG. Returned when the caller asks for `full=true`,
+   *  or via `photoApi.getRunPhotoFull`. Omitted from the default thumb response. */
+  photo_data?: string | null;
+  /** Small (~5–15 KB) base64 thumbnail. Returned in the default list response.
+   *  Use this for carousels / grids; fetch full on demand for the lightbox. */
+  thumb_data?: string | null;
+  /** Hint that the row in this list response carries thumb_data, not photo_data. */
+  is_thumb?: boolean;
   distance_marker_km: number;
   caption: string | null;
   created_at: string | null;
@@ -143,7 +149,13 @@ export interface Walk {
 export interface WalkPhoto {
   id: number;
   walk_id: number;
-  photo_data: string;
+  /** Full-resolution base64 JPEG. Returned when the caller asks for `full=true`,
+   *  or via `walkPhotoApi.getWalkPhotoFull`. Omitted from the default thumb response. */
+  photo_data?: string | null;
+  /** Small (~5–15 KB) base64 thumbnail. Returned in the default list response. */
+  thumb_data?: string | null;
+  /** Hint that the row in this list response carries thumb_data, not photo_data. */
+  is_thumb?: boolean;
   lat: number | null;
   lng: number | null;
   distance_marker_km: number | null;
@@ -766,9 +778,26 @@ export const photoApi = {
     });
   },
 
-  getForRun: (runId: number, thumbnailsOnly = false): Promise<RunPhoto[]> => {
-    const qs = thumbnailsOnly ? '?thumbnails_only=true' : '';
+  /**
+   * List a run's photos. Defaults to thumbnails (`thumb_data`).
+   *   - `{ thumbnailsOnly: true }`: omit base64 entirely (metadata only)
+   *   - `{ full: true }`: return full-resolution `photo_data` (legacy)
+   */
+  getForRun: (
+    runId: number,
+    opts?: { thumbnailsOnly?: boolean; full?: boolean },
+  ): Promise<RunPhoto[]> => {
+    const params: string[] = [];
+    if (opts?.thumbnailsOnly) params.push('thumbnails_only=true');
+    if (opts?.full) params.push('full=true');
+    const qs = params.length ? `?${params.join('&')}` : '';
     return apiFetch(`/runs/${runId}/photos${qs}`);
+  },
+
+  /** Fetch a single run photo's full-resolution base64. Used by the lightbox
+   *  to upgrade quality after the user taps a thumbnail. */
+  getRunPhotoFull: (runId: number, photoId: number): Promise<RunPhoto> => {
+    return apiFetch(`/runs/${runId}/photos/${photoId}/full`);
   },
 
   delete: (runId: number, photoId: number): Promise<void> => {
@@ -990,8 +1019,18 @@ export const walkPhotoApi = {
     });
   },
 
-  getForWalk: (walkId: number): Promise<WalkPhoto[]> => {
-    return apiFetch(`/walks/${walkId}/photos`);
+  /**
+   * List a walk's photos. Defaults to thumbnails (`thumb_data`).
+   *   - `{ full: true }`: return full-resolution `photo_data` (legacy)
+   */
+  getForWalk: (walkId: number, opts?: { full?: boolean }): Promise<WalkPhoto[]> => {
+    const qs = opts?.full ? '?full=true' : '';
+    return apiFetch(`/walks/${walkId}/photos${qs}`);
+  },
+
+  /** Fetch a single walk photo's full-resolution base64. */
+  getWalkPhotoFull: (walkId: number, photoId: number): Promise<WalkPhoto> => {
+    return apiFetch(`/walks/${walkId}/photos/${photoId}/full`);
   },
 
   delete: (walkId: number, photoId: number): Promise<void> => {

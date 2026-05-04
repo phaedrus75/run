@@ -185,8 +185,18 @@ def _make_thumbnail_b64(b64_full: Optional[str]) -> Optional[str]:
         return None
 
 
-MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
+MAX_BODY_BYTES = 12 * 1024 * 1024  # 12 MB
 
+# Hard limit on photos per run / walk. Mirrored on the client in
+# `frontend/constants/photos.ts`. Protects detail-screen response size and
+# DB row scan from runaway growth. 100 is well above realistic single-walk
+# usage; the median scenic walk has 3–5 photos.
+MAX_PHOTOS_PER_ACTIVITY = 100
+
+# Photo uploads send a base64-encoded JPEG inside a JSON body. A 1200px JPEG
+# at quality 0.85 lands at ~530–930 KB base64; the route handler caps the
+# actual `photo_data` field at 10 MB. The middleware ceiling sits just above
+# that so legitimate uploads are never silently rejected at the edge.
 @app.middleware("http")
 async def limit_request_body(request: Request, call_next):
     content_length = request.headers.get("content-length")
@@ -3588,7 +3598,14 @@ def upload_run_photo(
     category = getattr(run, 'category', 'outdoor') or 'outdoor'
     if category != 'outdoor':
         raise HTTPException(status_code=400, detail="Scenic photos are only for outdoor runs")
-    
+
+    existing_count = db.query(RunPhoto).filter(RunPhoto.run_id == run_id).count()
+    if existing_count >= MAX_PHOTOS_PER_ACTIVITY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This run already has {MAX_PHOTOS_PER_ACTIVITY} photos (the per-run limit).",
+        )
+
     base64_data = photo_data.get("photo_data")
     distance_marker = photo_data.get("distance_marker_km")
     caption = photo_data.get("caption")
@@ -3598,9 +3615,9 @@ def upload_run_photo(
     if not base64_data:
         raise HTTPException(status_code=400, detail="photo_data is required")
     
-    # 2400px JPEG at 0.85 quality is ~1.5-2.5 MB binary; base64 inflates ~33%
-    # so headroom of 10 MB covers worst-case (less compressible / wider photos)
-    # without rejecting otherwise-valid uploads.
+    # Headroom above the 1200px capture path so manually-uploaded richer
+    # library photos still fit. Anything above 10 MB is almost certainly
+    # something we don't want stored inline in the row anyway.
     MAX_PHOTO_BYTES = 10 * 1024 * 1024
     if len(base64_data) > MAX_PHOTO_BYTES:
         raise HTTPException(status_code=400, detail="Photo exceeds maximum size of 10MB")
@@ -3629,6 +3646,10 @@ def upload_run_photo(
     return {
         "id": photo.id,
         "run_id": photo.run_id,
+        # Mirror the list-response shape so the client can drop the new photo
+        # straight into its list state without a refetch.
+        "thumb_data": photo.thumb_data,
+        "is_thumb": True,
         "distance_marker_km": photo.distance_marker_km,
         "caption": photo.caption,
         "created_at": photo.created_at.isoformat() if photo.created_at else None,
@@ -3639,17 +3660,99 @@ def upload_run_photo(
 def get_run_photos(
     run_id: int,
     thumbnails_only: bool = False,
+    full: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth)
 ):
-    """Get photos for a run. Pass ?thumbnails_only=true to skip base64 data (faster for thumbnail grids)."""
+    """Get photos for a run.
+
+    Response shape:
+      - default: returns `thumb_data` (small base64 thumb, ~5–15 KB each).
+        Used by carousels / grids. Lazily backfills missing thumbs in-place.
+      - `?full=true`: returns full-resolution `photo_data` (legacy parity).
+      - `?thumbnails_only=true`: returns no base64 at all (just metadata).
+    """
     run = db.query(Run).filter(Run.id == run_id).first()
     if not run or run.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Run not found")
     photos = db.query(RunPhoto).filter(RunPhoto.run_id == run_id).order_by(RunPhoto.distance_marker_km.asc()).all()
+
     if thumbnails_only:
-        return [{"id": p.id, "run_id": p.run_id, "distance_marker_km": p.distance_marker_km, "caption": p.caption, "created_at": p.created_at.isoformat() if p.created_at else None} for p in photos]
-    return [{"id": p.id, "run_id": p.run_id, "photo_data": p.photo_data, "distance_marker_km": p.distance_marker_km, "caption": p.caption, "created_at": p.created_at.isoformat() if p.created_at else None} for p in photos]
+        return [
+            {
+                "id": p.id,
+                "run_id": p.run_id,
+                "distance_marker_km": p.distance_marker_km,
+                "caption": p.caption,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in photos
+        ]
+
+    if full:
+        return [
+            {
+                "id": p.id,
+                "run_id": p.run_id,
+                "photo_data": p.photo_data,
+                "distance_marker_km": p.distance_marker_km,
+                "caption": p.caption,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in photos
+        ]
+
+    # Default: thumbnails. Lazy-backfill missing ones so legacy rows get
+    # generated on first read instead of staying broken forever.
+    dirty = False
+    items: list[dict] = []
+    for p in photos:
+        thumb = getattr(p, "thumb_data", None)
+        if thumb is None:
+            thumb = _make_thumbnail_b64(p.photo_data)
+            if thumb:
+                p.thumb_data = thumb
+                dirty = True
+        items.append({
+            "id": p.id,
+            "run_id": p.run_id,
+            "thumb_data": thumb,
+            "is_thumb": True,
+            "distance_marker_km": p.distance_marker_km,
+            "caption": p.caption,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+    if dirty:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+    return items
+
+
+@app.get("/runs/{run_id}/photos/{photo_id}/full")
+def get_run_photo_full(
+    run_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return one run photo's full-resolution base64 on demand. Used by the
+    lightbox / pinch-zoomable viewer once the user taps a thumbnail."""
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    p = db.query(RunPhoto).filter(RunPhoto.id == photo_id, RunPhoto.run_id == run_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {
+        "id": p.id,
+        "run_id": p.run_id,
+        "photo_data": p.photo_data,
+        "distance_marker_km": p.distance_marker_km,
+        "caption": p.caption,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
 
 
 @app.delete("/runs/{run_id}/photos/{photo_id}")
@@ -4118,6 +4221,13 @@ def upload_walk_photo(
     if not walk:
         raise HTTPException(status_code=404, detail="Walk not found")
 
+    existing_count = db.query(WalkPhoto).filter(WalkPhoto.walk_id == walk_id).count()
+    if existing_count >= MAX_PHOTOS_PER_ACTIVITY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This walk already has {MAX_PHOTOS_PER_ACTIVITY} photos (the per-walk limit).",
+        )
+
     base64_data = payload.get("photo_data")
     if not base64_data:
         raise HTTPException(status_code=400, detail="photo_data is required")
@@ -4147,6 +4257,10 @@ def upload_walk_photo(
     return {
         "id": photo.id,
         "walk_id": photo.walk_id,
+        # Mirror the list-response shape so the client can drop the new photo
+        # straight into its list state without a refetch.
+        "thumb_data": photo.thumb_data,
+        "is_thumb": True,
         "lat": photo.lat,
         "lng": photo.lng,
         "distance_marker_km": photo.distance_marker_km,
@@ -4158,26 +4272,89 @@ def upload_walk_photo(
 @app.get("/walks/{walk_id}/photos")
 def list_walk_photos(
     walk_id: int,
+    full: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    """List a walk's photos.
+
+    Response shape:
+      - default: returns `thumb_data` (small base64 thumb). Used by carousel
+        + grid on the walk detail. Lazily backfills missing thumbs in-place.
+      - `?full=true`: returns full-resolution `photo_data` (legacy parity).
+    """
     walk = crud.get_walk(db, walk_id=walk_id, user_id=current_user.id)
     if not walk:
         raise HTTPException(status_code=404, detail="Walk not found")
     photos = crud.get_walk_photos(db, walk_id=walk_id)
-    return [
-        {
+
+    if full:
+        return [
+            {
+                "id": p.id,
+                "walk_id": p.walk_id,
+                "photo_data": p.photo_data,
+                "lat": p.lat,
+                "lng": p.lng,
+                "distance_marker_km": p.distance_marker_km,
+                "caption": p.caption,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in photos
+        ]
+
+    dirty = False
+    items: list[dict] = []
+    for p in photos:
+        thumb = getattr(p, "thumb_data", None)
+        if thumb is None:
+            thumb = _make_thumbnail_b64(p.photo_data)
+            if thumb:
+                p.thumb_data = thumb
+                dirty = True
+        items.append({
             "id": p.id,
             "walk_id": p.walk_id,
-            "photo_data": p.photo_data,
+            "thumb_data": thumb,
+            "is_thumb": True,
             "lat": p.lat,
             "lng": p.lng,
             "distance_marker_km": p.distance_marker_km,
             "caption": p.caption,
             "created_at": p.created_at.isoformat() if p.created_at else None,
-        }
-        for p in photos
-    ]
+        })
+    if dirty:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+    return items
+
+
+@app.get("/walks/{walk_id}/photos/{photo_id}/full")
+def get_walk_photo_full(
+    walk_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return one walk photo's full-resolution base64 on demand."""
+    walk = crud.get_walk(db, walk_id=walk_id, user_id=current_user.id)
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    p = db.query(WalkPhoto).filter(WalkPhoto.id == photo_id, WalkPhoto.walk_id == walk_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {
+        "id": p.id,
+        "walk_id": p.walk_id,
+        "photo_data": p.photo_data,
+        "lat": p.lat,
+        "lng": p.lng,
+        "distance_marker_km": p.distance_marker_km,
+        "caption": p.caption,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
 
 
 @app.delete("/walks/{walk_id}/photos/{photo_id}")

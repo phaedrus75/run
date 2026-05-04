@@ -7,7 +7,7 @@
  * with photo pins, pinch/pan; notes + add/delete photos only.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from './RunTypeButton';
 import { WalkMap, type MapMarker } from './WalkMap';
@@ -39,6 +40,7 @@ import {
   type NeighbourhoodMe,
 } from '../services/api';
 import { albumCache } from '../services/albumCache';
+import { MAX_PHOTOS_PER_ACTIVITY } from '../constants/photos';
 import { decodePolyline, pointAlongRouteAtKm, formatDistanceKm } from '../services/walkLocationTracker';
 import type { RouteForRetroactive } from '../services/retroactivePhotos';
 
@@ -82,6 +84,9 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   const [pendingCaption, setPendingCaption] = useState('');
   const [uploading, setUploading] = useState(false);
   const [lightboxPhoto, setLightboxPhoto] = useState<RunPhoto | null>(null);
+  /** Full-resolution base64 for the photo currently in the lightbox; fetched
+   *  on demand because the list response only carries thumbnails. */
+  const [lightboxFull, setLightboxFull] = useState<string | null>(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   // Retroactive photo picker state — opens a sheet that pulls photos from
   // the user's library matching the run's [started_at - 15min, completed_at +
@@ -159,6 +164,17 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
     return out;
   }, [gpsTracked, photos, routePoints]);
 
+  /** Tap a photo marker on the map → open the same lightbox the grid uses. */
+  const handleMarkerPress = useCallback(
+    (markerId: string) => {
+      if (!markerId.startsWith('run-photo-')) return;
+      const photoId = Number(markerId.slice('run-photo-'.length));
+      const found = photos.find((p) => p.id === photoId);
+      if (found) setLightboxPhoto(found);
+    },
+    [photos],
+  );
+
   const [mapZoom, setMapZoom] = useState(15);
 
   useEffect(() => {
@@ -187,14 +203,33 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
     }
   }, [visible, run]);
 
+  // When the lightbox opens, fetch the full-res photo on demand. The list
+  // response only carries thumbnails — full-res is only paid for when the
+  // user actually wants to look closely.
+  useEffect(() => {
+    setLightboxFull(null);
+    if (!lightboxPhoto || !run) return;
+    let cancelled = false;
+    photoApi
+      .getRunPhotoFull(run.id, lightboxPhoto.id)
+      .then((p) => {
+        if (cancelled) return;
+        if (p?.photo_data) setLightboxFull(p.photo_data);
+      })
+      .catch(() => {
+        // Non-fatal — the thumb stays visible.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lightboxPhoto, run]);
+
   const fetchPhotos = async () => {
     if (!run) return;
     setLoadingPhotos(true);
     try {
-      // Fetch full photo data so we can actually render thumbnails. The previous
-      // `thumbnails_only: true` was a half-finished optimization — the server omitted
-      // photo_data but the UI never rendered an <Image>, so every photo appeared as a
-      // text-only placeholder ("📍2.347K") and looked corrupted to the user.
+      // Default response carries `thumb_data` only — small + fast even for
+      // photo-heavy runs. The lightbox upgrades to full-res on demand.
       const data = await photoApi.getForRun(run.id);
       setPhotos(data);
     } catch {
@@ -222,20 +257,41 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   };
 
   const pickPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.7,
-    });
+    if (photos.length >= MAX_PHOTOS_PER_ACTIVITY) {
+      Alert.alert(
+        'Photo limit reached',
+        `${MAX_PHOTOS_PER_ACTIVITY} photos is the limit per run. Remove one to add another.`,
+      );
+      return;
+    }
+    // Wrap to surface failures (denied permission, OOM on large HEIC, etc.)
+    // as a friendly alert. Reading base64 from disk after the manipulator
+    // writes the resized JPEG avoids holding both the decoded original and
+    // the encoded base64 in memory simultaneously.
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
 
-    if (!result.canceled && result.assets[0]) {
       const manipulated = await ImageManipulator.manipulateAsync(
         result.assets[0].uri,
-        [{ resize: { width: 800 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        [{ resize: { width: 1600 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
+      const base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
       setPendingPhotoUri(manipulated.uri);
-      setPendingPhotoBase64(manipulated.base64 || null);
+      setPendingPhotoBase64(base64);
       setPhotoStep('marker');
+    } catch (e: any) {
+      console.warn('Photo pick failed', e);
+      Alert.alert(
+        'Could not attach photo',
+        e?.message ?? 'Try a different photo.',
+      );
     }
   };
 
@@ -405,6 +461,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                   showUserLocation={false}
                   routeColor="#F97316"
                   interactive
+                  onMarkerPress={handleMarkerPress}
                 />
                 <View style={styles.mapZoomBar} pointerEvents="box-none">
                   <TouchableOpacity
@@ -579,16 +636,19 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                               onPress={() => setLightboxPhoto(photo)}
                               style={styles.photoThumb}
                             >
-                              {photo.photo_data ? (
-                                <Image
-                                  source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
-                                  style={styles.photoThumbImage}
-                                />
-                              ) : (
-                                <View style={[styles.photoThumbImage, styles.photoThumbPlaceholder]}>
-                                  <Text style={styles.photoThumbPlaceholderText}>📍{km}K</Text>
-                                </View>
-                              )}
+                              {(() => {
+                                const src = photo.thumb_data ?? photo.photo_data;
+                                return src ? (
+                                  <Image
+                                    source={{ uri: `data:image/jpeg;base64,${src}` }}
+                                    style={styles.photoThumbImage}
+                                  />
+                                ) : (
+                                  <View style={[styles.photoThumbImage, styles.photoThumbPlaceholder]}>
+                                    <Text style={styles.photoThumbPlaceholderText}>📍{km}K</Text>
+                                  </View>
+                                );
+                              })()}
                               <View style={styles.photoMarkerBadge}>
                                 <Text style={styles.photoMarkerBadgeText}>{km}K</Text>
                               </View>
@@ -727,6 +787,11 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                 showUserLocation={false}
                 routeColor="#F97316"
                 interactive
+                onMarkerPress={(id) => {
+                  // Close the fullscreen map first so the lightbox shows on top.
+                  setMapFullscreen(false);
+                  handleMarkerPress(id);
+                }}
               />
             )}
             <View style={styles.mapFullZoomBar} pointerEvents="box-none">
@@ -764,13 +829,20 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             style={styles.lightboxOverlay}
             onPress={() => setLightboxPhoto(null)}
           >
-            {lightboxPhoto?.photo_data && (
-              <Image
-                source={{ uri: `data:image/jpeg;base64,${lightboxPhoto.photo_data}` }}
-                style={styles.lightboxImage}
-                resizeMode="contain"
-              />
-            )}
+            {(() => {
+              const src =
+                lightboxFull ??
+                lightboxPhoto?.photo_data ??
+                lightboxPhoto?.thumb_data ??
+                null;
+              return src ? (
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${src}` }}
+                  style={styles.lightboxImage}
+                  resizeMode="contain"
+                />
+              ) : null;
+            })()}
             {lightboxPhoto && (
               <View style={styles.lightboxInfo}>
                 <Text style={styles.lightboxMarker}>

@@ -29,7 +29,11 @@ import { colors, radius, spacing, typography, shadows } from '../theme/colors';
 
 export interface HeroPhoto {
   id: number;
+  /** Full-resolution base64 JPEG, if loaded. Falls back to thumb when missing. */
   photo_data?: string | null;
+  /** Small base64 thumbnail. Used as the carousel source — full-res is only
+   *  needed when the user opens the lightbox. */
+  thumb_data?: string | null;
   distance_marker_km?: number | null;
   caption?: string | null;
 }
@@ -69,17 +73,22 @@ export function PhotoHeroCarousel({ photos, onPress }: Props) {
                 { transform: [{ scale: pressed ? 0.98 : 1 }] },
               ]}
             >
-              {photo.photo_data ? (
-                <Image
-                  source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
-                  style={styles.image}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={[styles.image, styles.placeholder]}>
-                  <Text style={styles.placeholderText}>📷</Text>
-                </View>
-              )}
+              {(() => {
+                // Prefer the thumbnail (cheap to render, ~5–15 KB) and fall
+                // back to the full image only if the caller already has it.
+                const src = photo.thumb_data ?? photo.photo_data;
+                return src ? (
+                  <Image
+                    source={{ uri: `data:image/jpeg;base64,${src}` }}
+                    style={styles.image}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.image, styles.placeholder]}>
+                    <Text style={styles.placeholderText}>📷</Text>
+                  </View>
+                );
+              })()}
 
               {/* Distance pill — top-left */}
               {km != null && (

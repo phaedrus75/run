@@ -25,6 +25,8 @@ import ConfettiCannon from 'react-native-confetti-cannon';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
+import { MAX_PHOTOS_PER_ACTIVITY } from '../constants/photos';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunTypeButton } from '../components/RunTypeButton';
 import { Timer } from '../components/Timer';
@@ -186,23 +188,40 @@ export function RunScreen({ navigation }: RunScreenProps) {
   };
 
   const pickPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.7,
-      base64: false,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      const manipulated = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 800 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+    if (scenicPhotos.length >= MAX_PHOTOS_PER_ACTIVITY) {
+      Alert.alert(
+        'Photo limit reached',
+        `${MAX_PHOTOS_PER_ACTIVITY} photos is the limit per run.`,
       );
+      return;
+    }
+    // Wrap so any picker / manipulator failure (permission, OOM on large
+    // HEIC, etc.) surfaces as an alert instead of crashing the app.
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+        base64: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
 
+      const manipulated = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 1600 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+      );
+      const base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
       setPendingPhotoUri(manipulated.uri);
-      setPendingPhotoBase64(manipulated.base64 || null);
+      setPendingPhotoBase64(base64);
       setPhotoStep('marker');
+    } catch (e: any) {
+      console.warn('Photo pick failed', e);
+      Alert.alert(
+        'Could not attach photo',
+        e?.message ?? 'Try a different photo.',
+      );
     }
   };
 

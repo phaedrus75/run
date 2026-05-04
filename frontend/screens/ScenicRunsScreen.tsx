@@ -62,7 +62,11 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
     setSelectedRun(run);
     setLoadingPhotos(true);
     try {
-      const photos = await photoApi.getForRun(run.id);
+      // Scenic runs feed shows the photos full-screen as the focus of the
+      // experience, so we ask for full-res up front. (TODO: switch to thumbs
+      // for the in-list grid + on-demand full-res for the lightbox the same
+      // way WalkDetail / EditRunModal now do.)
+      const photos = await photoApi.getForRun(run.id, { full: true });
       setRunPhotos(photos);
     } catch (e) {
       console.error('Failed to fetch run photos:', e);

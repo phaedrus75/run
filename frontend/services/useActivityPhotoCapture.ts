@@ -13,10 +13,13 @@
  *   4. Mirrors the manifest into React state for the active screen UI.
  *   5. Kicks the archiver (best-effort, non-blocking).
  *
- * Resolution choice: 2400px wide, JPEG quality 0.85. ~3x sharper than the
- * old 1200px while still keeping the upload payload around 1.5–2 MB. The
- * user's full-resolution original is independently saved to their Photos
- * library by `photoArchiver` (writeOnly permission).
+ * Resolution choice: 1200px wide, JPEG quality 0.85. Lands at ~400–700 KB
+ * binary / ~530–930 KB base64 per photo — small enough for snappy uploads on
+ * cellular and many photos per activity, while still enough resolution for
+ * the album grid + full-screen viewer at typical phone densities. The user's
+ * full-resolution original is independently saved to their Photos library by
+ * `photoArchiver` (writeOnly permission), so the canonical sharp copy is
+ * always kept on-device regardless of what we upload.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -37,9 +40,10 @@ import {
 } from './photoSession';
 import { archivePhoto, getMediaPermissionState } from './photoArchiver';
 import { WalkSnapshot } from './walkLocationTracker';
+import { MAX_PHOTOS_PER_ACTIVITY } from '../constants/photos';
 
 /** Width of the JPEG we resize to before saving + uploading. */
-const UPLOAD_WIDTH_PX = 2400;
+const UPLOAD_WIDTH_PX = 1200;
 const UPLOAD_QUALITY = 0.85;
 
 interface TrackerHandle {
@@ -128,6 +132,13 @@ export function useActivityPhotoCapture(
 
   const capturePhoto = useCallback(async () => {
     if (capturing) return;
+    if (pendingPhotos.length >= MAX_PHOTOS_PER_ACTIVITY) {
+      Alert.alert(
+        'Photo limit reached',
+        `${MAX_PHOTOS_PER_ACTIVITY} photos is the limit per ${kind}. Save this one and start another for more.`,
+      );
+      return;
+    }
     setCapturing(true);
     try {
       const cam = await ImagePicker.requestCameraPermissionsAsync();
@@ -197,7 +208,7 @@ export function useActivityPhotoCapture(
     } finally {
       setCapturing(false);
     }
-  }, [capturing, kind, refresh, tracker]);
+  }, [capturing, kind, pendingPhotos.length, refresh, tracker]);
 
   const removePhoto = useCallback(async (photoId: string) => {
     const id = sessionIdRef.current;

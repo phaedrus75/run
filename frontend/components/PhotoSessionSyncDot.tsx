@@ -1,6 +1,15 @@
 /**
  * Status light on in-activity photo thumbnails: Photos library + server upload.
- * Blinking yellow until both are done, then solid green. Red / orange for failures / denied.
+ * Blinking yellow until done, then solid green. Red / orange for failures / denied.
+ *
+ * Semantics depend on whether the activity has been saved to the server yet:
+ *   - **During an active run/walk** (`hasServerActivity = false`): the photo
+ *     can't be uploaded because there's no run/walk id on the server to attach
+ *     it to. "Green" therefore means "safely on disk + Photos library" — that
+ *     is the strongest guarantee available before save. Upload happens after
+ *     the user hits Save and is reflected on the post-save screen.
+ *   - **After save** (`hasServerActivity = true`): "green" requires both the
+ *     archive and the server upload to be done.
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -9,11 +18,23 @@ import type { PhotoEntry } from '../services/photoSession';
 
 export type PhotoSessionSyncVisual = 'green' | 'yellow' | 'red' | 'orange';
 
-export function photoEntrySyncVisual(p: PhotoEntry): PhotoSessionSyncVisual {
-  if (p.upload.status === 'failed' || p.archive.status === 'failed') return 'red';
+export function photoEntrySyncVisual(
+  p: PhotoEntry,
+  hasServerActivity = false,
+): PhotoSessionSyncVisual {
+  // Failures and denials are always called out — they're actionable.
+  if (p.archive.status === 'failed') return 'red';
   if (p.archive.status === 'denied') return 'orange';
-  if (p.archive.status === 'done' && p.upload.status === 'done') return 'green';
-  return 'yellow';
+  if (hasServerActivity && p.upload.status === 'failed') return 'red';
+
+  if (hasServerActivity) {
+    return p.archive.status === 'done' && p.upload.status === 'done'
+      ? 'green'
+      : 'yellow';
+  }
+  // No server activity yet — "safe on device" is the strongest available
+  // guarantee. Upload is not possible until linkActivityId runs.
+  return p.archive.status === 'done' ? 'green' : 'yellow';
 }
 
 const COLORS: Record<PhotoSessionSyncVisual, string> = {
@@ -25,12 +46,16 @@ const COLORS: Record<PhotoSessionSyncVisual, string> = {
 
 export function PhotoSessionSyncDot({
   photo,
+  hasServerActivity = false,
   style,
 }: {
   photo: PhotoEntry;
+  /** True once `linkActivityId` has stamped a run/walk id onto the manifest.
+   *  During an active recording this is always false. */
+  hasServerActivity?: boolean;
   style?: object;
 }) {
-  const visual = photoEntrySyncVisual(photo);
+  const visual = photoEntrySyncVisual(photo, hasServerActivity);
   const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {

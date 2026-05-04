@@ -49,6 +49,9 @@ export interface WalkMapProps {
   routeWidth?: number;
   /** Enable pinch / pan / rotate on the map (default false for backward compatibility). */
   interactive?: boolean;
+  /** Fired when the user taps a marker. Receives the marker's `id` so the
+   *  caller can look up the underlying entity (e.g. a photo). */
+  onMarkerPress?: (markerId: string) => void;
 }
 
 export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
@@ -62,9 +65,26 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
     routeColor = colors.primary,
     routeWidth = 6,
     interactive = false,
+    onMarkerPress,
   },
   ref,
 ) {
+  // Both AppleMaps and GoogleMaps in expo-maps fire `onMarkerClick` with an
+  // event whose shape varies by version — sometimes `{ id }`, sometimes the
+  // full marker object. Read defensively and pass the id back to the caller.
+  const handleMarkerClick = React.useCallback(
+    (event: any) => {
+      if (!onMarkerPress) return;
+      const id =
+        event?.id ??
+        event?.markerId ??
+        event?.marker?.id ??
+        event?.nativeEvent?.id ??
+        null;
+      if (typeof id === 'string') onMarkerPress(id);
+    },
+    [onMarkerPress],
+  );
   if (!AppleMaps && !GoogleMaps) {
     return (
       <View style={[styles.placeholder, style]}>
@@ -125,6 +145,7 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
         markers={appleMarkers.length ? appleMarkers : undefined}
         properties={{ isMyLocationEnabled: showUserLocation }}
         uiSettings={appleUi}
+        onMarkerClick={onMarkerPress ? handleMarkerClick : undefined}
       />
     );
   }
@@ -166,6 +187,7 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
         markers={googleMarkers.length ? googleMarkers : undefined}
         properties={{ isMyLocationEnabled: showUserLocation }}
         uiSettings={googleUi}
+        onMarkerClick={onMarkerPress ? handleMarkerClick : undefined}
       />
     );
   }
