@@ -37,10 +37,15 @@ interface Circle {
   joined_at: string;
 }
 
+// Module-level cache so the Circles list renders instantly on every focus
+// after the first cold load. The fetch still runs in the background to
+// pick up new circles or member counts.
+let circlesCache: Circle[] | null = null;
+
 export function CirclesScreen({ navigation }: any) {
   const { logout } = useAuth();
-  const [circles, setCircles] = useState<Circle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [circles, setCircles] = useState<Circle[]>(circlesCache ?? []);
+  const [loading, setLoading] = useState(circlesCache === null);
   const [refreshing, setRefreshing] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -57,7 +62,9 @@ export function CirclesScreen({ navigation }: any) {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
-        setCircles(await response.json());
+        const data = await response.json();
+        circlesCache = data;
+        setCircles(data);
       } else if (response.status === 401) {
         Alert.alert('Session Expired', 'Please log in again.', [
           { text: 'OK', onPress: () => logout() },

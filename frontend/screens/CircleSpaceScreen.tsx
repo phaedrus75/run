@@ -37,10 +37,13 @@ interface CircleMember {
 
 interface CirclePhoto {
   id: number;
-  photo_data: string;
+  thumb_data?: string | null;
+  photo_data?: string | null;
+  is_thumb?: boolean;
   caption: string | null;
   distance_marker_km: number;
   user_name: string;
+  run_id?: number | null;
   run_distance: string;
   run_date: string | null;
   created_at: string | null;
@@ -58,20 +61,36 @@ interface CircleDetails {
   created_by: number;
 }
 
+// Module-level cache so re-opening a circle is instant. Subsequent focus
+// events revalidate in the background while showing the cached scaffold.
+type CircleSpaceCacheEntry = {
+  feed: FeedItem[];
+  details: CircleDetails | null;
+  photos: CirclePhoto[];
+};
+const circleSpaceCache: Map<number, CircleSpaceCacheEntry> = new Map();
+
 export function CircleSpaceScreen({ route, navigation }: any) {
   const { circleId, circleName } = route.params;
+  const cached = circleSpaceCache.get(circleId);
   const [activeTab, setActiveTab] = useState<Tab>('feed');
   const [refreshing, setRefreshing] = useState(false);
 
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [details, setDetails] = useState<CircleDetails | null>(null);
-  const [photos, setPhotos] = useState<CirclePhoto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [feed, setFeed] = useState<FeedItem[]>(cached?.feed ?? []);
+  const [details, setDetails] = useState<CircleDetails | null>(cached?.details ?? null);
+  const [photos, setPhotos] = useState<CirclePhoto[]>(cached?.photos ?? []);
+  // Per-section loaders so the screen scaffold (header + tabs) renders
+  // immediately and each tab fills in independently.
+  const [detailsLoading, setDetailsLoading] = useState(!cached?.details);
+  const [feedLoading, setFeedLoading] = useState(!cached);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [photosFetched, setPhotosFetched] = useState(!!cached);
 
   const [checkinEmoji, setCheckinEmoji] = useState('👋');
   const [checkinMessage, setCheckinMessage] = useState('');
 
   const [selectedPhoto, setSelectedPhoto] = useState<CirclePhoto | null>(null);
+  const [selectedFull, setSelectedFull] = useState<string | null>(null);
 
   const authFetch = async (url: string, options: any = {}) => {
     const token = await getToken();
@@ -81,33 +100,101 @@ export function CircleSpaceScreen({ route, navigation }: any) {
     });
   };
 
-  const fetchAll = useCallback(async () => {
-    try {
-      const [feedRes, detailsRes, photosRes] = await Promise.all([
-        authFetch(`${API_BASE_URL}/circles/${circleId}/feed`),
-        authFetch(`${API_BASE_URL}/circles/${circleId}`),
-        authFetch(`${API_BASE_URL}/circles/${circleId}/photos`),
-      ]);
-      if (feedRes.ok) setFeed(await feedRes.json());
-      if (detailsRes.ok) setDetails(await detailsRes.json());
-      if (photosRes.ok) setPhotos(await photosRes.json());
-    } catch (e) {
-      console.error('Failed to fetch circle data:', e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const writeCache = useCallback((patch: Partial<CircleSpaceCacheEntry>) => {
+    const prev = circleSpaceCache.get(circleId) ?? { feed: [], details: null, photos: [] };
+    circleSpaceCache.set(circleId, { ...prev, ...patch });
   }, [circleId]);
 
+  const fetchFeed = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/circles/${circleId}/feed`);
+      if (res.ok) {
+        const data = await res.json();
+        setFeed(data);
+        writeCache({ feed: data });
+      }
+    } catch (e) {
+      console.error('Failed to fetch circle feed:', e);
+    } finally {
+      setFeedLoading(false);
+    }
+  }, [circleId, writeCache]);
+
+  const fetchDetails = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/circles/${circleId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDetails(data);
+        writeCache({ details: data });
+      }
+    } catch (e) {
+      console.error('Failed to fetch circle details:', e);
+    } finally {
+      setDetailsLoading(false);
+    }
+  }, [circleId, writeCache]);
+
+  const fetchPhotos = useCallback(async () => {
+    setPhotosLoading(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/circles/${circleId}/photos`);
+      if (res.ok) {
+        const data = await res.json();
+        setPhotos(data);
+        writeCache({ photos: data });
+      }
+    } catch (e) {
+      console.error('Failed to fetch circle photos:', e);
+    } finally {
+      setPhotosLoading(false);
+      setPhotosFetched(true);
+    }
+  }, [circleId, writeCache]);
+
+  // Always refresh feed + details on focus (cheap, small payloads).
+  // Defer photos until the user actually visits the Photos tab — they're
+  // the heaviest payload and most opens never visit that tab.
   useFocusEffect(
     useCallback(() => {
-      fetchAll();
-    }, [fetchAll])
+      fetchFeed();
+      fetchDetails();
+    }, [fetchFeed, fetchDetails])
   );
+
+  // Fetch photos lazily — first time the Photos tab is opened.
+  React.useEffect(() => {
+    if (activeTab === 'photos' && !photosFetched && !photosLoading) {
+      fetchPhotos();
+    }
+  }, [activeTab, photosFetched, photosLoading, fetchPhotos]);
+
+  // Fetch full-resolution image when the lightbox opens.
+  React.useEffect(() => {
+    let cancelled = false;
+    setSelectedFull(null);
+    if (!selectedPhoto) return;
+    if (selectedPhoto.photo_data && !selectedPhoto.is_thumb) {
+      setSelectedFull(selectedPhoto.photo_data);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await authFetch(`${API_BASE_URL}/circles/${circleId}/photos/${selectedPhoto.id}/full`);
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          setSelectedFull(data.photo_data ?? null);
+        }
+      } catch (e) {
+        console.error('Failed to fetch full photo:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedPhoto, circleId]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchAll();
+    Promise.all([fetchFeed(), fetchDetails(), fetchPhotos()]).finally(() => setRefreshing(false));
   };
 
   const handleReact = async (itemType: string, itemId: number, emoji: string) => {
@@ -130,7 +217,8 @@ export function CircleSpaceScreen({ route, navigation }: any) {
         body: JSON.stringify({ emoji: checkinEmoji, message: checkinMessage }),
       });
       setCheckinMessage('');
-      fetchAll();
+      fetchFeed();
+      fetchDetails();
     } catch (e) {
       Alert.alert('Error', 'Failed to check in');
     }
@@ -202,7 +290,9 @@ export function CircleSpaceScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {feed.length === 0 && !loading ? (
+      {feedLoading && feed.length === 0 ? (
+        <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.xl }} />
+      ) : feed.length === 0 ? (
         <View style={styles.emptyFeed}>
           <Text style={styles.emptyEmoji}>🌿</Text>
           <Text style={styles.emptyText}>No activity yet. Log a run or check in to get started.</Text>
@@ -255,39 +345,39 @@ export function CircleSpaceScreen({ route, navigation }: any) {
 
   const photoSize = (SCREEN_WIDTH - spacing.lg * 2 - spacing.xs * 2) / 3;
 
-  const renderPhotosTab = () => (
-    <View>
-      {photos.length === 0 ? (
+  const renderPhotosTab = () => {
+    if (photosLoading && photos.length === 0) {
+      return <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.xl }} />;
+    }
+    if (photos.length === 0) {
+      return (
         <View style={styles.emptyFeed}>
           <Text style={styles.emptyEmoji}>📷</Text>
           <Text style={styles.emptyText}>No trail photos yet. Share your scenic runs.</Text>
         </View>
-      ) : (
-        <View style={styles.photoGrid}>
-          {photos.map(photo => (
+      );
+    }
+    return (
+      <View style={styles.photoGrid}>
+        {photos.map(photo => {
+          const src = photo.thumb_data || photo.photo_data;
+          if (!src) return null;
+          return (
             <TouchableOpacity
               key={photo.id}
               style={[styles.photoThumbnail, { width: photoSize, height: photoSize }]}
               onPress={() => setSelectedPhoto(photo)}
             >
               <Image
-                source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
+                source={{ uri: `data:image/jpeg;base64,${src}` }}
                 style={styles.photoImage}
               />
             </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 100 }} />
-      </SafeAreaView>
+          );
+        })}
+      </View>
     );
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -333,10 +423,17 @@ export function CircleSpaceScreen({ route, navigation }: any) {
             {selectedPhoto && (
               <>
                 <Image
-                  source={{ uri: `data:image/jpeg;base64,${selectedPhoto.photo_data}` }}
+                  source={{ uri: `data:image/jpeg;base64,${selectedFull || selectedPhoto.thumb_data || selectedPhoto.photo_data}` }}
                   style={styles.photoModalImage}
                   resizeMode="contain"
                 />
+                {!selectedFull && (
+                  <ActivityIndicator
+                    size="small"
+                    color="#fff"
+                    style={styles.photoModalLoader}
+                  />
+                )}
                 <View style={styles.photoModalInfo}>
                   <Text style={styles.photoModalName}>{selectedPhoto.user_name}</Text>
                   <Text style={styles.photoModalDetail}>
@@ -613,6 +710,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 350,
     borderRadius: radius.md,
+  },
+  photoModalLoader: {
+    position: 'absolute',
+    top: 165,
+    alignSelf: 'center',
   },
   photoModalInfo: {
     marginTop: spacing.md,

@@ -3483,54 +3483,102 @@ def get_circle_feed(
 @app.get("/circles/{circle_id}/photos")
 def get_circle_photos(
     circle_id: int,
+    full: bool = False,
+    limit: int = Query(60, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth)
 ):
-    """All scenic photos from circle members' runs."""
+    """All scenic photos from circle members' runs.
+
+    Response shape mirrors run/walk photo endpoints:
+      - default: each item has ``thumb_data`` (~5–15 KB base64). Lazy
+        backfills missing thumbs in-place. Capped to ``limit`` most-recent.
+      - ``?full=true``: returns full ``photo_data`` (slow, legacy).
+    """
     _verify_circle_membership(db, circle_id, current_user.id)
 
     member_ids = [m.user_id for m in db.query(CircleMembership).filter(
         CircleMembership.circle_id == circle_id
     ).all()]
+    if not member_ids:
+        return []
 
     from datetime import datetime
     min_date = datetime(2026, 1, 1)
 
-    photos = db.query(RunPhoto).filter(
-        RunPhoto.user_id.in_(member_ids),
-        RunPhoto.created_at >= min_date,
-    ).order_by(RunPhoto.created_at.desc()).all()
+    rows = (
+        db.query(RunPhoto, Run, User)
+        .join(Run, Run.id == RunPhoto.run_id)
+        .join(User, User.id == RunPhoto.user_id)
+        .filter(
+            RunPhoto.user_id.in_(member_ids),
+            RunPhoto.created_at >= min_date,
+        )
+        .order_by(RunPhoto.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
-    user_cache = {}
-    def get_user(uid):
-        if uid not in user_cache:
-            u = db.query(User).filter(User.id == uid).first()
-            user_cache[uid] = u
-        return user_cache[uid]
-
-    run_cache = {}
-    def get_run(rid):
-        if rid not in run_cache:
-            r = db.query(Run).filter(Run.id == rid).first()
-            run_cache[rid] = r
-        return run_cache[rid]
-
-    result = []
-    for p in photos:
-        u = get_user(p.user_id)
-        r = get_run(p.run_id)
-        result.append({
+    dirty = False
+    result: list[dict] = []
+    for p, r, u in rows:
+        item: dict = {
             "id": p.id,
-            "photo_data": p.photo_data,
             "caption": p.caption,
             "distance_marker_km": p.distance_marker_km,
             "user_name": u.name if u else "Runner",
+            "run_id": r.id if r else None,
             "run_distance": r.run_type.upper() if r else "",
             "run_date": r.completed_at.isoformat() if r and r.completed_at else None,
             "created_at": p.created_at.isoformat() if p.created_at else None,
-        })
+        }
+        if full:
+            item["photo_data"] = p.photo_data
+        else:
+            thumb = getattr(p, "thumb_data", None)
+            if thumb is None and p.photo_data:
+                thumb = _make_thumbnail_b64(p.photo_data)
+                if thumb:
+                    p.thumb_data = thumb
+                    dirty = True
+            item["thumb_data"] = thumb
+            item["is_thumb"] = True
+        result.append(item)
 
+    if dirty:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
     return result
+
+
+@app.get("/circles/{circle_id}/photos/{photo_id}/full")
+def get_circle_photo_full(
+    circle_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return one circle photo's full-resolution base64 on demand. Only
+    members of the circle can fetch, and the photo's owner must still be
+    a member."""
+    _verify_circle_membership(db, circle_id, current_user.id)
+    member_ids = {
+        m.user_id
+        for m in db.query(CircleMembership).filter(CircleMembership.circle_id == circle_id).all()
+    }
+    p = db.query(RunPhoto).filter(RunPhoto.id == photo_id).first()
+    if not p or p.user_id not in member_ids:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {
+        "id": p.id,
+        "run_id": p.run_id,
+        "photo_data": p.photo_data,
+        "distance_marker_km": p.distance_marker_km,
+        "caption": p.caption,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
 
 
 @app.post("/circles/{circle_id}/feed/{item_type}/{item_id}/react")
