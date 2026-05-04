@@ -142,7 +142,7 @@ export function StreakModal({ visible, onClose, progress, streakHistory = [] }: 
                 ✅ Complete <Text style={styles.ruleBold}>2 runs of any distance</Text> each week
               </Text>
               <Text style={styles.ruleHint}>
-                Week resets every Sunday at midnight
+                Week resets every Monday at midnight
               </Text>
             </View>
           </ScrollView>

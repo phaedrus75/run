@@ -274,7 +274,7 @@ class CircleCheckin(Base):
     """
     Circle Check-in - Weekly pulse from circle members
     
-    One check-in per member per week (Sunday-Saturday).
+    One check-in per member per week (Monday-Sunday).
     """
     __tablename__ = "circle_checkins"
     

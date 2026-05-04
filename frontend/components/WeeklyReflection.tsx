@@ -18,12 +18,10 @@ interface WeeklyReflectionProps {
   onSaved: () => void;
 }
 
-export function WeeklyReflection({ weekComplete, existingReflection, onSaved }: WeeklyReflectionProps) {
+export function WeeklyReflection({ weekComplete: _weekComplete, existingReflection, onSaved }: WeeklyReflectionProps) {
   const [selectedMood, setSelectedMood] = useState('');
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
-
-  if (!weekComplete) return null;
 
   if (existingReflection?.has_reflection) {
     return (
@@ -51,6 +49,12 @@ export function WeeklyReflection({ weekComplete, existingReflection, onSaved }: 
       setSaving(false);
     }
   };
+
+  // Reflection prompt only appears on the weekend (Sat/Sun) — give people the
+  // weekend window to look back on their Mon-Sun week.
+  const day = new Date().getDay(); // 0=Sun, 6=Sat
+  const isWeekend = day === 0 || day === 6;
+  if (!isWeekend) return null;
 
   return (
     <View style={[styles.card, shadows.small]}>

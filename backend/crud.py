@@ -194,12 +194,16 @@ def is_valid_streak_week(runs: List[Run]) -> bool:
 
 
 def get_week_boundaries_for_date(date: datetime) -> tuple:
-    """Get Sunday-Saturday week boundaries for a given date"""
-    days_since_sunday = (date.weekday() + 1) % 7
-    sunday = date - timedelta(days=days_since_sunday)
-    sunday = sunday.replace(hour=0, minute=0, second=0, microsecond=0)
-    saturday = sunday + timedelta(days=6, hours=23, minutes=59, seconds=59)
-    return (sunday, saturday)
+    """Get Monday-Sunday week boundaries for a given date.
+
+    Weeks run Mon 00:00 → Sun 23:59:59 so the weekend is the catch-up window
+    at the END of the week.
+    """
+    days_since_monday = date.weekday()  # Monday=0, Sunday=6
+    monday = date - timedelta(days=days_since_monday)
+    monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    sunday = monday + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    return (monday, sunday)
 
 
 def calculate_streaks(db: Session, user_id: Optional[int] = None) -> tuple:
@@ -223,10 +227,10 @@ def calculate_streaks(db: Session, user_id: Optional[int] = None) -> tuple:
     # Group runs by week
     weeks_data = {}
     for run in all_runs:
-        sunday, saturday = get_week_boundaries_for_date(run.completed_at)
-        week_key = sunday.strftime("%Y-%m-%d")
+        week_start_dt, _ = get_week_boundaries_for_date(run.completed_at)
+        week_key = week_start_dt.strftime("%Y-%m-%d")
         if week_key not in weeks_data:
-            weeks_data[week_key] = {"start": sunday, "runs": []}
+            weeks_data[week_key] = {"start": week_start_dt, "runs": []}
         weeks_data[week_key]["runs"].append(run)
     
     # Sort weeks from most recent to oldest
@@ -306,10 +310,10 @@ def get_streak_history(db: Session, user_id: Optional[int] = None) -> list:
     
     weeks_data = {}
     for run in all_runs:
-        sunday, saturday = get_week_boundaries_for_date(run.completed_at)
-        week_key = sunday.strftime("%Y-%m-%d")
+        week_start_dt, _ = get_week_boundaries_for_date(run.completed_at)
+        week_key = week_start_dt.strftime("%Y-%m-%d")
         if week_key not in weeks_data:
-            weeks_data[week_key] = {"start": sunday, "runs": []}
+            weeks_data[week_key] = {"start": week_start_dt, "runs": []}
         weeks_data[week_key]["runs"].append(run)
     
     sorted_weeks = sorted(weeks_data.items(), key=lambda x: x[1]["start"])
@@ -387,11 +391,9 @@ def get_stats_summary(db: Session, user_id: Optional[int] = None) -> dict:
             q = q.filter(Run.user_id == user_id)
         return q
     
-    # This week's stats (Sunday-Saturday weeks)
-    days_since_sunday = (now.weekday() + 1) % 7
-    week_start = now - timedelta(days=days_since_sunday)
-    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-    
+    # This week's stats (Monday-Sunday weeks)
+    week_start, _ = get_week_boundaries_for_date(now)
+
     week_runs = base_query().filter(
         Run.completed_at >= week_start,
         Run.completed_at >= min_date
