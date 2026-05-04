@@ -31,9 +31,16 @@ interface CircleMember {
   user_id: number;
   name: string;
   handle: string | null;
+  total_runs: number;
+  total_km: number;
+  weekly_runs: number;
+  weekly_km: number;
   monthly_runs: number;
+  monthly_km: number;
   is_you: boolean;
 }
+
+type MemberRange = 'week' | 'month';
 
 interface CirclePhoto {
   id: number;
@@ -74,6 +81,7 @@ export function CircleSpaceScreen({ route, navigation }: any) {
   const { circleId, circleName } = route.params;
   const cached = circleSpaceCache.get(circleId);
   const [activeTab, setActiveTab] = useState<Tab>('feed');
+  const [memberRange, setMemberRange] = useState<MemberRange>('week');
   const [refreshing, setRefreshing] = useState(false);
 
   const [feed, setFeed] = useState<FeedItem[]>(cached?.feed ?? []);
@@ -359,25 +367,73 @@ export function CircleSpaceScreen({ route, navigation }: any) {
   );
 
   const renderMembersTab = () => {
-    const sortedMembers = [...(details?.members || [])].sort((a, b) => a.name.localeCompare(b.name));
+    const rangeRuns = (m: CircleMember) =>
+      memberRange === 'week' ? m.weekly_runs : m.monthly_runs;
+    const rangeKm = (m: CircleMember) =>
+      memberRange === 'week' ? m.weekly_km : m.monthly_km;
+
+    // Sort by km in the selected range, descending — leaderboard feel.
+    // Ties fall back to name for stable ordering.
+    const sortedMembers = [...(details?.members || [])].sort((a, b) => {
+      const diff = rangeKm(b) - rangeKm(a);
+      if (diff !== 0) return diff;
+      return a.name.localeCompare(b.name);
+    });
+
     return (
       <View>
-        {sortedMembers.map(member => (
-          <View key={member.user_id} style={[styles.memberRow, member.is_you && styles.memberRowYou]}>
-            <View style={styles.memberAvatar}>
-              <Text style={styles.memberAvatarText}>{member.name[0]?.toUpperCase() || '?'}</Text>
-            </View>
-            <View style={styles.memberInfo}>
-              <Text style={styles.memberName}>{member.name}{member.is_you ? ' (You)' : ''}</Text>
-              {member.handle && <Text style={styles.memberHandle}>@{member.handle}</Text>}
-            </View>
-            {member.monthly_runs > 0 && (
-              <View style={styles.ranThisWeek}>
-                <Text style={styles.ranThisWeekText}>ran this month</Text>
+        <View style={styles.rangeToggle}>
+          {(['week', 'month'] as MemberRange[]).map(r => (
+            <TouchableOpacity
+              key={r}
+              style={[styles.rangeOption, memberRange === r && styles.rangeOptionActive]}
+              onPress={() => setMemberRange(r)}
+            >
+              <Text
+                style={[
+                  styles.rangeOptionText,
+                  memberRange === r && styles.rangeOptionTextActive,
+                ]}
+              >
+                {r === 'week' ? 'This week' : 'This month'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {sortedMembers.map((member, idx) => {
+          const runs = rangeRuns(member);
+          const km = rangeKm(member);
+          return (
+            <View
+              key={member.user_id}
+              style={[styles.memberRow, member.is_you && styles.memberRowYou]}
+            >
+              <Text style={styles.memberRank}>{idx + 1}</Text>
+              <View style={styles.memberAvatar}>
+                <Text style={styles.memberAvatarText}>
+                  {member.name[0]?.toUpperCase() || '?'}
+                </Text>
               </View>
-            )}
-          </View>
-        ))}
+              <View style={styles.memberInfo}>
+                <Text style={styles.memberName}>
+                  {member.name}{member.is_you ? ' (You)' : ''}
+                </Text>
+                {member.handle && (
+                  <Text style={styles.memberHandle}>@{member.handle}</Text>
+                )}
+              </View>
+              <View style={styles.memberStats}>
+                <Text style={styles.memberStatPrimary}>
+                  {km.toFixed(1)} km
+                </Text>
+                <Text style={styles.memberStatSecondary}>
+                  {runs} run{runs === 1 ? '' : 's'}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
 
         {details?.invite_code && (
           <View style={[styles.inviteCard, shadows.small]}>
@@ -696,6 +752,53 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.success,
     fontWeight: typography.weights.medium,
+  },
+  rangeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  rangeOption: {
+    flex: 1,
+    paddingVertical: spacing.sm - 2,
+    alignItems: 'center',
+    borderRadius: radius.md,
+  },
+  rangeOptionActive: {
+    backgroundColor: colors.primary,
+  },
+  rangeOptionText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.weights.medium,
+  },
+  rangeOptionTextActive: {
+    color: colors.textOnPrimary,
+    fontWeight: typography.weights.semibold,
+  },
+  memberRank: {
+    width: 24,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginRight: spacing.xs,
+  },
+  memberStats: {
+    alignItems: 'flex-end',
+    marginLeft: spacing.sm,
+  },
+  memberStatPrimary: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  memberStatSecondary: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
   inviteCard: {
     backgroundColor: colors.surface,

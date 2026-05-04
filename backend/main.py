@@ -2139,22 +2139,24 @@ def get_circle_details(
     min_date = datetime(2026, 1, 1)
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    
+    week_start, _ = crud.get_week_boundaries_for_date(now)
+
     members = []
     for m in memberships:
         user = db.query(User).filter(User.id == m.user_id).first()
         if user:
-            # Get user's stats
             user_runs = db.query(Run).filter(
                 Run.user_id == user.id,
                 Run.completed_at >= min_date
             ).all()
-            
+
             monthly_runs = [r for r in user_runs if r.completed_at >= month_start]
-            
+            weekly_runs = [r for r in user_runs if r.completed_at >= week_start]
+
             total_km = sum(r.distance_km for r in user_runs)
             monthly_km = sum(r.distance_km for r in monthly_runs)
-            
+            weekly_km = sum(r.distance_km for r in weekly_runs)
+
             members.append({
                 "user_id": user.id,
                 "name": user.name or "Runner",
@@ -2163,9 +2165,11 @@ def get_circle_details(
                 "total_km": round(total_km, 1),
                 "monthly_km": round(monthly_km, 1),
                 "monthly_runs": len(monthly_runs),
+                "weekly_km": round(weekly_km, 1),
+                "weekly_runs": len(weekly_runs),
                 "is_you": user.id == current_user.id,
             })
-    
+
     # Sort by monthly km (leaderboard)
     members.sort(key=lambda x: x["monthly_km"], reverse=True)
     
