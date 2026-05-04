@@ -94,6 +94,7 @@ export interface Run {
   started_at?: string | null;
   neighbourhood_visibility?: string | null;
   neighbourhood_published_at?: string | null;
+  circles_share?: boolean;
 }
 
 export interface RunPhoto {
@@ -402,6 +403,17 @@ export const runApi = {
   delete: (id: number): Promise<void> => {
     return apiFetch(`/runs/${id}`, { method: 'DELETE' });
   },
+
+  /**
+   * 👥 Share / unshare a run inside the user's circles. Runs are shared
+   * by default; this lets the owner opt a specific run out (and opt
+   * back in later). Returns the updated run.
+   */
+  shareCircles: (id: number): Promise<Run> =>
+    apiFetch(`/runs/${id}/share-circles`, { method: 'POST', body: JSON.stringify({}) }),
+
+  unshareCircles: (id: number): Promise<Run> =>
+    apiFetch(`/runs/${id}/share-circles`, { method: 'DELETE' }),
 };
 
 // ==========================================

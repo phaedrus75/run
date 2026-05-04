@@ -357,6 +357,7 @@ def run_migrations():
                     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_centroid_lat DOUBLE PRECISION",
                     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_centroid_lng DOUBLE PRECISION",
                     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_city VARCHAR",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS circles_share BOOLEAN DEFAULT TRUE",
                 ]:
                     conn.execute(text(stmt))
                 conn.execute(text("""
@@ -478,6 +479,7 @@ def run_migrations():
                 _sqlite_col("runs", "neighbourhood_centroid_lat", "neighbourhood_centroid_lat FLOAT")
                 _sqlite_col("runs", "neighbourhood_centroid_lng", "neighbourhood_centroid_lng FLOAT")
                 _sqlite_col("runs", "neighbourhood_city", "neighbourhood_city VARCHAR")
+                _sqlite_col("runs", "circles_share", "circles_share BOOLEAN DEFAULT 1")
                 _sqlite_col("run_photos", "thumb_data", "thumb_data TEXT")
                 _sqlite_col("walk_photos", "thumb_data", "thumb_data TEXT")
         except Exception as e:
@@ -1796,6 +1798,8 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
         "started_at": getattr(run, "started_at", None),
         "neighbourhood_visibility": getattr(run, "neighbourhood_visibility", None) or "off",
         "neighbourhood_published_at": getattr(run, "neighbourhood_published_at", None),
+        # Default True for legacy rows where the column hasn't been touched.
+        "circles_share": True if getattr(run, "circles_share", None) is None else bool(run.circles_share),
     }
 
 
@@ -2830,6 +2834,42 @@ def unshare_run_neighbourhood(
     return format_run_response(run, db=db)
 
 
+@app.post("/runs/{run_id}/share-circles")
+def share_run_circles(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Re-enable visibility of this run inside the user's circles. This is
+    the default state; the endpoint exists so users who previously opted
+    out can flip it back on. No payload — the run is set circles_share=True."""
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    run.circles_share = True
+    db.commit()
+    db.refresh(run)
+    return format_run_response(run, db=db)
+
+
+@app.delete("/runs/{run_id}/share-circles")
+def unshare_run_circles(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Hide this run from every circle the owner belongs to. The owner
+    still sees their own run in the feed (so they don't lose track of it),
+    but other members no longer do."""
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    run.circles_share = False
+    db.commit()
+    db.refresh(run)
+    return format_run_response(run, db=db)
+
+
 @app.post("/neighbourhood/runs/{run_id}/save")
 @app.post("/neighborhood/runs/{run_id}/save", include_in_schema=False)
 def neighbourhood_save_add(
@@ -3511,10 +3551,26 @@ def get_circle_feed(
     from datetime import datetime
     min_date = datetime(2026, 1, 1)
 
-    runs = db.query(Run).filter(
-        Run.user_id.in_(member_ids),
-        Run.completed_at >= min_date
-    ).order_by(Run.completed_at.desc()).limit(limit).all()
+    # Owners always see their own runs in the feed, even if they've opted
+    # them out of circles. Other members only see runs where the owner
+    # left circles_share at the default-true (or hasn't opted out yet —
+    # legacy rows are treated as visible).
+    from sqlalchemy import or_
+    runs = (
+        db.query(Run)
+        .filter(
+            Run.user_id.in_(member_ids),
+            Run.completed_at >= min_date,
+            or_(
+                Run.user_id == current_user.id,
+                Run.circles_share.is_(None),
+                Run.circles_share.is_(True),
+            ),
+        )
+        .order_by(Run.completed_at.desc())
+        .limit(limit)
+        .all()
+    )
 
     checkins = db.query(CircleCheckin).filter(
         CircleCheckin.circle_id == circle_id,

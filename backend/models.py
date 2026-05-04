@@ -78,6 +78,11 @@ class Run(Base):
     neighbourhood_centroid_lng = Column(Float, nullable=True)
     neighbourhood_city = Column(String, nullable=True)  # snapshot at publish time
 
+    # Circles share (opt-OUT, default visible). Inside any circle the user
+    # belongs to, this run shows up in the feed unless the owner flips
+    # this off. The owner always sees their own runs regardless.
+    circles_share = Column(Boolean, nullable=True, default=True)
+
 
 
 

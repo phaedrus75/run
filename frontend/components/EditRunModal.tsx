@@ -35,6 +35,7 @@ import {
   photoApi,
   levelApi,
   neighbourhoodApi,
+  runApi,
   type Run,
   type RunPhoto,
   type NeighbourhoodMe,
@@ -99,11 +100,18 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
   const [nbShareBusy, setNbShareBusy] = useState(false);
   const [localNeighbourhoodShare, setLocalNeighbourhoodShare] = useState(false);
 
+  // Circles share is opt-OUT (default true). We mirror it locally so the
+  // toggle feels instant; the network call updates the row in the
+  // background.
+  const [circlesShareBusy, setCirclesShareBusy] = useState(false);
+  const [localCirclesShare, setLocalCirclesShare] = useState(true);
+
   useEffect(() => {
     if (!visible || !run) return;
     neighbourhoodApi.getMe().then(setNbMe).catch(() => setNbMe(null));
     setLocalNeighbourhoodShare((run.neighbourhood_visibility || 'off') === 'neighbourhood');
-  }, [visible, run?.id, run?.neighbourhood_visibility]);
+    setLocalCirclesShare(run.circles_share !== false);
+  }, [visible, run?.id, run?.neighbourhood_visibility, run?.circles_share]);
 
   const routePoints = useMemo(
     () => (run?.route_polyline ? decodePolyline(run.route_polyline) : []),
@@ -591,6 +599,36 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
               />
             </View>
           )}
+
+          {/* Circles share is opt-OUT — runs are visible to circle members
+              by default. The toggle is always shown so the user can flip
+              an album private even if they're not in any circles yet. */}
+          <View style={styles.nbRow}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={styles.label}>Share with my circles</Text>
+              <Text style={styles.nbHint}>
+                On by default. Turn off to hide this run from every circle you're a member of.
+              </Text>
+            </View>
+            <Switch
+              value={localCirclesShare}
+              disabled={circlesShareBusy}
+              onValueChange={async (on) => {
+                if (!run) return;
+                setLocalCirclesShare(on);
+                setCirclesShareBusy(true);
+                try {
+                  if (on) await runApi.shareCircles(run.id);
+                  else await runApi.unshareCircles(run.id);
+                } catch (e: any) {
+                  setLocalCirclesShare(!on);
+                  Alert.alert('Circles', e?.message || 'Could not update sharing');
+                } finally {
+                  setCirclesShareBusy(false);
+                }
+              }}
+            />
+          </View>
 
           {/* Scenic Photos — shown for outdoor iPhone-led AND watch-recorded runs.
               Watch runs only get the retroactive (library) flow since the watch
