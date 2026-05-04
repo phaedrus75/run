@@ -171,11 +171,16 @@ function MainTabs() {
           height: 85,
           paddingBottom: 25,
           paddingTop: 10,
+          // Outer gutter so the leftmost (Home) and rightmost (Community)
+          // tab labels don't crash against the screen edges.
+          paddingHorizontal: 10,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-        tabBarItemStyle: { paddingHorizontal: 0 },
+        // A little breathing room between every tab item, on top of the
+        // outer gutter on tabBarStyle.
+        tabBarItemStyle: { paddingHorizontal: 4 },
         tabBarIconStyle: { marginBottom: -2 },
         tabBarIcon: ({ focused, color, size }) => {
           if (route.name === 'Activity') {
