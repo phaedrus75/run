@@ -26,7 +26,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
@@ -234,16 +234,6 @@ export function HistoryScreen({ navigation, route }: HistoryScreenProps) {
     setEditStepModalVisible(true);
   };
 
-  const handleSaveStep = async (id: number, data: { step_count: number; recorded_date: string }) => {
-    await stepsApi.update(id, data);
-    fetchSteps();
-  };
-
-  const handleDeleteStep = async (id: number) => {
-    await stepsApi.delete(id);
-    fetchSteps();
-  };
-
   const handleAddStep = async () => {
     if (!addStepCount) return;
     setAddingStep(true);
@@ -391,7 +381,11 @@ export function HistoryScreen({ navigation, route }: HistoryScreenProps) {
             style={[styles.segmentButton, activeTab === 'runs' && styles.segmentButtonActive]}
             onPress={() => setActiveTab('runs')}
           >
-            <Ionicons name="fitness-outline" size={16} color={activeTab === 'runs' ? colors.textOnPrimary : colors.textSecondary} />
+            <MaterialCommunityIcons
+              name="run-fast"
+              size={18}
+              color={activeTab === 'runs' ? colors.textOnPrimary : colors.textSecondary}
+            />
             <Text style={[styles.segmentText, activeTab === 'runs' && styles.segmentTextActive]}>Runs</Text>
           </TouchableOpacity>
           {user?.beta_steps_enabled && (
@@ -661,17 +655,19 @@ export function HistoryScreen({ navigation, route }: HistoryScreenProps) {
         onDelete={handleDeleteRun}
       />
 
-      {/* ✏️ Edit Step Modal */}
-      <EditStepModal
-        visible={editStepModalVisible}
-        entry={selectedStep}
-        onClose={() => {
-          setEditStepModalVisible(false);
-          setSelectedStep(null);
-        }}
-        onSave={handleSaveStep}
-        onDelete={handleDeleteStep}
-      />
+      {/* ✏️ Edit Step Modal — component owns save/delete; parent refetches via onUpdate */}
+      {editStepModalVisible && (
+        <EditStepModal
+          entry={selectedStep ?? undefined}
+          onClose={() => {
+            setEditStepModalVisible(false);
+            setSelectedStep(null);
+          }}
+          onUpdate={() => {
+            void fetchSteps();
+          }}
+        />
+      )}
 
       {/* ➕ Add Step Modal */}
       {showAddStep && (

@@ -41,6 +41,8 @@ const MIN_YEAR = 2026;
 interface Props {
   navigation: any;
   route?: any;
+  /** When true, used inside Activity tab: no outer safe-area top, compact header. */
+  embedded?: boolean;
 }
 
 const getAvailableMonths = () => {
@@ -74,7 +76,7 @@ const getAvailableQuarters = () => {
   return quarters.reverse();
 };
 
-export function RunsTabScreen({ navigation }: Props) {
+export function RunsTabScreen({ navigation, route, embedded }: Props) {
   const [tab, setTab] = useState<InnerTab>('history');
   const [allRuns, setAllRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,6 +133,20 @@ export function RunsTabScreen({ navigation }: Props) {
     setLoading(true);
     fetchData();
   }, [fetchData]));
+
+  // Open run from Album / deep link: Activity stack passes `focusRunId`.
+  React.useEffect(() => {
+    const id = route?.params?.focusRunId as number | undefined;
+    if (id == null || !allRuns.length) return;
+    const r = allRuns.find((x) => x.id === id);
+    if (r) {
+      setEditRun(r);
+      setTab('history');
+      try {
+        navigation.setParams({ focusRunId: undefined });
+      } catch {}
+    }
+  }, [route?.params?.focusRunId, allRuns, navigation]);
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
@@ -425,11 +441,7 @@ export function RunsTabScreen({ navigation }: Props) {
       renderSectionHeader={() => null}
       ListHeaderComponent={historyHeader}
       renderItem={({ item }) => (
-        <RunHistoryCard
-          run={item}
-          onPress={() => setEditRun(item)}
-          onDelete={fetchData}
-        />
+        <RunHistoryCard run={item} onPress={() => setEditRun(item)} />
       )}
       ListEmptyComponent={
         loading ? (
@@ -447,11 +459,17 @@ export function RunsTabScreen({ navigation }: Props) {
     />
   );
 
+  const Shell = embedded ? View : SafeAreaView;
+  const shellProps = embedded
+    ? { style: styles.container }
+    : { style: styles.container, edges: ['top' as const] };
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Runs</Text>
+    <Shell {...shellProps}>
+      {/* Header — compact when embedded inside Activity tab */}
+      <View style={[styles.header, embedded && styles.headerEmbedded]}>
+        {!embedded && <Text style={styles.title}>Runs</Text>}
+        {embedded && <View style={{ flex: 1 }} />}
         <TouchableOpacity
           onPress={() => navigation.navigate('AddRun')}
           style={styles.addBtn}
@@ -507,7 +525,7 @@ export function RunsTabScreen({ navigation }: Props) {
         year={selectedQuarterYear}
         onClose={() => setShowQuarterReview(false)}
       />
-    </SafeAreaView>
+    </Shell>
   );
 }
 
@@ -520,6 +538,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+  },
+  headerEmbedded: {
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+    justifyContent: 'flex-end',
   },
   title: {
     fontSize: typography.sizes.xxl,

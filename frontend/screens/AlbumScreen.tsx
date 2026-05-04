@@ -38,9 +38,10 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { albumApi, AlbumPhoto, AlbumPhotoActivity } from '../services/api';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import { AppHeader } from '../components/AppHeader';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PAGE_SIZE = 24;
@@ -133,14 +134,14 @@ export function AlbumScreen({ navigation }: Props) {
 
   const onActivityPress = (group: Group) => {
     if (group.kind === 'walk') {
-      navigation.navigate('Walks', {
+      navigation.navigate('Activity', {
         screen: 'WalkDetail',
         params: { walkId: group.activityId },
       });
     } else {
-      navigation.navigate('Runs', {
-        screen: 'RunsTab',
-        params: { focusRunId: group.activityId },
+      navigation.navigate('Activity', {
+        screen: 'ActivityHome',
+        params: { segment: 'runs', focusRunId: group.activityId },
       });
     }
   };
@@ -157,9 +158,9 @@ export function AlbumScreen({ navigation }: Props) {
           ]}
         >
           <View style={styles.cardHeaderIcon}>
-            <Ionicons
-              name={group.kind === 'run' ? 'fitness' : 'walk'}
-              size={16}
+            <MaterialCommunityIcons
+              name={group.kind === 'run' ? 'run-fast' : 'walk'}
+              size={18}
               color={group.kind === 'run' ? '#F97316' : '#10B981'}
             />
           </View>
@@ -214,6 +215,7 @@ export function AlbumScreen({ navigation }: Props) {
   if (!firstLoaded && loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        <AppHeader />
         <Header />
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
@@ -225,6 +227,7 @@ export function AlbumScreen({ navigation }: Props) {
   if (firstLoaded && photos.length === 0 && !error) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        <AppHeader />
         <Header />
         <View style={styles.center}>
           <Ionicons name="images-outline" size={56} color={colors.textLight} />
@@ -240,6 +243,7 @@ export function AlbumScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <AppHeader />
       <Header />
       {error && (
         <View style={styles.errorBanner}>

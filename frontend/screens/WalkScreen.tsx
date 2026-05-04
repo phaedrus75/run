@@ -50,9 +50,12 @@ const IS_EXPO_GO = Constants.appOwnership === 'expo';
 
 interface Props {
   navigation: any;
+  route?: any;
+  /** When true, nested under Activity tab — skip duplicate safe area + hero title. */
+  embedded?: boolean;
 }
 
-export function WalkScreen({ navigation }: Props) {
+export function WalkScreen({ navigation, embedded }: Props) {
   const [tab, setTab] = useState<InnerTab>('history');
   const [walks, setWalks] = useState<Walk[]>([]);
   const [stats, setStats] = useState<WalkStats | null>(null);
@@ -143,18 +146,25 @@ export function WalkScreen({ navigation }: Props) {
     navigation.navigate('ActiveWalk');
   };
 
+  const Shell = embedded ? View : SafeAreaView;
+  const shellProps = embedded
+    ? { style: styles.container }
+    : { style: styles.container, edges: ['top' as const] };
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Shell {...shellProps}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Walks</Text>
-          <Text style={styles.subtitle}>
-            Slow down. Track the route. Find your stride.
-          </Text>
-        </View>
+        {!embedded && (
+          <View style={styles.header}>
+            <Text style={styles.title}>Walks</Text>
+            <Text style={styles.subtitle}>
+              Slow down. Track the route. Find your stride.
+            </Text>
+          </View>
+        )}
 
         {/* Inner tab switcher */}
         <View style={styles.innerTabRow}>
@@ -267,7 +277,7 @@ export function WalkScreen({ navigation }: Props) {
           <WalkStatsSection stats={stats} />
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Shell>
   );
 }
 

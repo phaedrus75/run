@@ -9,13 +9,15 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+
+import { navigationRef } from './navigationRef';
+import { DrawerProvider } from './contexts/DrawerContext';
 
 // 📱 Screens
 import { HomeScreen } from './screens/HomeScreen';
 import { RunScreen } from './screens/RunScreen';
-import { RunsTabScreen } from './screens/RunsTabScreen';
 import { AddRunScreen } from './screens/AddRunScreen';
 import { ActiveRunScreen } from './screens/ActiveRunScreen';
 import { RunSummaryScreen } from './screens/RunSummaryScreen';
@@ -24,13 +26,11 @@ import { CircleSpaceScreen } from './screens/CircleSpaceScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import AuthScreen from './screens/AuthScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
-import { WalkScreen } from './screens/WalkScreen';
 import { ActiveWalkScreen } from './screens/ActiveWalkScreen';
 import { WalkSummaryScreen } from './screens/WalkSummaryScreen';
 import { WalkDetailScreen } from './screens/WalkDetailScreen';
 import { DiscoverWalksScreen } from './screens/DiscoverWalksScreen';
 import { PublicWalkDetailScreen } from './screens/PublicWalkDetailScreen';
-import { BetaScreen } from './screens/BetaScreen';
 import { WatchDiagnosticsScreen } from './screens/WatchDiagnosticsScreen';
 import { PhotoRecoveryScreen } from './screens/PhotoRecoveryScreen';
 import { PhotoReviewScreen } from './screens/PhotoReviewScreen';
@@ -42,9 +42,11 @@ import { GymTabScreen } from './screens/GymTabScreen';
 import { StepsTabScreen } from './screens/StepsTabScreen';
 import { WeightTabScreen } from './screens/WeightTabScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
+import { ActivityScreen } from './screens/ActivityScreen';
+import { AboutScreen } from './screens/AboutScreen';
+import { HonorsScreen } from './screens/HonorsScreen';
 import { GoButton } from './components/GoButton';
 
-// Registers background-location TaskManager task at app start
 import './services/walkBackgroundTask';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -57,45 +59,56 @@ import { drainPendingArchives } from './services/photoArchiver';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// ─── Home stack ───────────────────────────────────────────────────────────────
+// ─── Home stack (drawer destinations: profile, tools, honors, about) ───────────
 function HomeStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="HomeMain" component={HomeScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymTab" component={GymTabScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StepsTab" component={StepsTabScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="WeightTab" component={WeightTabScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="WatchDiagnostics" component={WatchDiagnosticsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="PhotoRecovery" component={PhotoRecoveryScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Honors" component={HonorsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GymHistory" component={HistoryScreen} initialParams={{ mode: 'gym' }} options={{ headerShown: false }} />
+      <Stack.Screen name="StepsHistory" component={HistoryScreen} initialParams={{ mode: 'steps' }} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
 
-// ─── Runs stack ───────────────────────────────────────────────────────────────
-// Root = RunsTabScreen (history + stats). Go button routes to ActiveRun or RunScreen.
-function RunsStack() {
+// ─── Activity stack (runs + walks + all drill-downs) ─────────────────────────
+function ActivityStack() {
   return (
     <Stack.Navigator>
+      <Stack.Screen name="ActivityHome" component={ActivityScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="RunScreen" component={RunScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ActiveRun" component={ActiveRunScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="RunSummary" component={RunSummaryScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="ActiveWalk" component={ActiveWalkScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="WalkSummary" component={WalkSummaryScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="PhotoReview" component={PhotoReviewScreen} options={{ headerShown: false, presentation: 'modal' }} />
+      <Stack.Screen name="WalkDetail" component={WalkDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen
-        name="RunHistory"
-        component={RunsTabScreen}
-        options={{ headerShown: false }}
+        name="PublicWalkDetail"
+        component={PublicWalkDetailScreen}
+        options={{
+          headerShown: true,
+          title: 'Walk preview',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+        }}
       />
       <Stack.Screen
-        name="RunScreen"
-        component={RunScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="ActiveRun"
-        component={ActiveRunScreen}
-        options={{ headerShown: false, gestureEnabled: false }}
-      />
-      <Stack.Screen
-        name="RunSummary"
-        component={RunSummaryScreen}
-        options={{ headerShown: false, gestureEnabled: false }}
-      />
-      <Stack.Screen
-        name="PhotoReview"
-        component={PhotoReviewScreen}
-        options={{ headerShown: false, presentation: 'modal' }}
+        name="DiscoverWalks"
+        component={DiscoverWalksScreen}
+        options={{
+          headerShown: true,
+          title: 'Discover walks',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+        }}
       />
       <Stack.Screen
         name="AddRun"
@@ -111,31 +124,6 @@ function RunsStack() {
   );
 }
 
-// ─── Walk stack ───────────────────────────────────────────────────────────────
-function WalkStack() {
-  return (
-    <Stack.Navigator>
-      <Stack.Screen name="WalkHome" component={WalkScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="ActiveWalk" component={ActiveWalkScreen} options={{ headerShown: false, gestureEnabled: false }} />
-      <Stack.Screen name="WalkSummary" component={WalkSummaryScreen} options={{ headerShown: false, gestureEnabled: false }} />
-      <Stack.Screen name="PhotoReview" component={PhotoReviewScreen} options={{ headerShown: false, presentation: 'modal' }} />
-      <Stack.Screen name="WalkDetail" component={WalkDetailScreen} options={{ headerShown: false }} />
-      <Stack.Screen
-        name="PublicWalkDetail"
-        component={PublicWalkDetailScreen}
-        options={{ headerShown: true, title: 'Walk preview', headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.primary }}
-      />
-      <Stack.Screen
-        name="DiscoverWalks"
-        component={DiscoverWalksScreen}
-        options={{ headerShown: true, title: 'Discover walks', headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.primary }}
-      />
-    </Stack.Navigator>
-  );
-}
-
-// ─── Album stack ──────────────────────────────────────────────────────────────
-// Top-level "Album" tab — every photo from every run/walk in one timeline.
 function AlbumStack() {
   return (
     <Stack.Navigator>
@@ -145,49 +133,22 @@ function AlbumStack() {
   );
 }
 
-// ─── Community stack ──────────────────────────────────────────────────────────
-// Top-level "Community" tab — Circles (real) + Neighbourhood (placeholder).
-// CirclesList + CircleSpace remain registered in LabsStack as well so any
-// existing deep links from the Beta hub continue to work; routing within
-// the Community tab uses this stack's instances.
 function CommunityStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="CommunityHome"  component={CommunityHomeScreen}  options={{ headerShown: false }} />
-      <Stack.Screen name="Neighbourhood"  component={NeighbourhoodScreen}  options={{ headerShown: false }} />
-      <Stack.Screen name="CirclesList"    component={CirclesScreen}        options={{ headerShown: false }} />
-      <Stack.Screen name="CircleSpace"    component={CircleSpaceScreen}    options={{ headerShown: false }} />
-    </Stack.Navigator>
-  );
-}
-
-// ─── Labs stack ───────────────────────────────────────────────────────────────
-// Hub + Circles + Gym (with stats) + Steps (with stats)
-function LabsStack() {
-  return (
-    <Stack.Navigator>
-      <Stack.Screen name="BetaHome" component={BetaScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="CommunityHome" component={CommunityHomeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Neighbourhood" component={NeighbourhoodScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CirclesList" component={CirclesScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CircleSpace" component={CircleSpaceScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="GymTab" component={GymTabScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="StepsTab" component={StepsTabScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="WeightTab" component={WeightTabScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="WatchDiagnostics" component={WatchDiagnosticsScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="PhotoRecovery" component={PhotoRecoveryScreen} options={{ headerShown: false }} />
-      {/* Keep legacy history routes for any deep-links still using them */}
-      <Stack.Screen name="GymHistory" component={HistoryScreen} initialParams={{ mode: 'gym' }} options={{ headerShown: false }} />
-      <Stack.Screen name="StepsHistory" component={HistoryScreen} initialParams={{ mode: 'steps' }} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
 
-// ─── Go placeholder ───────────────────────────────────────────────────────────
-// The Tab.Screen for the centre slot needs a component; GoButton renders the
-// actual UI as a tabBarButton overlay so this is never displayed.
-function GoPlaceholder() { return null; }
+function GoPlaceholder() {
+  return null;
+}
 
-// ─── Main Tabs ────────────────────────────────────────────────────────────────
-// Layout: Home | Runs | [GO] | Walks | Labs
+// ─── Main Tabs: Home | Activity | GO | Album | Community (5 slots, GO centred)
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -207,43 +168,31 @@ function MainTabs() {
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
-        // 7-slot layout means each tab is ~14% of the screen — drop the
-        // label size a hair so longer words ("Community") don't truncate
-        // on smaller iPhones.
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginTop: 2 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
         tabBarItemStyle: { paddingHorizontal: 0 },
         tabBarIconStyle: { marginBottom: -2 },
         tabBarIcon: ({ focused, color, size }) => {
+          if (route.name === 'Activity') {
+            return <MaterialCommunityIcons name="routes" size={size + 2} color={color} />;
+          }
           let icon: keyof typeof Ionicons.glyphMap = 'home';
           switch (route.name) {
-            case 'Home':      icon = focused ? 'home'    : 'home-outline';    break;
-            case 'Runs':      icon = focused ? 'fitness' : 'fitness-outline'; break;
-            case 'Walks':     icon = focused ? 'walk'    : 'walk-outline';    break;
-            case 'Album':     icon = focused ? 'images'  : 'images-outline';  break;
-            case 'Community': icon = focused ? 'people'  : 'people-outline';  break;
-            case 'Labs':      icon = focused ? 'flask'   : 'flask-outline';   break;
+            case 'Home':
+              icon = focused ? 'home' : 'home-outline';
+              break;
+            case 'Album':
+              icon = focused ? 'images' : 'images-outline';
+              break;
+            case 'Community':
+              icon = focused ? 'people' : 'people-outline';
+              break;
           }
           return <Ionicons name={icon} size={size} color={color} />;
         },
       })}
     >
-      {/* 7-slot bottom nav with GO at the exact centre (slot 4 of 7).
-          Layout: Home | Runs | Walks | [GO] | Album | Community | Labs.
-          Three tabs left + the centre GO + three tabs right keeps the
-          GO button mathematically centred while letting both pillars of
-          the brand ("the path" and "the album") sit on either side of it. */}
-      <Tab.Screen name="Home"  component={HomeStack}  options={{ tabBarLabel: 'Home'  }} />
-      <Tab.Screen name="Runs"  component={RunsStack}  options={{ tabBarLabel: 'Runs'  }} />
-      <Tab.Screen
-        name="Walks"
-        component={WalkStack}
-        options={{ tabBarLabel: 'Walks' }}
-        listeners={({ navigation }) => ({
-          tabPress: () => {
-            navigation.navigate('Walks', { screen: 'WalkHome' });
-          },
-        })}
-      />
+      <Tab.Screen name="Home" component={HomeStack} options={{ tabBarLabel: 'Home' }} />
+      <Tab.Screen name="Activity" component={ActivityStack} options={{ tabBarLabel: 'Activity' }} />
       <Tab.Screen
         name="Go"
         component={GoPlaceholder}
@@ -252,14 +201,12 @@ function MainTabs() {
           tabBarButton: () => <GoButton />,
         }}
       />
-      <Tab.Screen name="Album"     component={AlbumStack}     options={{ tabBarLabel: 'Album'     }} />
+      <Tab.Screen name="Album" component={AlbumStack} options={{ tabBarLabel: 'Album' }} />
       <Tab.Screen name="Community" component={CommunityStack} options={{ tabBarLabel: 'Community' }} />
-      <Tab.Screen name="Labs"      component={LabsStack}      options={{ tabBarLabel: 'Labs'      }} />
     </Tab.Navigator>
   );
 }
 
-// ─── App Navigator ────────────────────────────────────────────────────────────
 function AppNavigator() {
   const { isLoading, isAuthenticated, needsOnboarding } = useAuth();
 
@@ -284,8 +231,10 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <MainTabs />
+    <NavigationContainer ref={navigationRef}>
+      <DrawerProvider>
+        <MainTabs />
+      </DrawerProvider>
     </NavigationContainer>
   );
 }
@@ -298,11 +247,6 @@ function WatchWorkoutBridgeHost() {
     return () => sub.remove();
   }, []);
 
-  // Drain any payloads queued while signed-out as soon as auth is ready.
-  // Both the watch queue (workouts that failed to upload at receive-time) and
-  // the phone-side draft queue (in-app recordings whose save call failed)
-  // retry here. Phone drafts run after the watch drain to keep the alert
-  // ordering predictable.
   useEffect(() => {
     if (!isAuthenticated) return;
     (async () => {
@@ -315,10 +259,6 @@ function WatchWorkoutBridgeHost() {
           `${result.succeeded} pending ${noun} from earlier ${result.succeeded === 1 ? 'has' : 'have'} now been saved.`,
         );
       }
-      // Drain photo uploads + Photos-library archives. Both are idempotent
-      // and silent on success; the user only sees noise if many photos
-      // surface at once. Run after activity drains so any newly-linked
-      // sessions get picked up.
       void drainPendingUploads();
       void drainPendingArchives();
     })();
@@ -329,16 +269,10 @@ function WatchWorkoutBridgeHost() {
 
 export default function App() {
   return (
-    // GestureHandlerRootView is required by react-native-gesture-handler on
-    // the new architecture (RN ≥ 0.74 / Expo SDK 54). Without it pinch-to-
-    // zoom and pan gestures on the photo viewer simply don't fire.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <AuthProvider>
-          {/* Mounted at root so the native event listener is attached before
-              auth resolves; otherwise iOS can deliver queued WCSession user
-              infos during cold launch and the events get dropped. */}
           <WatchWorkoutBridgeHost />
           <AppNavigator />
         </AuthProvider>

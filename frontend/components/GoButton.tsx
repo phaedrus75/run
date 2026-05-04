@@ -22,7 +22,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
@@ -30,8 +30,12 @@ import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 const ACCENT = '#F97316'; // orange accent for run options
 const WALK_COLOR = '#10B981'; // green for walk
 
+/** A GO-sheet option renders an icon from one of two families: Ionicons
+ *  (general purpose) or MaterialCommunityIcons (which has the runner /
+ *  walker glyphs we want for activity choices). */
 interface Option {
-  icon: keyof typeof Ionicons.glyphMap;
+  iconFamily: 'ionicons' | 'material';
+  icon: string;
   label: string;
   sub: string;
   color: string;
@@ -40,25 +44,28 @@ interface Option {
 
 const OPTIONS: Option[] = [
   {
+    iconFamily: 'material',
     icon: 'walk',
     label: 'Start a Walk',
     sub: 'GPS map · distance · photos',
     color: WALK_COLOR,
-    onPress: (nav) => nav.navigate('Walks', { screen: 'ActiveWalk' }),
+    onPress: (nav) => nav.navigate('Activity', { screen: 'ActiveWalk' }),
   },
   {
-    icon: 'fitness',
+    iconFamily: 'material',
+    icon: 'run-fast',
     label: 'Start a Run',
     sub: 'GPS tracked outdoor run',
     color: ACCENT,
-    onPress: (nav) => nav.navigate('Runs', { screen: 'ActiveRun' }),
+    onPress: (nav) => nav.navigate('Activity', { screen: 'ActiveRun' }),
   },
   {
+    iconFamily: 'ionicons',
     icon: 'pencil',
     label: 'Log a Run',
     sub: 'Manual entry · time · distance type',
     color: colors.primary,
-    onPress: (nav) => nav.navigate('Runs', { screen: 'RunScreen' }),
+    onPress: (nav) => nav.navigate('Activity', { screen: 'RunScreen' }),
   },
 ];
 
@@ -107,12 +114,11 @@ export function GoButton() {
   return (
     <>
       {/* The tab bar button itself — a raised 3D pill that floats above the
-          bar. Composed of a soft outer glow, a hard outer shadow, a gradient
-          fill, and a thin inner highlight to give it a tactile look. */}
+          bar. Composed of a hard outer shadow, a gradient fill, and a thin
+          inner highlight to give it a tactile look. The drop shadow alone
+          carries the "lifted" feel — the soft orange halo we tried earlier
+          read as a coloured background and got pulled. */}
       <View style={styles.wrapper}>
-        {/* Soft halo behind the button (suggests a lifted object). */}
-        <View style={styles.halo} pointerEvents="none" />
-
         <Animated.View style={[styles.btnShadow, { transform: [{ scale: pulseAnim }] }]}>
           <Pressable
             onPress={open}
@@ -130,7 +136,12 @@ export function GoButton() {
               {/* Thin top-edge highlight to catch the eye like a glossy
                   surface. */}
               <View style={styles.btnHighlight} pointerEvents="none" />
-              <Ionicons name="add" size={36} color="#fff" />
+              {/* Hand-drawn "+" with two crossed bars. Ionicons' `add` is
+                  too thin to read as a primary action at this size; bars
+                  give us pixel-level control over weight and corner
+                  rounding. */}
+              <View style={styles.plusH} pointerEvents="none" />
+              <View style={styles.plusV} pointerEvents="none" />
             </LinearGradient>
           </Pressable>
         </Animated.View>
@@ -159,7 +170,11 @@ export function GoButton() {
               ]}
             >
               <View style={[styles.optIcon, { backgroundColor: opt.color + '18', borderColor: opt.color + '40' }]}>
-                <Ionicons name={opt.icon} size={24} color={opt.color} />
+                {opt.iconFamily === 'material' ? (
+                  <MaterialCommunityIcons name={opt.icon as any} size={26} color={opt.color} />
+                ) : (
+                  <Ionicons name={opt.icon as any} size={24} color={opt.color} />
+                )}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.optLabel}>{opt.label}</Text>
@@ -178,37 +193,27 @@ export function GoButton() {
   );
 }
 
-const BTN_SIZE = 68;
-const HALO_SIZE = BTN_SIZE + 28;
-const GO_ORANGE = '#F97316';
+const BTN_SIZE = 54;
 
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    top: -26,
-  },
-  halo: {
-    position: 'absolute',
-    width: HALO_SIZE,
-    height: HALO_SIZE,
-    borderRadius: HALO_SIZE / 2,
-    backgroundColor: GO_ORANGE,
-    opacity: 0.14,
-    top: -14,
+    top: -18,
   },
   btnShadow: {
     width: BTN_SIZE,
     height: BTN_SIZE,
     borderRadius: BTN_SIZE / 2,
-    // Strong, slightly downward-offset shadow so the button reads as
-    // floating above the tab bar.
-    shadowColor: '#9A3D0A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.32,
-    shadowRadius: 14,
-    elevation: 10,
+    // Neutral, slightly downward-offset shadow so the button reads as
+    // floating above the tab bar without bleeding any orange/red colour
+    // into the surrounding nav.
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    elevation: 7,
   },
   btnPressable: {
     width: BTN_SIZE,
@@ -231,12 +236,29 @@ const styles = StyleSheet.create({
     // A small bright sliver at the top-left to suggest a light source above
     // and a glossy surface.
     position: 'absolute',
-    top: 4,
-    left: 8,
-    right: 8,
-    height: 18,
-    borderRadius: 14,
+    top: 3,
+    left: 6,
+    right: 6,
+    height: 14,
+    borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.20)',
+  },
+  plusH: {
+    // Horizontal bar of the "+". Scaled to the (now smaller) button — kept
+    // proportional to the tab-icon size so the GO button doesn't feel
+    // out of place next to the surrounding nav icons.
+    position: 'absolute',
+    width: 18,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#fff',
+  },
+  plusV: {
+    position: 'absolute',
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#fff',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

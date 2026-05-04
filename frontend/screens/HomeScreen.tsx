@@ -20,7 +20,6 @@ import {
   TouchableOpacity,
   Alert,
   Dimensions,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,21 +27,14 @@ import ConfettiCannon from 'react-native-confetti-cannon';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  StatCard, 
-
-  StreakProgress,
-  StreakModal,
-  PersonalRecords,
-  Achievements,
+import {
   GoalsProgress as GoalsProgressComponent,
   WeekSummaryCard,
 } from '../components';
+import { AppHeader } from '../components/AppHeader';
 import { MonthInReview } from '../components/MonthInReview';
 import { QuarterInReview } from '../components/QuarterInReview';
 import { WeeklyReflection } from '../components/WeeklyReflection';
-import { RhythmPlant } from '../components/RhythmPlant';
-import { ScenicRunsModal } from './ScenicRunsScreen';
 import { 
   statsApi,
   levelApi,
@@ -52,12 +44,9 @@ import {
   type MotivationalMessage, 
   type WeeklyStreakProgress, 
   type GoalsProgress,
-  type PersonalRecords as PersonalRecordsType,
-  type AchievementsData,
   type MonthInReview as MonthInReviewType,
   type DailyWisdom,
   type SeasonalMarker,
-  type StreakPeriod,
   type WalkStats,
 } from '../services/api';
 
@@ -77,12 +66,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const confettiRef = useRef<any>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   
-  // 🔥 Streak modal state
-  const [showStreak, setShowStreak] = useState(false);
-  
-  // 📸 Scenic runs modal state
-  const [showScenicRuns, setShowScenicRuns] = useState(false);
-  
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
   const [walkStats, setWalkStats] = useState<WalkStats | null>(null);
@@ -90,8 +73,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [motivation, setMotivation] = useState<MotivationalMessage | null>(null);
   const [streakProgress, setStreakProgress] = useState<WeeklyStreakProgress | null>(null);
   const [goals, setGoals] = useState<GoalsProgress | null>(null);
-  const [records, setRecords] = useState<PersonalRecordsType | null>(null);
-  const [achievements, setAchievements] = useState<AchievementsData | null>(null);
   const [monthReview, setMonthReview] = useState<MonthInReviewType | null>(null);
   const [showMonthReview, setShowMonthReview] = useState(false);
   const [monthBannerVisible, setMonthBannerVisible] = useState(false);
@@ -102,7 +83,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [autoQuarter, setAutoQuarter] = useState<{ q: number; year: number } | null>(null);
   const [dailyWisdom, setDailyWisdom] = useState<DailyWisdom | null>(null);
   const [seasonalMarkers, setSeasonalMarkers] = useState<SeasonalMarker[]>([]);
-  const [streakHistory, setStreakHistory] = useState<StreakPeriod[]>([]);
   const [currentReflection, setCurrentReflection] = useState<{ has_reflection: boolean; reflection?: string; mood?: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -120,21 +100,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   // 📡 Fetch data from API
   const fetchData = useCallback(async () => {
     try {
-      const [statsData, motivationData, streakData, goalsData, recordsData, achievementsData] = await Promise.all([
+      const [statsData, motivationData, streakData, goalsData] = await Promise.all([
         statsApi.get(),
         statsApi.getMotivation(),
         statsApi.getStreakProgress(),
         statsApi.getGoals(),
-        statsApi.getPersonalRecords(),
-        statsApi.getAchievements(),
       ]);
       
       setStats(statsData);
       setMotivation(motivationData);
       setStreakProgress(streakData);
       setGoals(goalsData);
-      setRecords(recordsData);
-      setAchievements(achievementsData);
 
       // Walk stats are non-critical — fail quietly so the home screen always
       // renders even if the walk endpoints aren't reachable.
@@ -142,11 +118,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       
       // Fetch secondary data (graceful failure)
       try {
-        const [monthReviewData, wisdomData, markersData, historyData, levelData, reflectionData] = await Promise.all([
+        const [monthReviewData, wisdomData, markersData, levelData, reflectionData] = await Promise.all([
           statsApi.getMonthReview().catch(() => null),
           statsApi.getDailyWisdom().catch(() => null),
           statsApi.getSeasonalMarkers().catch(() => ({ markers: [] })),
-          statsApi.getStreakHistory().catch(() => []),
           levelApi.get().catch(() => null),
           reflectionsApi.getCurrent().catch(() => null),
         ]);
@@ -192,7 +167,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
         if (wisdomData) setDailyWisdom(wisdomData);
         setSeasonalMarkers(markersData?.markers || []);
-        setStreakHistory(historyData || []);
         if (reflectionData) setCurrentReflection(reflectionData);
       } catch (e) {
         console.log('Secondary data fetch partial failure');
@@ -203,6 +177,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       setStats({
         total_runs: 0,
         total_km: 0,
+        total_duration_seconds: 0,
         current_streak: 0,
         longest_streak: 0,
         average_pace: '0:00',
@@ -268,6 +243,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   
   return (
     <SafeAreaView style={styles.container}>
+      <AppHeader />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -276,36 +252,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* 👋 Header */}
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <Image source={require('../assets/logo.png')} style={styles.titleLogo} />
-            <Text style={styles.title}>ZenRun</Text>
-          </View>
-          <View style={styles.headerRight}>
-            {/* 🔥 Streak Badge */}
-            {streakProgress && (
-              <TouchableOpacity 
-                style={styles.streakBadge}
-                onPress={() => setShowStreak(true)}
-              >
-                <RhythmPlant weeks={streakProgress.current_streak} size="small" />
-                <Text style={styles.streakCount}>{streakProgress.current_streak}w</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity 
-              style={styles.profileButton}
-              onPress={() => navigation.navigate('Profile')}
-            >
-              <View style={styles.profileAvatar}>
-                <Text style={styles.profileAvatarText}>
-                  {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-        
         {/* Greeting */}
         <Text style={styles.greeting}>
           {getGreeting()}, {user?.name || 'Runner'}
@@ -486,7 +432,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         {/* Quick Action */}
         <TouchableOpacity
           style={[styles.startButton, shadows.medium]}
-          onPress={() => navigation.navigate('Run')}
+          onPress={() => navigation.getParent()?.navigate('Activity', { screen: 'RunScreen' })}
           activeOpacity={0.8}
         >
           <Text style={styles.startButtonText}>Log a run</Text>
@@ -497,45 +443,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <GoalsProgressComponent goals={goals} />
         )}
         
-        {/* 📸 Scenic Runs */}
-        <TouchableOpacity 
-          style={[styles.scenicRunsButton, shadows.small]}
-          onPress={() => setShowScenicRuns(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.scenicRunsEmoji}>🏞️</Text>
-          <View>
-            <Text style={styles.scenicRunsTitle}>Scenic Runs</Text>
-            <Text style={styles.scenicRunsSubtitle}>Photos from your outdoor runs</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* 🏆 Personal Records */}
-        {records && (
-          <PersonalRecords records={records} />
-        )}
-        
-        {/* 🎖️ Achievements */}
-        {achievements && (
-          <Achievements data={achievements} />
-        )}
-        
       </ScrollView>
-      
-      {/* 📸 Scenic Runs Modal */}
-      <ScenicRunsModal
-        visible={showScenicRuns}
-        onClose={() => setShowScenicRuns(false)}
-      />
-      
-      
-      {/* 🔥 Streak Modal */}
-      <StreakModal
-        visible={showStreak}
-        onClose={() => setShowStreak(false)}
-        progress={streakProgress}
-        streakHistory={streakHistory}
-      />
       
       {/* 📅 Month in Review Modal */}
       {showMonthReview && monthReview && (

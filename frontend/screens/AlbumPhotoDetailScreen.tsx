@@ -32,7 +32,7 @@ import {
   ListRenderItem,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -90,12 +90,12 @@ export function AlbumPhotoDetailScreen({ navigation, route }: Props) {
 
   const goToActivity = () => {
     if (activePhoto.kind === 'run') {
-      navigation.navigate('Runs', {
-        screen: 'RunHistory',
-        params: { focusRunId: activePhoto.activity.id },
+      navigation.navigate('Activity', {
+        screen: 'ActivityHome',
+        params: { segment: 'runs', focusRunId: activePhoto.activity.id },
       });
     } else {
-      navigation.navigate('Walks', {
+      navigation.navigate('Activity', {
         screen: 'WalkDetail',
         params: { walkId: activePhoto.activity.id },
       });
@@ -168,10 +168,10 @@ export function AlbumPhotoDetailScreen({ navigation, route }: Props) {
           <Text style={styles.caption}>{activePhoto.caption}</Text>
         ) : null}
         <View style={styles.metaRow}>
-          <Ionicons
-            name={activePhoto.kind === 'run' ? 'fitness' : 'walk'}
-            size={16}
-            color={colors.text}
+          <MaterialCommunityIcons
+            name={activePhoto.kind === 'run' ? 'run-fast' : 'walk'}
+            size={18}
+            color="#fff"
           />
           <Text style={styles.metaTitle}>
             {activePhoto.kind === 'run' ? 'Run' : 'Walk'} ·{' '}

@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import { AppHeader } from '../components/AppHeader';
 import { getToken } from '../services/auth';
 import { API_BASE_URL } from '../services/config';
 
@@ -52,6 +53,7 @@ export function CommunityHomeScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <AppHeader />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <Text style={styles.title}>Community</Text>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
@@ -51,8 +52,10 @@ interface UserGoals {
   monthly_km_goal: number;
 }
 
-export function ProfileScreen({ navigation }: { navigation: any }) {
+export function ProfileScreen({ navigation, route }: { navigation: any; route?: any }) {
   const { user, logout, deleteAccount, refreshUser } = useAuth();
+  const scrollRef = useRef<ScrollView>(null);
+  const goalsLayoutY = useRef(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -97,6 +100,22 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
   }, []);
 
   useEffect(() => { fetchAll(); }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (route?.params?.scrollTo === 'goals') {
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollTo({
+            y: Math.max(0, goalsLayoutY.current - 12),
+            animated: true,
+          });
+        });
+        try {
+          navigation.setParams({ scrollTo: undefined });
+        } catch {}
+      }
+    }, [route?.params?.scrollTo, navigation]),
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -309,6 +328,7 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -513,6 +533,11 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
           )
         )}
 
+        <View
+          onLayout={(e) => {
+            goalsLayoutY.current = e.nativeEvent.layout.y;
+          }}
+        >
         {/* Goals Section Header */}
         <Text style={styles.groupTitle}>Goals</Text>
 
@@ -588,6 +613,7 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
             <Text style={styles.primaryButtonText}>Save Goals</Text>
           )}
         </TouchableOpacity>
+        </View>
 
         {/* Feedback */}
         <TouchableOpacity
@@ -624,7 +650,7 @@ export function ProfileScreen({ navigation }: { navigation: any }) {
           )}
         </TouchableOpacity>
 
-        <Text style={styles.version}>ZenRun v1.5.1</Text>
+        <Text style={styles.version}>ZenRun v1.6.0</Text>
       </ScrollView>
     </View>
   );

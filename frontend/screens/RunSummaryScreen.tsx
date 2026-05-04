@@ -172,7 +172,7 @@ export function RunSummaryScreen({ navigation, route }: Props) {
 
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
 
-      navigation.replace('RunHistory');
+      navigation.replace('ActivityHome');
     } catch (e: any) {
       // Save failed before the run was created. The session (with photos
       // safely on disk) becomes a draft that retries from boot.
@@ -187,7 +187,7 @@ export function RunSummaryScreen({ navigation, route }: Props) {
         Alert.alert(
           'Saved as draft',
           `Could not save right now (${e?.message ?? 'unknown error'}). Your run and photos are safe — we'll auto-retry next time you open the app while signed in.`,
-          [{ text: 'OK', onPress: () => navigation.replace('RunHistory') }],
+          [{ text: 'OK', onPress: () => navigation.replace('ActivityHome') }],
         );
       } else {
         Alert.alert('Could not save run', e?.message ?? 'Please try again.');
