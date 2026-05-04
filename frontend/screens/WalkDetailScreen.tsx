@@ -38,6 +38,7 @@ import {
   Walk,
   WalkPhoto,
 } from '../services/api';
+import { albumCache } from '../services/albumCache';
 import {
   decodePolyline,
   formatDistanceKm,
@@ -218,6 +219,7 @@ export function WalkDetailScreen({ navigation, route }: Props) {
         caption: pendingCaption.trim() || undefined,
       });
       setPhotos((prev) => [...prev, photo]);
+      albumCache.invalidate();
       cancelPhotoFlow();
     } catch (e: any) {
       Alert.alert('Upload failed', e?.message ?? 'Try again.');
@@ -238,6 +240,7 @@ export function WalkDetailScreen({ navigation, route }: Props) {
             await walkPhotoApi.delete(walk.id, photo.id);
             setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
             setLightbox(null);
+            albumCache.invalidate();
           } catch (e: any) {
             Alert.alert('Could not delete', e?.message ?? 'Try again.');
           }

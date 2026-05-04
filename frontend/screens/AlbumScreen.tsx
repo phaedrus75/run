@@ -68,12 +68,9 @@ export function AlbumScreen({ navigation }: Props) {
   const [mode, setMode] = useState<Mode>('grid');
 
   const fetchPage = useCallback(
-    async (reset: boolean, opts: { silent?: boolean } = {}) => {
-      // Allow concurrent silent revalidate to skip if a foreground load
-      // is already in flight — the foreground load will refresh state.
-      if (loading && opts.silent) return;
-      if (loading && !opts.silent) return;
-      if (!opts.silent) setLoading(true);
+    async (reset: boolean) => {
+      if (loading) return;
+      setLoading(true);
       setError(null);
       try {
         const page = await albumApi.list({
@@ -91,9 +88,9 @@ export function AlbumScreen({ navigation }: Props) {
         setCursor(page.next_cursor);
         setHasMore(page.next_cursor !== null);
       } catch (e: any) {
-        if (!opts.silent) setError(e?.message ?? 'Could not load album.');
+        setError(e?.message ?? 'Could not load album.');
       } finally {
-        if (!opts.silent) setLoading(false);
+        setLoading(false);
         setRefreshing(false);
         setFirstLoaded(true);
       }
@@ -101,23 +98,22 @@ export function AlbumScreen({ navigation }: Props) {
     [cursor, loading],
   );
 
-  // Initial mount: only hit the network if we have no cache, or the
-  // cache is older than the TTL. Either way we render whatever we have
-  // immediately (see hydration above).
+  // Cache is authoritative. We only fetch on:
+  //   • First mount with no cache (cold start, fresh login).
+  //   • Pull-to-refresh (explicit user intent).
+  //   • Cache invalidation (e.g. after upload/delete — see albumCache).
+  // Switching tabs does NOT refetch — the cache survives unmount because
+  // it lives at module scope, and we hydrate state from it instantly.
   useEffect(() => {
-    if (!cached) {
-      void fetchPage(true);
-    } else if (albumCache.isStale()) {
-      // Fresh data in the background, no spinner.
-      void fetchPage(true, { silent: true });
-    }
+    if (!cached) void fetchPage(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-focus: revalidate silently if stale, never blow away the list.
+  // On focus we only fetch if the cache was invalidated by some other
+  // surface (e.g. a photo was uploaded or deleted while we were away).
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => {
-      if (albumCache.isStale()) void fetchPage(true, { silent: true });
+      if (!albumCache.read()) void fetchPage(true);
     });
     return unsub;
   }, [navigation, fetchPage]);

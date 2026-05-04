@@ -38,6 +38,7 @@ import {
   type RunPhoto,
   type NeighbourhoodMe,
 } from '../services/api';
+import { albumCache } from '../services/albumCache';
 import { decodePolyline, pointAlongRouteAtKm, formatDistanceKm } from '../services/walkLocationTracker';
 import type { RouteForRetroactive } from '../services/retroactivePhotos';
 
@@ -254,6 +255,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
       });
       resetPhotoFlow();
       fetchPhotos();
+      albumCache.invalidate();
     } catch {
       Alert.alert('Upload Failed', 'Could not upload photo. Try again.');
     } finally {
@@ -272,6 +274,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
           try {
             await photoApi.delete(run.id, photoId);
             setPhotos(prev => prev.filter(p => p.id !== photoId));
+            albumCache.invalidate();
           } catch {
             Alert.alert('Error', 'Failed to delete photo');
           }
@@ -804,6 +807,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
               photo_data: base64,
               distance_marker_km: distanceKm,
             });
+            albumCache.invalidate();
           }}
           onClose={() => setRetroPickerVisible(false)}
           onComplete={() => fetchPhotos()}

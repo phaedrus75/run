@@ -44,6 +44,7 @@ import {
 } from '../services/photoSession';
 import { retryPhoto } from '../services/photoUploader';
 import { photoApi, walkPhotoApi } from '../services/api';
+import { albumCache } from '../services/albumCache';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -145,6 +146,7 @@ export function PhotoReviewScreen({ navigation, route }: Props) {
                 } else {
                   await walkPhotoApi.delete(activityId, entry.upload.serverPhotoId);
                 }
+                albumCache.invalidate();
               } catch {
                 // surface but don't block local deletion
               }
