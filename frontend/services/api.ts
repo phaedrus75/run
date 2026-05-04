@@ -967,6 +967,29 @@ export const levelApi = {
   },
 };
 
+export interface ZenStatus {
+  unlocked: boolean;
+  just_unlocked: boolean;
+  celebrated: boolean;
+  status: 'locked' | 'active' | 'grace' | 'expired';
+  level: string;
+  year_km: number;
+  year_threshold_km: number;
+  rolling_km: number;
+  rolling_threshold_km: number;
+  grace_days_remaining: number | null;
+  unlocked_at: string | null;
+}
+
+export const zenApi = {
+  status: async (): Promise<ZenStatus> => {
+    return apiFetch('/user/zen-status');
+  },
+  markCelebrated: async (): Promise<{ celebrated: boolean }> => {
+    return apiFetch('/user/zen/celebrated', { method: 'POST' });
+  },
+};
+
 // ==========================================
 // 🚶 WALK API
 // ==========================================

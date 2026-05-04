@@ -349,6 +349,9 @@ def run_migrations():
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS home_lat DOUBLE PRECISION",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS home_lng DOUBLE PRECISION",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS neighbourhood_widen_radius_km INTEGER DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS zen_unlocked_at TIMESTAMP",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS zen_below_since TIMESTAMP",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS zen_celebrated_at TIMESTAMP",
                 ]:
                     conn.execute(text(stmt))
                 for stmt in [
@@ -474,6 +477,9 @@ def run_migrations():
                 _sqlite_col("users", "home_lat", "home_lat FLOAT")
                 _sqlite_col("users", "home_lng", "home_lng FLOAT")
                 _sqlite_col("users", "neighbourhood_widen_radius_km", "neighbourhood_widen_radius_km INTEGER DEFAULT 0")
+                _sqlite_col("users", "zen_unlocked_at", "zen_unlocked_at TIMESTAMP")
+                _sqlite_col("users", "zen_below_since", "zen_below_since TIMESTAMP")
+                _sqlite_col("users", "zen_celebrated_at", "zen_celebrated_at TIMESTAMP")
                 _sqlite_col("runs", "neighbourhood_visibility", "neighbourhood_visibility VARCHAR DEFAULT 'off'")
                 _sqlite_col("runs", "neighbourhood_published_at", "neighbourhood_published_at TIMESTAMP")
                 _sqlite_col("runs", "neighbourhood_centroid_lat", "neighbourhood_centroid_lat FLOAT")
@@ -968,8 +974,16 @@ def set_user_level(level_data: dict, current_user: User = Depends(require_auth),
     if new_level not in LEVEL_ORDER:
         raise HTTPException(status_code=400, detail=f"Invalid level. Must be one of: {LEVEL_ORDER}")
 
+    # Zen is gated: must have been auto-unlocked by hitting 1000km in a
+    # calendar year. Manual selection is otherwise blocked.
+    if new_level == 'zen' and current_user.zen_unlocked_at is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Zen tier is locked. Reach 1000 km in a calendar year to unlock it.",
+        )
+
     current_user.runner_level = new_level
-    
+
     level_goals = LEVEL_GOALS.get(new_level, LEVEL_GOALS['breath'])
     goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
     if not goals:
@@ -985,6 +999,149 @@ def set_user_level(level_data: dict, current_user: User = Depends(require_auth),
         "yearly_km_goal": level_goals["yearly_km"],
         "monthly_km_goal": level_goals["monthly_km"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Zen tier (auto-promoted, rolling-maintained)
+# ---------------------------------------------------------------------------
+
+ZEN_THRESHOLD_KM = 1000.0
+ZEN_GRACE_DAYS = 30
+
+
+def _compute_zen_status(db: Session, current_user: User) -> dict:
+    """Compute and persist the user's Zen-tier status.
+
+    First-time unlock requires hitting 1000 km within the current calendar
+    year (Jan 1 -> now). Once unlocked, maintenance is judged on a rolling
+    365-day window. Falling under 1000 km starts a 30-day grace period;
+    after that the user is auto-demoted to Flow.
+    """
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    year_start = datetime(now.year, 1, 1)
+    rolling_start = now - timedelta(days=365)
+    min_date = datetime(2026, 1, 1)
+
+    year_floor = max(year_start, min_date)
+    rolling_floor = max(rolling_start, min_date)
+
+    year_km = db.query(func.coalesce(func.sum(Run.distance_km), 0.0)).filter(
+        Run.user_id == current_user.id,
+        Run.completed_at >= year_floor,
+    ).scalar() or 0.0
+
+    rolling_km = db.query(func.coalesce(func.sum(Run.distance_km), 0.0)).filter(
+        Run.user_id == current_user.id,
+        Run.completed_at >= rolling_floor,
+    ).scalar() or 0.0
+
+    year_km = float(year_km)
+    rolling_km = float(rolling_km)
+
+    just_unlocked = False
+    state_changed = False
+
+    # Backfill: existing accounts that were already on Zen prior to this
+    # tracking landing. Treat them as "earned + already celebrated" so we
+    # don't pop a celebration on first refresh.
+    if current_user.zen_unlocked_at is None and current_user.runner_level == 'zen':
+        current_user.zen_unlocked_at = now
+        current_user.zen_celebrated_at = now
+        state_changed = True
+
+    if current_user.zen_unlocked_at is None:
+        # First-time unlock: calendar-year threshold.
+        if year_km >= ZEN_THRESHOLD_KM:
+            current_user.zen_unlocked_at = now
+            current_user.runner_level = 'zen'
+            current_user.zen_below_since = None
+            level_goals = LEVEL_GOALS.get('zen', LEVEL_GOALS['flow'])
+            goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+            if not goals:
+                goals = UserGoals(user_id=current_user.id)
+                db.add(goals)
+            goals.yearly_km_goal = level_goals['yearly_km']
+            goals.monthly_km_goal = level_goals['monthly_km']
+            just_unlocked = True
+            state_changed = True
+    else:
+        # Already unlocked once -> evaluate maintenance on rolling 365d.
+        if rolling_km >= ZEN_THRESHOLD_KM:
+            if current_user.zen_below_since is not None:
+                current_user.zen_below_since = None
+                state_changed = True
+        else:
+            if current_user.zen_below_since is None:
+                current_user.zen_below_since = now
+                state_changed = True
+            days_below = (now - current_user.zen_below_since).days
+            if days_below >= ZEN_GRACE_DAYS and current_user.runner_level == 'zen':
+                current_user.runner_level = 'flow'
+                current_user.zen_below_since = None
+                level_goals = LEVEL_GOALS.get('flow', LEVEL_GOALS['flow'])
+                goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+                if goals:
+                    goals.yearly_km_goal = level_goals['yearly_km']
+                    goals.monthly_km_goal = level_goals['monthly_km']
+                state_changed = True
+
+    if state_changed:
+        db.commit()
+        db.refresh(current_user)
+
+    unlocked = current_user.zen_unlocked_at is not None
+    if not unlocked:
+        status = 'locked'
+        grace_days_remaining = None
+    elif rolling_km >= ZEN_THRESHOLD_KM:
+        status = 'active'
+        grace_days_remaining = None
+    else:
+        if current_user.zen_below_since is not None:
+            elapsed = (now - current_user.zen_below_since).days
+            grace_days_remaining = max(0, ZEN_GRACE_DAYS - elapsed)
+        else:
+            grace_days_remaining = ZEN_GRACE_DAYS
+        status = 'grace' if current_user.runner_level == 'zen' else 'expired'
+
+    return {
+        'unlocked': unlocked,
+        'just_unlocked': just_unlocked,
+        'celebrated': current_user.zen_celebrated_at is not None,
+        'status': status,
+        'level': current_user.runner_level,
+        'year_km': round(year_km, 1),
+        'year_threshold_km': ZEN_THRESHOLD_KM,
+        'rolling_km': round(rolling_km, 1),
+        'rolling_threshold_km': ZEN_THRESHOLD_KM,
+        'grace_days_remaining': grace_days_remaining,
+        'unlocked_at': current_user.zen_unlocked_at.isoformat() if current_user.zen_unlocked_at else None,
+    }
+
+
+@app.get("/user/zen-status")
+def get_zen_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return the user's current Zen-tier status, running unlock/maintain checks."""
+    return _compute_zen_status(db, current_user)
+
+
+@app.post("/user/zen/celebrated")
+def mark_zen_celebrated(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Mark the one-time Zen unlock celebration as seen."""
+    from datetime import datetime
+    if current_user.zen_unlocked_at is None:
+        raise HTTPException(status_code=400, detail="Zen not unlocked yet")
+    if current_user.zen_celebrated_at is None:
+        current_user.zen_celebrated_at = datetime.now()
+        db.commit()
+    return {"celebrated": True}
 
 
 @app.put("/user/privacy")

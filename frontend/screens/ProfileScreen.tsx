@@ -16,7 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
-import { levelApi } from '../services/api';
+import { levelApi, zenApi, ZenStatus } from '../services/api';
 
 import { API_BASE_URL } from '../services/config';
 
@@ -65,14 +65,39 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
 
   const [profilePrivacy, setProfilePrivacy] = useState<'private' | 'circles' | 'public'>('private');
 
+  const [zen, setZen] = useState<ZenStatus | null>(null);
+
   const fetchAll = useCallback(async () => {
     try {
-      const [, , levelData] = await Promise.all([
+      const [, , levelData, zenData] = await Promise.all([
         fetchGoals(),
         fetchHandle(),
         levelApi.get().catch(() => null),
+        zenApi.status().catch(() => null),
       ]);
       if (levelData?.level) setCurrentLevel(levelData.level);
+      if (zenData) {
+        setZen(zenData);
+        if (zenData.level) setCurrentLevel(zenData.level);
+        // Server-side just-unlocked: celebrate once, then mark as seen.
+        if (zenData.unlocked && !zenData.celebrated) {
+          Alert.alert(
+            'Zen unlocked 🧘',
+            "You've crossed 1000 km this year. Welcome to Zen — pure running, pure zen.\n\nMaintain 1000 km on a rolling year to keep it.",
+            [
+              {
+                text: 'Nice',
+                onPress: async () => {
+                  try {
+                    await zenApi.markCelebrated();
+                    setZen(z => (z ? { ...z, celebrated: true } : z));
+                  } catch {}
+                },
+              },
+            ],
+          );
+        }
+      }
     } catch {} finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -414,6 +439,48 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
                   </TouchableOpacity>
                 );
               })}
+
+              {/* Zen — auto-unlocked at 1000km/yr, maintained on rolling 365d. */}
+              {(() => {
+                const meta = LEVEL_META.zen;
+                const unlocked = !!zen?.unlocked;
+                const isActive = currentLevel === 'zen';
+                const yearKm = zen?.year_km ?? 0;
+                const yearTarget = zen?.year_threshold_km ?? 1000;
+                const rollingKm = zen?.rolling_km ?? 0;
+                const grace = zen?.status === 'grace';
+                const graceDays = zen?.grace_days_remaining ?? 0;
+                const subline = !unlocked
+                  ? `${yearKm.toFixed(0)} / ${yearTarget.toFixed(0)} km this year`
+                  : grace
+                    ? `Maintaining: ${rollingKm.toFixed(0)} / ${yearTarget.toFixed(0)} km · ${graceDays}d grace`
+                    : meta.tagline;
+                return (
+                  <TouchableOpacity
+                    key="zen"
+                    style={[
+                      styles.levelOption,
+                      isActive && { backgroundColor: meta.color + '15', borderColor: meta.color },
+                      !unlocked && { opacity: 0.55 },
+                    ]}
+                    onPress={() => unlocked && changeLevel('zen')}
+                    disabled={!unlocked}
+                    activeOpacity={unlocked ? 0.7 : 1}
+                  >
+                    <Text style={styles.levelOptionEmoji}>{meta.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.levelOptionName, isActive && { color: meta.color }]}>{meta.name}</Text>
+                        {!unlocked && (
+                          <Ionicons name="lock-closed" size={14} color={colors.textSecondary} />
+                        )}
+                      </View>
+                      <Text style={styles.levelOptionTagline} numberOfLines={1}>{subline}</Text>
+                    </View>
+                    {isActive && <Ionicons name="checkmark-circle" size={20} color={meta.color} />}
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           )}
         </View>

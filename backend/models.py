@@ -166,6 +166,12 @@ class User(Base):
     home_lng = Column(Float, nullable=True)
     neighbourhood_widen_radius_km = Column(Integer, default=0, server_default='0')
 
+    # 🧘 Zen tier (auto-promoted at 1000km in a calendar year, maintained on
+    # rolling 365d window with a 30-day grace period).
+    zen_unlocked_at = Column(DateTime, nullable=True)
+    zen_below_since = Column(DateTime, nullable=True)
+    zen_celebrated_at = Column(DateTime, nullable=True)
+
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
 
