@@ -7,6 +7,30 @@ interface AchievementsProps {
   data: AchievementsData;
 }
 
+/** Subsections under Path (movement) vs Album (looking back + community). */
+const PATH_CATEGORY_ORDER = [
+  'milestone',
+  'distance',
+  'distance_type',
+  'specialist',
+  'streak',
+  'dedication',
+  'goals',
+  'category',
+  'steps',
+  'walking',
+];
+
+const ALBUM_CATEGORY_ORDER = [
+  'album',
+  'mood',
+  'reflection',
+  'pr',
+  'neighbourhood',
+  'circles',
+  'zen',
+];
+
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
   milestone: { label: 'First Steps', emoji: '🌱' },
   distance: { label: 'The Long Road', emoji: '🛤️' },
@@ -16,18 +40,18 @@ const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
   goals: { label: 'Horizons', emoji: '🌅' },
   category: { label: 'Outdoor & Indoor', emoji: '🏞️' },
   steps: { label: 'Daily Movement', emoji: '🚶' },
+  album: { label: 'Album', emoji: '📷' },
   scenic: { label: 'Trail Album', emoji: '📷' },
   levels: { label: 'Your Path', emoji: '🌊' },
   dedication: { label: 'Showing Up', emoji: '🌤️' },
-  mood: { label: 'Reflection', emoji: '🪞' },
+  mood: { label: 'Run mood', emoji: '🪞' },
   walking: { label: 'Walking the Path', emoji: '🚶' },
+  reflection: { label: 'Weekly reflection', emoji: '📝' },
+  pr: { label: 'Personal records', emoji: '🏅' },
+  neighbourhood: { label: 'Neighbourhood', emoji: '🏙️' },
+  circles: { label: 'Circles', emoji: '👥' },
+  zen: { label: 'Zen', emoji: '🧘' },
 };
-
-const CATEGORY_ORDER = [
-  'milestone', 'distance', 'distance_type', 'specialist',
-  'streak', 'goals', 'category', 'steps',
-  'scenic', 'walking', 'levels', 'dedication', 'mood',
-];
 
 function groupByCategory(achievements: Achievement[]): Record<string, Achievement[]> {
   const groups: Record<string, Achievement[]> = {};
@@ -36,6 +60,26 @@ function groupByCategory(achievements: Achievement[]): Record<string, Achievemen
     groups[a.category].push(a);
   }
   return groups;
+}
+
+function renderCategoryBlock(
+  cat: string,
+  grouped: Record<string, Achievement[]>,
+  showLocked: boolean,
+  renderBadge: (a: Achievement) => React.ReactNode,
+) {
+  const items = grouped[cat] || [];
+  const catInfo = CATEGORY_LABELS[cat] || { label: cat, emoji: '' };
+  const visible = showLocked ? items : items.filter(a => a.unlocked);
+  if (visible.length === 0) return null;
+  return (
+    <View key={cat} style={styles.categorySection}>
+      <Text style={styles.categoryTitle}>
+        {catInfo.emoji} {catInfo.label}
+      </Text>
+      <View style={styles.badgeGrid}>{visible.map(renderBadge)}</View>
+    </View>
+  );
 }
 
 export function Achievements({ data }: AchievementsProps) {
@@ -48,68 +92,57 @@ export function Achievements({ data }: AchievementsProps) {
   const renderBadge = (achievement: Achievement) => (
     <View
       key={achievement.id}
-      style={[
-        styles.badge,
-        !achievement.unlocked && styles.lockedBadge,
-      ]}
+      style={[styles.badge, !achievement.unlocked && styles.lockedBadge]}
     >
       <Text style={[styles.badgeEmoji, !achievement.unlocked && styles.lockedEmoji]}>
         {achievement.emoji}
       </Text>
-      <Text
-        style={[styles.badgeName, !achievement.unlocked && styles.lockedText]}
-      >
+      <Text style={[styles.badgeName, !achievement.unlocked && styles.lockedText]}>
         {achievement.name}
       </Text>
-      <Text
-        style={[styles.badgeDesc, !achievement.unlocked && styles.lockedText]}
-      >
+      <Text style={[styles.badgeDesc, !achievement.unlocked && styles.lockedText]}>
         {achievement.description}
       </Text>
-      {achievement.unlocked && (
-        <View style={styles.unlockedDot} />
-      )}
+      {achievement.unlocked && <View style={styles.unlockedDot} />}
     </View>
   );
 
-  const visibleCategories = showLocked
-    ? CATEGORY_ORDER.filter(c => grouped[c]?.length)
-    : CATEGORY_ORDER.filter(c => grouped[c]?.some(a => a.unlocked));
+  const pathCats = PATH_CATEGORY_ORDER.filter(c =>
+    showLocked ? grouped[c]?.length : grouped[c]?.some(a => a.unlocked),
+  );
+  const albumCats = ALBUM_CATEGORY_ORDER.filter(c =>
+    showLocked ? grouped[c]?.length : grouped[c]?.some(a => a.unlocked),
+  );
 
   return (
     <View style={[styles.container, shadows.small]}>
       <View style={styles.header}>
         <Text style={styles.title}>Milestones</Text>
-        {unlocked_count > 0 && (
-          <Text style={styles.countSubtle}>{unlocked_count} earned</Text>
+        {total > 0 && (
+          <Text style={styles.countSubtle}>
+            {unlocked_count} / {total} earned
+          </Text>
         )}
       </View>
 
-      {visibleCategories.map(cat => {
-        const items = grouped[cat] || [];
-        const catInfo = CATEGORY_LABELS[cat] || { label: cat, emoji: '' };
-        const visible = showLocked ? items : items.filter(a => a.unlocked);
-        if (visible.length === 0) return null;
+      {pathCats.length > 0 && (
+        <View style={styles.pathAlbumBlock}>
+          <Text style={styles.pathAlbumTitle}>Path</Text>
+          <Text style={styles.pathAlbumSubtitle}>The run, the rhythm, the distance</Text>
+          {pathCats.map(cat => renderCategoryBlock(cat, grouped, showLocked, renderBadge))}
+        </View>
+      )}
 
-        return (
-          <View key={cat} style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>
-              {catInfo.emoji} {catInfo.label}
-            </Text>
-            <View style={styles.badgeGrid}>
-              {visible.map(renderBadge)}
-            </View>
-          </View>
-        );
-      })}
+      {albumCats.length > 0 && (
+        <View style={styles.pathAlbumBlock}>
+          <Text style={styles.pathAlbumTitle}>Album</Text>
+          <Text style={styles.pathAlbumSubtitle}>Photos, mood, community, records</Text>
+          {albumCats.map(cat => renderCategoryBlock(cat, grouped, showLocked, renderBadge))}
+        </View>
+      )}
 
-      <TouchableOpacity
-        style={styles.toggleButton}
-        onPress={() => setShowLocked(!showLocked)}
-      >
-        <Text style={styles.toggleText}>
-          {showLocked ? 'Show earned' : 'See what\u2019s ahead'}
-        </Text>
+      <TouchableOpacity style={styles.toggleButton} onPress={() => setShowLocked(!showLocked)}>
+        <Text style={styles.toggleText}>{showLocked ? 'Show earned' : "See what's ahead"}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -137,6 +170,20 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textLight,
     fontWeight: typography.weights.medium,
+  },
+  pathAlbumBlock: {
+    marginBottom: spacing.lg,
+  },
+  pathAlbumTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  pathAlbumSubtitle: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   categorySection: {
     marginBottom: spacing.md,

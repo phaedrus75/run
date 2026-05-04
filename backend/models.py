@@ -171,6 +171,7 @@ class User(Base):
     zen_unlocked_at = Column(DateTime, nullable=True)
     zen_below_since = Column(DateTime, nullable=True)
     zen_celebrated_at = Column(DateTime, nullable=True)
+    zen_demoted_at = Column(DateTime, nullable=True)
 
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())

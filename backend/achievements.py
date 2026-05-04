@@ -3,12 +3,17 @@
 ===============================
 
 Tracks personal records, achievements, and goals.
-100 achievements across 13 categories.
+Badges are grouped into Path vs Album on the client; legacy rows stay in
+ACHIEVEMENTS for DB compatibility but are hidden from checks and totals.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
+from collections import defaultdict
+
+from sqlalchemy import func as sqlfunc, or_
 from sqlalchemy.orm import Session
+
 from models import Run
 
 # ==========================================
@@ -371,6 +376,36 @@ ACHIEVEMENTS = {
         "emoji": "🌅", "category": "streak",
         "check": lambda s: s.get("longest_streak", 0) >= 52,
     },
+    "streak_current_2": {
+        "id": "streak_current_2", "name": "Present Week",
+        "description": "On a 2-week active streak right now",
+        "emoji": "🔥", "category": "streak",
+        "check": lambda s: s.get("current_streak", 0) >= 2,
+    },
+    "streak_current_4": {
+        "id": "streak_current_4", "name": "Rolling Month",
+        "description": "On a 4-week active streak right now",
+        "emoji": "🔥", "category": "streak",
+        "check": lambda s: s.get("current_streak", 0) >= 4,
+    },
+    "streak_current_8": {
+        "id": "streak_current_8", "name": "Hot Streak",
+        "description": "On an 8-week active streak right now",
+        "emoji": "🔥", "category": "streak",
+        "check": lambda s: s.get("current_streak", 0) >= 8,
+    },
+    "streak_current_16": {
+        "id": "streak_current_16", "name": "Unbroken",
+        "description": "On a 16-week active streak right now",
+        "emoji": "🔥", "category": "streak",
+        "check": lambda s: s.get("current_streak", 0) >= 16,
+    },
+    "streak_current_26": {
+        "id": "streak_current_26", "name": "Half-Year Heat",
+        "description": "On a 26-week active streak right now",
+        "emoji": "🔥", "category": "streak",
+        "check": lambda s: s.get("current_streak", 0) >= 26,
+    },
 
     # ---- GOALS: Monthly & yearly goal hits (8) ----
     "monthly_goal_1": {
@@ -522,79 +557,123 @@ ACHIEVEMENTS = {
         "check": lambda s: s.get("days_30k_steps", 0) >= 1,
     },
 
-    # ---- SCENIC PHOTOS (6) ----
+    # ---- ALBUM: run photos (ids unchanged for user_achievements) ----
     "scenic_first": {
-        "id": "scenic_first", "name": "Shutterbug",
-        "description": "Take your first scenic photo on a run",
-        "emoji": "📷", "category": "scenic",
+        "id": "scenic_first", "name": "Album Opener",
+        "description": "Add your first photo to a run",
+        "emoji": "📷", "category": "album",
         "check": lambda s: s.get("total_photos", 0) >= 1,
     },
     "scenic_5": {
-        "id": "scenic_5", "name": "Photo Album",
-        "description": "Take 5 scenic photos",
-        "emoji": "🖼️", "category": "scenic",
+        "id": "scenic_5", "name": "Growing Album",
+        "description": "Add 5 photos to your runs",
+        "emoji": "🖼️", "category": "album",
         "check": lambda s: s.get("total_photos", 0) >= 5,
     },
     "scenic_10": {
-        "id": "scenic_10", "name": "Photographer",
-        "description": "Take 10 scenic photos",
-        "emoji": "📸", "category": "scenic",
+        "id": "scenic_10", "name": "Album Regular",
+        "description": "Add 10 photos to your runs",
+        "emoji": "📸", "category": "album",
         "check": lambda s: s.get("total_photos", 0) >= 10,
     },
     "scenic_25": {
         "id": "scenic_25", "name": "Visual Storyteller",
-        "description": "Take 25 scenic photos",
-        "emoji": "🎞️", "category": "scenic",
+        "description": "Add 25 photos to your runs",
+        "emoji": "🎞️", "category": "album",
         "check": lambda s: s.get("total_photos", 0) >= 25,
     },
     "scenic_3_runs": {
-        "id": "scenic_3_runs", "name": "Scenic Explorer",
+        "id": "scenic_3_runs", "name": "Routes Remembered",
         "description": "Add photos to 3 different runs",
-        "emoji": "🗺️", "category": "scenic",
+        "emoji": "🗺️", "category": "album",
         "check": lambda s: s.get("runs_with_photos", 0) >= 3,
     },
     "scenic_10_runs": {
         "id": "scenic_10_runs", "name": "Trail Documentarian",
         "description": "Add photos to 10 different runs",
-        "emoji": "📖", "category": "scenic",
+        "emoji": "📖", "category": "album",
         "check": lambda s: s.get("runs_with_photos", 0) >= 10,
     },
+    "album_50_photos": {
+        "id": "album_50_photos", "name": "Deep Cut",
+        "description": "Add 50 photos to your runs",
+        "emoji": "📚", "category": "album",
+        "check": lambda s: s.get("total_photos", 0) >= 50,
+    },
+    "album_100_photos": {
+        "id": "album_100_photos", "name": "Century Frame",
+        "description": "Add 100 photos to your runs",
+        "emoji": "🎬", "category": "album",
+        "check": lambda s: s.get("total_photos", 0) >= 100,
+    },
+    "album_25_runs": {
+        "id": "album_25_runs", "name": "Many Chapters",
+        "description": "Add photos to 25 different runs",
+        "emoji": "📔", "category": "album",
+        "check": lambda s: s.get("runs_with_photos", 0) >= 25,
+    },
+    "album_50_runs": {
+        "id": "album_50_runs", "name": "Library of Paths",
+        "description": "Add photos to 50 different runs",
+        "emoji": "📕", "category": "album",
+        "check": lambda s: s.get("runs_with_photos", 0) >= 50,
+    },
+    "album_4km_moment": {
+        "id": "album_4km_moment", "name": "The Fourth Kilometre",
+        "description": "Capture a run photo at 4 km or beyond along the route",
+        "emoji": "🎯", "category": "album",
+        "check": lambda s: s.get("photos_at_or_beyond_4km", 0) >= 1,
+    },
+    "album_seasons_4": {
+        "id": "album_seasons_4", "name": "Four Seasons",
+        "description": "Run photos across all four seasons of the year",
+        "emoji": "🍂", "category": "album",
+        "check": lambda s: s.get("photo_seasons_covered", 0) >= 4,
+    },
+    "album_paths_10": {
+        "id": "album_paths_10", "name": "Ten Trails",
+        "description": "Photos on 10 distinct start locations (routes)",
+        "emoji": "🧭", "category": "album",
+        "check": lambda s: s.get("photo_route_buckets", 0) >= 10,
+    },
 
-    # ---- LEVELS (5) ----
+    # ---- LEGACY (hidden; kept so user_achievement rows stay valid) ----
     "level_stride": {
         "id": "level_stride", "name": "Finding Stride",
-        "description": "Reach the Stride level",
-        "emoji": "🌿", "category": "levels",
-        "check": lambda s: s.get("runner_level", "") in ("stride", "flow", "zen"),
+        "description": "Retired badge",
+        "emoji": "🌿", "category": "levels", "legacy": True,
+        "check": lambda s: False,
     },
     "level_flow": {
         "id": "level_flow", "name": "In the Flow",
-        "description": "Reach the Flow level",
-        "emoji": "🌊", "category": "levels",
-        "check": lambda s: s.get("runner_level", "") in ("flow", "zen"),
+        "description": "Retired badge",
+        "emoji": "🌊", "category": "levels", "legacy": True,
+        "check": lambda s: False,
     },
+
+    # ---- DISTANCE VARIETY (was mis-labelled as levels) ----
     "level_all_breath": {
-        "id": "level_all_breath", "name": "Breath Complete",
-        "description": "Run all Breath distances (1K, 2K, 3K, 5K)",
-        "emoji": "🫁", "category": "levels",
+        "id": "level_all_breath", "name": "Breath Quartet",
+        "description": "Run every distance from 1K through 5K at least once",
+        "emoji": "🫁", "category": "distance_type",
         "check": lambda s: all(
             s.get("runs_by_type", {}).get(d, 0) >= 1
             for d in ["1k", "2k", "3k", "5k"]
         ),
     },
     "level_all_stride": {
-        "id": "level_all_stride", "name": "Stride Complete",
-        "description": "Run all Stride distances (2K, 3K, 5K, 8K, 10K)",
-        "emoji": "👣", "category": "levels",
+        "id": "level_all_stride", "name": "Stride Five",
+        "description": "Run 2K through 10K at least once each",
+        "emoji": "👣", "category": "distance_type",
         "check": lambda s: all(
             s.get("runs_by_type", {}).get(d, 0) >= 1
             for d in ["2k", "3k", "5k", "8k", "10k"]
         ),
     },
     "level_all_flow": {
-        "id": "level_all_flow", "name": "Flow Complete",
-        "description": "Run all Flow distances (3K-21K)",
-        "emoji": "🌊", "category": "levels",
+        "id": "level_all_flow", "name": "Flow Seven",
+        "description": "Run 3K through 21K at least once each",
+        "emoji": "🌊", "category": "distance_type",
         "check": lambda s: all(
             s.get("runs_by_type", {}).get(d, 0) >= 1
             for d in ["3k", "5k", "8k", "10k", "15k", "18k", "21k"]
@@ -657,6 +736,238 @@ ACHIEVEMENTS = {
         "description": "Log 25 runs with a mood",
         "emoji": "🌙", "category": "mood",
         "check": lambda s: s.get("runs_with_mood", 0) >= 25,
+    },
+    "mood_50": {
+        "id": "mood_50", "name": "Emotional Map",
+        "description": "Log 50 runs with a mood",
+        "emoji": "🗺️", "category": "mood",
+        "check": lambda s: s.get("runs_with_mood", 0) >= 50,
+    },
+    "mood_every_mood": {
+        "id": "mood_every_mood", "name": "Full Spectrum",
+        "description": "Log every run mood at least once (easy, good, tough, great)",
+        "emoji": "🌈", "category": "mood",
+        "check": lambda s: s.get("distinct_run_mood_count", 0) >= 4,
+    },
+
+    # ---- WEEKLY REFLECTION ----
+    "reflection_first": {
+        "id": "reflection_first", "name": "Weekend Pause",
+        "description": "Save your first weekly reflection",
+        "emoji": "📝", "category": "reflection",
+        "check": lambda s: s.get("reflection_count", 0) >= 1,
+    },
+    "reflection_4": {
+        "id": "reflection_4", "name": "Month of Sundays",
+        "description": "Save 4 weekly reflections",
+        "emoji": "📅", "category": "reflection",
+        "check": lambda s: s.get("reflection_count", 0) >= 4,
+    },
+    "reflection_12": {
+        "id": "reflection_12", "name": "Season of Thought",
+        "description": "Save 12 weekly reflections",
+        "emoji": "🌿", "category": "reflection",
+        "check": lambda s: s.get("reflection_count", 0) >= 12,
+    },
+    "reflection_26": {
+        "id": "reflection_26", "name": "Half-Year Journal",
+        "description": "Save 26 weekly reflections",
+        "emoji": "📔", "category": "reflection",
+        "check": lambda s: s.get("reflection_count", 0) >= 26,
+    },
+    "reflection_52": {
+        "id": "reflection_52", "name": "Year of Looking Back",
+        "description": "Save 52 weekly reflections",
+        "emoji": "📖", "category": "reflection",
+        "check": lambda s: s.get("reflection_count", 0) >= 52,
+    },
+    "reflection_every_mood": {
+        "id": "reflection_every_mood", "name": "Every Feeling",
+        "description": "Use each weekly reflection mood emoji at least once",
+        "emoji": "✨", "category": "reflection",
+        "check": lambda s: s.get("distinct_reflection_moods", 0) >= 5,
+    },
+
+    # ---- PERSONAL RECORDS ----
+    "pr_first": {
+        "id": "pr_first", "name": "Personal Best",
+        "description": "Set a personal record on any distance",
+        "emoji": "🏅", "category": "pr",
+        "check": lambda s: s.get("pr_distances_held", 0) >= 1,
+    },
+    "pr_3_distances": {
+        "id": "pr_3_distances", "name": "Triple Threat",
+        "description": "Hold a PR on 3 different distances",
+        "emoji": "🎖️", "category": "pr",
+        "check": lambda s: s.get("pr_distances_held", 0) >= 3,
+    },
+    "pr_5_distances": {
+        "id": "pr_5_distances", "name": "PR Collector",
+        "description": "Hold a PR on 5 different distances",
+        "emoji": "🏆", "category": "pr",
+        "check": lambda s: s.get("pr_distances_held", 0) >= 5,
+    },
+    "pr_burst": {
+        "id": "pr_burst", "name": "Breakthrough Month",
+        "description": "Improve a PR 3+ times in a single calendar month",
+        "emoji": "⚡", "category": "pr",
+        "check": lambda s: s.get("pr_burst_max_in_month", 0) >= 3,
+    },
+    "pr_all_breath": {
+        "id": "pr_all_breath", "name": "PR Quartet",
+        "description": "Hold a PR on 1K, 2K, 3K, and 5K",
+        "emoji": "🎯", "category": "pr",
+        "check": lambda s: s.get("pr_breath_held", False),
+    },
+    "pr_all_stride": {
+        "id": "pr_all_stride", "name": "PR Stride Set",
+        "description": "Hold a PR from 2K through 10K",
+        "emoji": "🥇", "category": "pr",
+        "check": lambda s: s.get("pr_stride_held", False),
+    },
+    "pr_all_flow": {
+        "id": "pr_all_flow", "name": "PR Full Deck",
+        "description": "Hold a PR on every standard distance through 21K",
+        "emoji": "👑", "category": "pr",
+        "check": lambda s: s.get("pr_flow_held", False),
+    },
+
+    # ---- ZEN (earned tier) ----
+    "zen_unlocked": {
+        "id": "zen_unlocked", "name": "Zen Unlocked",
+        "description": "Earn Zen by reaching 1000 km in a calendar year",
+        "emoji": "🧘", "category": "zen",
+        "check": lambda s: s.get("zen_unlocked", False),
+    },
+    "zen_maintained_3mo": {
+        "id": "zen_maintained_3mo", "name": "Zen Three Months",
+        "description": "Stay on Zen with a healthy rolling year for 90 days after unlock",
+        "emoji": "🌿", "category": "zen",
+        "check": lambda s: s.get("zen_maintained_90d", False),
+    },
+    "zen_maintained_6mo": {
+        "id": "zen_maintained_6mo", "name": "Zen Six Months",
+        "description": "Stay on Zen with a healthy rolling year for 180 days after unlock",
+        "emoji": "🌳", "category": "zen",
+        "check": lambda s: s.get("zen_maintained_180d", False),
+    },
+    "zen_maintained_year": {
+        "id": "zen_maintained_year", "name": "Zen Year",
+        "description": "Stay on Zen with a healthy rolling year for a full year after unlock",
+        "emoji": "🌅", "category": "zen",
+        "check": lambda s: s.get("zen_maintained_365d", False),
+    },
+    "zen_returned": {
+        "id": "zen_returned", "name": "Zen Returned",
+        "description": "Earn Zen again after a lapse",
+        "emoji": "♻️", "category": "zen",
+        "check": lambda s: s.get("zen_returned", False),
+    },
+
+    # ---- NEIGHBOURHOOD ----
+    "neighbourhood_first_share": {
+        "id": "neighbourhood_first_share", "name": "City Voice",
+        "description": "Share your first run to the Neighbourhood",
+        "emoji": "🏙️", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_shared_runs", 0) >= 1,
+    },
+    "neighbourhood_shared_5": {
+        "id": "neighbourhood_shared_5", "name": "Local Regular",
+        "description": "Share 5 runs to the Neighbourhood",
+        "emoji": "🌆", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_shared_runs", 0) >= 5,
+    },
+    "neighbourhood_shared_25": {
+        "id": "neighbourhood_shared_25", "name": "City Contributor",
+        "description": "Share 25 runs to the Neighbourhood",
+        "emoji": "🌃", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_shared_runs", 0) >= 25,
+    },
+    "neighbourhood_shared_100": {
+        "id": "neighbourhood_shared_100", "name": "Neighbourhood Anchor",
+        "description": "Share 100 runs to the Neighbourhood",
+        "emoji": "🗼", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_shared_runs", 0) >= 100,
+    },
+    "neighbourhood_first_save_received": {
+        "id": "neighbourhood_first_save_received", "name": "Saved for Later",
+        "description": "Someone saved one of your shared runs",
+        "emoji": "🔖", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_saves_received", 0) >= 1,
+    },
+    "neighbourhood_loves_5": {
+        "id": "neighbourhood_loves_5", "name": "Felt in the City",
+        "description": "Receive 5 Loves on your shared runs",
+        "emoji": "💚", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_loves_received", 0) >= 5,
+    },
+    "neighbourhood_loves_25": {
+        "id": "neighbourhood_loves_25", "name": "City Favourite",
+        "description": "Receive 25 Loves on your shared runs",
+        "emoji": "💚", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_loves_received", 0) >= 25,
+    },
+    "neighbourhood_loves_100": {
+        "id": "neighbourhood_loves_100", "name": "Beloved Route",
+        "description": "Receive 100 Loves on your shared runs",
+        "emoji": "💚", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_loves_received", 0) >= 100,
+    },
+    "neighbourhood_explorer_5": {
+        "id": "neighbourhood_explorer_5", "name": "Scout",
+        "description": "Save 5 runs from other ZenRunners",
+        "emoji": "🧭", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_saves_of_others", 0) >= 5,
+    },
+    "neighbourhood_explorer_25": {
+        "id": "neighbourhood_explorer_25", "name": "Curator",
+        "description": "Save 25 runs from other ZenRunners",
+        "emoji": "🗺️", "category": "neighbourhood",
+        "check": lambda s: s.get("neighbourhood_saves_of_others", 0) >= 25,
+    },
+
+    # ---- CIRCLES ----
+    "circle_first_join": {
+        "id": "circle_first_join", "name": "Circle Up",
+        "description": "Join your first circle",
+        "emoji": "👥", "category": "circles",
+        "check": lambda s: s.get("circle_memberships", 0) >= 1,
+    },
+    "circle_first_share": {
+        "id": "circle_first_share", "name": "Shared with Friends",
+        "description": "Have a run visible to your circles",
+        "emoji": "🤝", "category": "circles",
+        "check": lambda s: s.get("runs_circles_shared", 0) >= 1,
+    },
+    "checkin_first": {
+        "id": "checkin_first", "name": "Weekly Pulse",
+        "description": "Post your first circle check-in",
+        "emoji": "💬", "category": "circles",
+        "check": lambda s: s.get("circle_checkins", 0) >= 1,
+    },
+    "checkin_4": {
+        "id": "checkin_4", "name": "Month of Pulses",
+        "description": "Post 4 circle check-ins",
+        "emoji": "📣", "category": "circles",
+        "check": lambda s: s.get("circle_checkins", 0) >= 4,
+    },
+    "checkin_12": {
+        "id": "checkin_12", "name": "Quarter of Pulses",
+        "description": "Post 12 circle check-ins",
+        "emoji": "🔔", "category": "circles",
+        "check": lambda s: s.get("circle_checkins", 0) >= 12,
+    },
+    "checkin_26": {
+        "id": "checkin_26", "name": "Half-Year Pulse",
+        "description": "Post 26 circle check-ins",
+        "emoji": "⏰", "category": "circles",
+        "check": lambda s: s.get("circle_checkins", 0) >= 26,
+    },
+    "checkin_52": {
+        "id": "checkin_52", "name": "Year of Pulses",
+        "description": "Post 52 circle check-ins",
+        "emoji": "🎊", "category": "circles",
+        "check": lambda s: s.get("circle_checkins", 0) >= 52,
     },
 
     # ---- WALKING ----
@@ -729,13 +1040,134 @@ ACHIEVEMENTS = {
         "emoji": "🧭", "category": "walking",
         "check": lambda s: s.get("public_walks_done", 0) >= 1,
     },
+    "walks_250": {
+        "id": "walks_250", "name": "Walking Deep",
+        "description": "Complete 250 walks",
+        "emoji": "🛤️", "category": "walking",
+        "check": lambda s: s.get("total_walks", 0) >= 250,
+    },
+    "walks_500": {
+        "id": "walks_500", "name": "Walking Life",
+        "description": "Complete 500 walks",
+        "emoji": "🌍", "category": "walking",
+        "check": lambda s: s.get("total_walks", 0) >= 500,
+    },
+    "walk_km_250": {
+        "id": "walk_km_250", "name": "250 km Walked",
+        "description": "Walk 250 km in total",
+        "emoji": "🌾", "category": "walking",
+        "check": lambda s: s.get("total_walk_km", 0) >= 250,
+    },
+    "walk_km_500": {
+        "id": "walk_km_500", "name": "500 km Walked",
+        "description": "Walk 500 km in total",
+        "emoji": "🏔️", "category": "walking",
+        "check": lambda s: s.get("total_walk_km", 0) >= 500,
+    },
+    "walk_long_15": {
+        "id": "walk_long_15", "name": "15 km Stretch",
+        "description": "Complete a single walk of 15 km or more",
+        "emoji": "⛰️", "category": "walking",
+        "check": lambda s: s.get("longest_walk_km", 0) >= 15,
+    },
+    "walk_streak_2": {
+        "id": "walk_streak_2", "name": "Walk Rhythm",
+        "description": "On a 2-week active walking streak right now",
+        "emoji": "👣", "category": "walking",
+        "check": lambda s: s.get("walk_current_streak", 0) >= 2,
+    },
+    "walk_streak_4": {
+        "id": "walk_streak_4", "name": "Walk Month",
+        "description": "On a 4-week active walking streak right now",
+        "emoji": "👣", "category": "walking",
+        "check": lambda s: s.get("walk_current_streak", 0) >= 4,
+    },
+    "walk_streak_12": {
+        "id": "walk_streak_12", "name": "Walk Quarter",
+        "description": "On a 12-week active walking streak right now",
+        "emoji": "👣", "category": "walking",
+        "check": lambda s: s.get("walk_current_streak", 0) >= 12,
+    },
     "walk_photo_first": {
         "id": "walk_photo_first", "name": "Walking with a Camera",
         "description": "Capture a photo on a walk",
-        "emoji": "📸", "category": "walking",
+        "emoji": "📸", "category": "album",
         "check": lambda s: s.get("walks_with_photos", 0) >= 1,
     },
 }
+
+
+def _rolling_year_km(db: Session, user_id: int) -> float:
+    now = datetime.now()
+    rolling_start = max(now - timedelta(days=365), datetime(2026, 1, 1))
+    q = db.query(sqlfunc.coalesce(sqlfunc.sum(Run.distance_km), 0.0)).filter(
+        Run.user_id == user_id,
+        Run.completed_at >= rolling_start,
+    )
+    return float(q.scalar() or 0.0)
+
+
+def _photo_seasons_covered(db: Session, user_id: int) -> int:
+    """Distinct seasons (meteorological N. hemisphere) among run photos."""
+    rows = (
+        db.query(Run.completed_at)
+        .join(RunPhoto, RunPhoto.run_id == Run.id)
+        .filter(RunPhoto.user_id == user_id, Run.user_id == user_id)
+        .all()
+    )
+    seasons = set()
+    for (dt,) in rows:
+        if not dt:
+            continue
+        m = dt.month
+        if m in (12, 1, 2):
+            seasons.add(0)
+        elif m in (3, 4, 5):
+            seasons.add(1)
+        elif m in (6, 7, 8):
+            seasons.add(2)
+        else:
+            seasons.add(3)
+    return len(seasons)
+
+
+def _photo_route_buckets(db: Session, user_id: int) -> int:
+    buckets = set()
+    q = (
+        db.query(Run.start_lat, Run.start_lng)
+        .join(RunPhoto, RunPhoto.run_id == Run.id)
+        .filter(RunPhoto.user_id == user_id, Run.user_id == user_id)
+        .distinct()
+        .all()
+    )
+    for lat, lng in q:
+        if lat is None or lng is None:
+            continue
+        buckets.add((round(lat, 3), round(lng, 3)))
+    return len(buckets)
+
+
+def _pr_burst_max_in_month(all_runs: list) -> int:
+    """Max count of PR improvements in any calendar month."""
+    valid = {"1k", "2k", "3k", "5k", "8k", "10k", "15k", "18k", "21k"}
+    sorted_runs = sorted(
+        (r for r in all_runs if r.run_type in valid and r.completed_at),
+        key=lambda r: r.completed_at,
+    )
+    best: dict[str, int] = {}
+    by_month: dict[str, int] = defaultdict(int)
+    for run in sorted_runs:
+        rt = run.run_type
+        prev = best.get(rt)
+        if prev is None:
+            best[rt] = run.duration_seconds
+            key = run.completed_at.strftime("%Y-%m")
+            by_month[key] += 1
+        elif run.duration_seconds < prev:
+            best[rt] = run.duration_seconds
+            key = run.completed_at.strftime("%Y-%m")
+            by_month[key] += 1
+    return max(by_month.values(), default=0)
 
 
 def get_personal_records(db: Session, user_id: int = None, category: str = None) -> dict:
@@ -905,9 +1337,21 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
     ``user_achievements`` table so the Home "Recent milestones" strip can
     sort by real ``unlocked_at`` instead of the index-position proxy.
     """
-    from models import StepEntry, RunPhoto, User, Walk, WalkPhoto, UserAchievement
-    from collections import defaultdict
-    
+    import crud
+    from models import (
+        StepEntry,
+        RunPhoto,
+        User,
+        Walk,
+        WalkPhoto,
+        UserAchievement,
+        WeeklyReflection,
+        NeighbourhoodSave,
+        NeighbourhoodIRanThis,
+        CircleMembership,
+        CircleCheckin,
+    )
+
     min_date = datetime(2026, 1, 1)
     
     query = db.query(Run).filter(Run.completed_at >= min_date)
@@ -922,7 +1366,8 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
     great_mood_runs = 0
     run_dates = []
     weekly_runs = defaultdict(list)
-    
+    distinct_run_mood_ids: set = set()
+
     for run in all_runs:
         runs_by_type[run.run_type] = runs_by_type.get(run.run_type, 0) + 1
         cat = getattr(run, 'category', 'outdoor') or 'outdoor'
@@ -930,13 +1375,14 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
             treadmill_runs += 1
         else:
             outdoor_runs += 1
-        
+
         mood = getattr(run, 'mood', None)
         if mood:
             runs_with_mood += 1
             if mood == 'great':
                 great_mood_runs += 1
-        
+            distinct_run_mood_ids.add(mood)
+
         if run.completed_at:
             run_dates.append(run.completed_at.date())
             iso = run.completed_at.isocalendar()
@@ -967,22 +1413,118 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
     days_25k_steps = sum(1 for s in step_entries if s.step_count >= 25000)
     days_30k_steps = sum(1 for s in step_entries if s.step_count >= 30000)
     
-    # Scenic photo data
+    # Run photo / album roll-ups
     total_photos = 0
     runs_with_photos = 0
+    photos_at_or_beyond_4km = 0
+    photo_seasons_covered = 0
+    photo_route_buckets = 0
     if user_id is not None:
         total_photos = db.query(RunPhoto).filter(RunPhoto.user_id == user_id).count()
-        from sqlalchemy import func as sqlfunc
-        runs_with_photos = db.query(sqlfunc.count(sqlfunc.distinct(RunPhoto.run_id))).filter(
-            RunPhoto.user_id == user_id
-        ).scalar() or 0
-    
-    # Runner level
+        runs_with_photos = (
+            db.query(sqlfunc.count(sqlfunc.distinct(RunPhoto.run_id)))
+            .filter(RunPhoto.user_id == user_id)
+            .scalar()
+            or 0
+        )
+        photos_at_or_beyond_4km = (
+            db.query(RunPhoto)
+            .filter(RunPhoto.user_id == user_id, RunPhoto.distance_marker_km >= 4.0)
+            .count()
+        )
+        photo_seasons_covered = _photo_seasons_covered(db, user_id)
+        photo_route_buckets = _photo_route_buckets(db, user_id)
+
+    # Runner level + zen + reflection + social
     runner_level = ""
+    zen_unlocked = False
+    zen_maintained_90d = False
+    zen_maintained_180d = False
+    zen_maintained_365d = False
+    zen_returned = False
+    rolling_km = 0.0
+    reflection_count = 0
+    distinct_reflection_moods = 0
+    neighbourhood_shared_runs = 0
+    neighbourhood_saves_received = 0
+    neighbourhood_loves_received = 0
+    neighbourhood_saves_of_others = 0
+    circle_memberships = 0
+    runs_circles_shared = 0
+    circle_checkins = 0
+    user_obj = None
     if user_id is not None:
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            runner_level = getattr(user, 'runner_level', '') or ''
+        user_obj = db.query(User).filter(User.id == user_id).first()
+        if user_obj:
+            runner_level = getattr(user_obj, "runner_level", "") or ""
+            rolling_km = _rolling_year_km(db, user_id)
+            zen_unlocked = user_obj.zen_unlocked_at is not None
+            if zen_unlocked and user_obj.zen_unlocked_at:
+                days_since = (datetime.now() - user_obj.zen_unlocked_at).days
+                ok = rolling_km >= 1000.0 and runner_level == "zen"
+                zen_maintained_90d = ok and days_since >= 90
+                zen_maintained_180d = ok and days_since >= 180
+                zen_maintained_365d = ok and days_since >= 365
+            zen_returned = (
+                getattr(user_obj, "zen_demoted_at", None) is not None and runner_level == "zen"
+            )
+
+        reflection_count = db.query(WeeklyReflection).filter(WeeklyReflection.user_id == user_id).count()
+        ref_moods = (
+            db.query(sqlfunc.count(sqlfunc.distinct(WeeklyReflection.mood)))
+            .filter(WeeklyReflection.user_id == user_id, WeeklyReflection.mood.isnot(None))
+            .scalar()
+            or 0
+        )
+        distinct_reflection_moods = int(ref_moods)
+
+        neighbourhood_shared_runs = (
+            db.query(Run)
+            .filter(Run.user_id == user_id, Run.neighbourhood_visibility == "neighbourhood")
+            .count()
+        )
+        neighbourhood_saves_received = (
+            db.query(sqlfunc.count(NeighbourhoodSave.id))
+            .join(Run, Run.id == NeighbourhoodSave.run_id)
+            .filter(Run.user_id == user_id, NeighbourhoodSave.user_id != user_id)
+            .scalar()
+            or 0
+        )
+        neighbourhood_loves_received = (
+            db.query(sqlfunc.count(NeighbourhoodIRanThis.id))
+            .join(Run, Run.id == NeighbourhoodIRanThis.run_id)
+            .filter(Run.user_id == user_id, NeighbourhoodIRanThis.user_id != user_id)
+            .scalar()
+            or 0
+        )
+        neighbourhood_saves_of_others = (
+            db.query(sqlfunc.count(NeighbourhoodSave.id))
+            .join(Run, Run.id == NeighbourhoodSave.run_id)
+            .filter(NeighbourhoodSave.user_id == user_id, Run.user_id != user_id)
+            .scalar()
+            or 0
+        )
+
+        circle_memberships = (
+            db.query(sqlfunc.count(CircleMembership.id))
+            .filter(CircleMembership.user_id == user_id)
+            .scalar()
+            or 0
+        )
+        runs_circles_shared = (
+            db.query(Run)
+            .filter(
+                Run.user_id == user_id,
+                or_(Run.circles_share.is_(None), Run.circles_share == True),
+            )
+            .count()
+        )
+        circle_checkins = (
+            db.query(sqlfunc.count(CircleCheckin.id))
+            .filter(CircleCheckin.user_id == user_id)
+            .scalar()
+            or 0
+        )
     
     goals = get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id)
 
@@ -1002,13 +1544,29 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
                 longest_walk_km = float(w.distance_km or 0)
             if w.public_walk_id:
                 public_walks_done += 1
-        from sqlalchemy import func as sqlfunc
         walks_with_photos = (
             db.query(sqlfunc.count(sqlfunc.distinct(WalkPhoto.walk_id)))
             .filter(WalkPhoto.user_id == user_id)
             .scalar()
             or 0
         )
+
+    walk_current_streak = 0
+    if user_id is not None:
+        walk_current_streak, _ = crud.calculate_walk_streaks(db, user_id)
+
+    pr_records = get_personal_records(db, user_id=user_id) if user_id is not None else {}
+    pr_distances_held = sum(1 for v in pr_records.values() if v is not None)
+    breath_keys = ["1k", "2k", "3k", "5k"]
+    stride_keys = ["2k", "3k", "5k", "8k", "10k"]
+    flow_keys = ["3k", "5k", "8k", "10k", "15k", "18k", "21k"]
+    pr_breath_held = all(pr_records.get(d) for d in breath_keys)
+    pr_stride_held = all(pr_records.get(d) for d in stride_keys)
+    pr_flow_held = all(pr_records.get(d) for d in flow_keys)
+    pr_burst_max_in_month = _pr_burst_max_in_month(all_runs)
+
+    mood_canon = {"easy", "good", "tough", "great"}
+    distinct_run_mood_count = len(distinct_run_mood_ids & mood_canon)
 
     extended_stats = {
         **stats,
@@ -1017,6 +1575,7 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
         "longest_walk_km": round(longest_walk_km, 2),
         "public_walks_done": public_walks_done,
         "walks_with_photos": walks_with_photos,
+        "walk_current_streak": walk_current_streak,
         "runs_by_type": runs_by_type,
         "monthly_goals_hit": goals["monthly_goals_hit"],
         "yearly_goal_percent": goals["yearly"]["percent"],
@@ -1029,12 +1588,35 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
         "days_30k_steps": days_30k_steps,
         "total_photos": total_photos,
         "runs_with_photos": runs_with_photos,
+        "photos_at_or_beyond_4km": photos_at_or_beyond_4km,
+        "photo_seasons_covered": photo_seasons_covered,
+        "photo_route_buckets": photo_route_buckets,
         "runner_level": runner_level,
         "runs_with_mood": runs_with_mood,
         "great_mood_runs": great_mood_runs,
+        "distinct_run_mood_count": distinct_run_mood_count,
         "max_runs_in_week": max_runs_in_week,
         "max_types_in_week": max_types_in_week,
         "has_consecutive_days": has_consecutive_days,
+        "reflection_count": reflection_count,
+        "distinct_reflection_moods": distinct_reflection_moods,
+        "pr_distances_held": pr_distances_held,
+        "pr_burst_max_in_month": pr_burst_max_in_month,
+        "pr_breath_held": pr_breath_held,
+        "pr_stride_held": pr_stride_held,
+        "pr_flow_held": pr_flow_held,
+        "zen_unlocked": zen_unlocked,
+        "zen_maintained_90d": zen_maintained_90d,
+        "zen_maintained_180d": zen_maintained_180d,
+        "zen_maintained_365d": zen_maintained_365d,
+        "zen_returned": zen_returned,
+        "neighbourhood_shared_runs": neighbourhood_shared_runs,
+        "neighbourhood_saves_received": int(neighbourhood_saves_received),
+        "neighbourhood_loves_received": int(neighbourhood_loves_received),
+        "neighbourhood_saves_of_others": int(neighbourhood_saves_of_others),
+        "circle_memberships": int(circle_memberships),
+        "runs_circles_shared": runs_circles_shared,
+        "circle_checkins": int(circle_checkins),
     }
     
     # Pull existing unlock timestamps for this user so we can (a) annotate
@@ -1048,8 +1630,11 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
     locked = []
     new_unlock_rows: list[UserAchievement] = []
     now = datetime.now()
+    achievement_total_active = sum(1 for a in ACHIEVEMENTS.values() if not a.get("legacy"))
 
     for achievement_id, achievement in ACHIEVEMENTS.items():
+        if achievement.get("legacy"):
+            continue
         is_unlocked = achievement["check"](extended_stats)
 
         achievement_data = {
@@ -1090,7 +1675,7 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
     return {
         "unlocked": unlocked,
         "locked": locked,
-        "total": len(ACHIEVEMENTS),
+        "total": achievement_total_active,
         "unlocked_count": len(unlocked),
     }
 

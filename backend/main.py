@@ -352,6 +352,7 @@ def run_migrations():
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS zen_unlocked_at TIMESTAMP",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS zen_below_since TIMESTAMP",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS zen_celebrated_at TIMESTAMP",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS zen_demoted_at TIMESTAMP",
                 ]:
                     conn.execute(text(stmt))
                 for stmt in [
@@ -480,6 +481,7 @@ def run_migrations():
                 _sqlite_col("users", "zen_unlocked_at", "zen_unlocked_at TIMESTAMP")
                 _sqlite_col("users", "zen_below_since", "zen_below_since TIMESTAMP")
                 _sqlite_col("users", "zen_celebrated_at", "zen_celebrated_at TIMESTAMP")
+                _sqlite_col("users", "zen_demoted_at", "zen_demoted_at TIMESTAMP")
                 _sqlite_col("runs", "neighbourhood_visibility", "neighbourhood_visibility VARCHAR DEFAULT 'off'")
                 _sqlite_col("runs", "neighbourhood_published_at", "neighbourhood_published_at TIMESTAMP")
                 _sqlite_col("runs", "neighbourhood_centroid_lat", "neighbourhood_centroid_lat FLOAT")
@@ -1078,6 +1080,7 @@ def _compute_zen_status(db: Session, current_user: User) -> dict:
             days_below = (now - current_user.zen_below_since).days
             if days_below >= ZEN_GRACE_DAYS and current_user.runner_level == 'zen':
                 current_user.runner_level = 'flow'
+                current_user.zen_demoted_at = now
                 current_user.zen_below_since = None
                 level_goals = LEVEL_GOALS.get('flow', LEVEL_GOALS['flow'])
                 goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()

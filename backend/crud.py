@@ -295,6 +295,72 @@ def calculate_streaks(db: Session, user_id: Optional[int] = None) -> tuple:
     return (current_streak, longest_streak)
 
 
+def calculate_walk_streaks(db: Session, user_id: Optional[int] = None) -> tuple:
+    """Current and longest weekly streaks for walks (same week rules as runs)."""
+    min_date = datetime(2026, 1, 1)
+    query = db.query(Walk).filter(Walk.ended_at.isnot(None), Walk.ended_at >= min_date)
+    if user_id is not None:
+        query = query.filter(Walk.user_id == user_id)
+    all_walks = query.order_by(Walk.ended_at.desc()).all()
+    if not all_walks:
+        return (0, 0)
+
+    weeks_data = {}
+    for w in all_walks:
+        if not w.ended_at:
+            continue
+        week_start_dt, _ = get_week_boundaries_for_date(w.ended_at)
+        week_key = week_start_dt.strftime("%Y-%m-%d")
+        if week_key not in weeks_data:
+            weeks_data[week_key] = {"start": week_start_dt, "walks": []}
+        weeks_data[week_key]["walks"].append(w)
+
+    sorted_weeks = sorted(weeks_data.items(), key=lambda x: x[1]["start"], reverse=True)
+    now = datetime.now()
+    current_week_start, _ = get_week_boundaries_for_date(now)
+    current_streak = 0
+    expected_week = current_week_start
+    for week_key, week_data in sorted_weeks:
+        week_start = week_data["start"]
+        days_diff = (expected_week - week_start).days
+        valid = len(week_data["walks"]) >= 2
+        if days_diff == 0 or (days_diff == 7 and current_streak == 0):
+            if valid:
+                current_streak += 1
+                expected_week = week_start - timedelta(days=7)
+            elif week_start == current_week_start:
+                expected_week = current_week_start - timedelta(days=7)
+            else:
+                break
+        elif days_diff == 7:
+            if valid:
+                current_streak += 1
+                expected_week = week_start - timedelta(days=7)
+            else:
+                break
+        else:
+            break
+
+    longest_streak = 0
+    temp_streak = 0
+    prev_week_start = None
+    for week_key, week_data in reversed(sorted_weeks):
+        week_start = week_data["start"]
+        if len(week_data["walks"]) >= 2:
+            if prev_week_start is None:
+                temp_streak = 1
+            elif (week_start - prev_week_start).days == 7:
+                temp_streak += 1
+            else:
+                temp_streak = 1
+            longest_streak = max(longest_streak, temp_streak)
+            prev_week_start = week_start
+        else:
+            temp_streak = 0
+            prev_week_start = None
+    return (current_streak, longest_streak)
+
+
 def get_streak_history(db: Session, user_id: Optional[int] = None) -> list:
     """
     Returns a list of all streaks: [{start_week, end_week, length, is_current}]
