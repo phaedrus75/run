@@ -147,6 +147,44 @@ def _sanitize_text(value: str, max_length: int = 500) -> str:
     return cleaned[:max_length]
 
 
+# ----- Photo thumbnail helper -------------------------------------------------
+# We store full-resolution JPEGs as base64 in `photo_data`. The Album / feed
+# views only need a small preview, so we generate a ~360px thumbnail at upload
+# time and store it in `thumb_data`. Old rows are backfilled lazily.
+_THUMB_MAX_EDGE = 360
+_THUMB_QUALITY = 70
+
+try:  # Pillow is required in production; treat missing as soft-fail in dev
+    from PIL import Image as _PILImage  # type: ignore
+    _PIL_AVAILABLE = True
+except Exception:  # pragma: no cover - graceful fallback
+    _PILImage = None  # type: ignore
+    _PIL_AVAILABLE = False
+
+
+def _make_thumbnail_b64(b64_full: Optional[str]) -> Optional[str]:
+    """Return a small JPEG base64 thumbnail for the given full-size base64
+    image, or None if Pillow is unavailable or decoding fails. Strips a leading
+    ``data:image/...;base64,`` prefix if present.
+    """
+    if not b64_full or not _PIL_AVAILABLE:
+        return None
+    try:
+        import base64 as _b64
+        from io import BytesIO as _BytesIO
+        clean = b64_full.split(",", 1)[-1] if b64_full.startswith("data:") else b64_full
+        raw = _b64.b64decode(clean, validate=False)
+        with _PILImage.open(_BytesIO(raw)) as im:
+            im = im.convert("RGB")
+            im.thumbnail((_THUMB_MAX_EDGE, _THUMB_MAX_EDGE), _PILImage.LANCZOS)
+            out = _BytesIO()
+            im.save(out, format="JPEG", quality=_THUMB_QUALITY, optimize=True)
+            return _b64.b64encode(out.getvalue()).decode("ascii")
+    except Exception as e:  # pragma: no cover
+        print(f"thumbnail error: {e}")
+        return None
+
+
 MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
 
 @app.middleware("http")
@@ -367,6 +405,11 @@ def run_migrations():
                     )
                 """))
 
+                # Photo thumbnails (small base64) so the album feed doesn't have
+                # to ship full-resolution JPEGs per item.
+                conn.execute(text("ALTER TABLE run_photos ADD COLUMN IF NOT EXISTS thumb_data TEXT"))
+                conn.execute(text("ALTER TABLE walk_photos ADD COLUMN IF NOT EXISTS thumb_data TEXT"))
+
                 conn.commit()
                 
                 migration_email = os.getenv("MIGRATION_USER_EMAIL")
@@ -424,6 +467,8 @@ def run_migrations():
                 _sqlite_col("runs", "neighbourhood_centroid_lat", "neighbourhood_centroid_lat FLOAT")
                 _sqlite_col("runs", "neighbourhood_centroid_lng", "neighbourhood_centroid_lng FLOAT")
                 _sqlite_col("runs", "neighbourhood_city", "neighbourhood_city VARCHAR")
+                _sqlite_col("run_photos", "thumb_data", "thumb_data TEXT")
+                _sqlite_col("walk_photos", "thumb_data", "thumb_data TEXT")
         except Exception as e:
             print(f"Migration note: {e}")
     
@@ -2506,13 +2551,16 @@ def neighbourhood_feed(
     widen_km = int(getattr(current_user, "neighbourhood_widen_radius_km", 0) or 0)
     vlat, vlng = current_user.home_lat, current_user.home_lng
 
+    # NB: we deliberately include the current user's own shared runs in the
+    # feed. The neighbourhood is "your city's runners" — the viewer is one of
+    # those runners. Hiding their own posts made the feed feel empty for new
+    # users who'd just shared their first run.
     base = (
         db.query(Run, User)
         .join(User, User.id == Run.user_id)
         .filter(
             Run.neighbourhood_visibility == "neighbourhood",
             Run.neighbourhood_published_at.isnot(None),
-            Run.user_id != current_user.id,
             User.handle.isnot(None),
             User.handle != "",
         )
@@ -2584,8 +2632,18 @@ def neighbourhood_feed(
             if p.run_id in seen:
                 continue
             seen.add(p.run_id)
-            data = p.photo_data or ""
-            thumbs[p.run_id] = data[:12000] if len(data) > 12000 else data
+            # Prefer the small thumbnail (~360px) so feed payloads stay light.
+            # Lazy-backfill if the row pre-dates the thumbnail migration.
+            thumb = getattr(p, "thumb_data", None)
+            if not thumb and p.photo_data:
+                thumb = _make_thumbnail_b64(p.photo_data)
+                if thumb:
+                    p.thumb_data = thumb
+            thumbs[p.run_id] = thumb or None
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
 
     items = [
         _neighbourhood_feed_item(db, run, author.handle, current_user.id, thumbs.get(run.id))
@@ -3560,6 +3618,7 @@ def upload_run_photo(
         run_id=run_id,
         user_id=current_user.id,
         photo_data=base64_data,
+        thumb_data=_make_thumbnail_b64(base64_data),
         distance_marker_km=distance_marker,
         caption=caption
     )
@@ -3653,6 +3712,7 @@ def list_my_photos(
     cursor: Optional[str] = None,
     limit: int = Query(20, ge=1, le=50),
     include_data: bool = True,
+    full: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -3664,8 +3724,10 @@ def list_my_photos(
     the previous response to fetch the next page. `next_cursor` is null on
     the last page.
 
-    `include_data` controls whether `photo_data` (base64) is included. The
-    Album grid wants it, but tools that just want metadata can pass false.
+    `include_data` controls whether `photo_data` (base64) is included.
+    By default we serve the small ``thumb_data`` (~360px) so the album loads
+    quickly. Pass ``full=true`` to get the full-resolution ``photo_data``
+    (slow, only for export-style tools).
 
     Each item carries a small `activity` payload so the client can render
     distance / when / kind without a second round-trip per photo.
@@ -3701,6 +3763,25 @@ def list_my_photos(
         walk_q = walk_q.filter(WalkPhoto.created_at < cursor_dt)
     walk_rows = walk_q.order_by(WalkPhoto.created_at.desc()).limit(window).all()
 
+    # Cap how many missing thumbnails we'll generate during a single page load
+    # so the first request after deploy doesn't spike CPU. Remaining rows
+    # gracefully fall back to full data and will be backfilled on later pages.
+    backfill_budget = 4
+
+    def _resolve_thumb(p) -> Optional[str]:
+        nonlocal backfill_budget
+        if getattr(p, "thumb_data", None):
+            return p.thumb_data
+        if full:
+            return None  # caller wanted full data anyway
+        if backfill_budget > 0 and p.photo_data:
+            t = _make_thumbnail_b64(p.photo_data)
+            if t:
+                p.thumb_data = t
+                backfill_budget -= 1
+                return t
+        return None
+
     items: list[dict] = []
     for p, r in run_rows:
         item = {
@@ -3724,7 +3805,13 @@ def list_my_photos(
             },
         }
         if include_data:
-            item["photo_data"] = p.photo_data
+            if full:
+                item["photo_data"] = p.photo_data
+            else:
+                # Prefer the thumb; fall back to full only when no thumb exists
+                # and we couldn't backfill in budget.
+                item["photo_data"] = _resolve_thumb(p) or p.photo_data
+                item["is_thumb"] = item["photo_data"] is not p.photo_data
         items.append(item)
 
     for p, w in walk_rows:
@@ -3749,8 +3836,18 @@ def list_my_photos(
             },
         }
         if include_data:
-            item["photo_data"] = p.photo_data
+            if full:
+                item["photo_data"] = p.photo_data
+            else:
+                item["photo_data"] = _resolve_thumb(p) or p.photo_data
+                item["is_thumb"] = item["photo_data"] is not p.photo_data
         items.append(item)
+
+    # Persist any thumbnails we generated this request.
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     items.sort(key=lambda x: x["created_at"] or "", reverse=True)
     items = items[:limit]
@@ -3758,6 +3855,36 @@ def list_my_photos(
     next_cursor = items[-1]["created_at"] if len(items) == limit and items[-1]["created_at"] else None
 
     return {"items": items, "next_cursor": next_cursor}
+
+
+@app.get("/me/photos/{kind}/{photo_id}/full")
+def get_my_photo_full(
+    kind: str,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return the full-resolution base64 ``photo_data`` for a single photo
+    owned by the current user. Used by the Album detail viewer to upgrade the
+    thumbnail to a sharp image on demand.
+    """
+    if kind == "run":
+        p = (
+            db.query(RunPhoto)
+            .filter(RunPhoto.id == photo_id, RunPhoto.user_id == current_user.id)
+            .first()
+        )
+    elif kind == "walk":
+        p = (
+            db.query(WalkPhoto)
+            .filter(WalkPhoto.id == photo_id, WalkPhoto.user_id == current_user.id)
+            .first()
+        )
+    else:
+        raise HTTPException(status_code=400, detail="kind must be 'run' or 'walk'")
+    if not p:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {"id": p.id, "kind": kind, "photo_data": p.photo_data}
 
 
 @app.get("/scenic-runs")
@@ -4011,6 +4138,7 @@ def upload_walk_photo(
         walk_id=walk_id,
         user_id=current_user.id,
         photo_data=base64_data,
+        thumb_data=_make_thumbnail_b64(base64_data),
         lat=payload.get("lat"),
         lng=payload.get("lng"),
         distance_marker_km=payload.get("distance_marker_km"),

@@ -1500,11 +1500,13 @@ def create_walk_photo(
     lng: Optional[float] = None,
     distance_marker_km: Optional[float] = None,
     caption: Optional[str] = None,
+    thumb_data: Optional[str] = None,
 ) -> WalkPhoto:
     photo = WalkPhoto(
         walk_id=walk_id,
         user_id=user_id,
         photo_data=photo_data,
+        thumb_data=thumb_data,
         lat=lat,
         lng=lng,
         distance_marker_km=distance_marker_km,

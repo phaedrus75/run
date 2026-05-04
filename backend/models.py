@@ -285,16 +285,17 @@ class CircleCheckin(Base):
 class RunPhoto(Base):
     """
     📸 Run Photo - Photos tagged to distance markers within a run
-    
+
     Part of the Scenic Runs feature. Each photo is tagged to a specific
     kilometer marker (e.g. "at the 5K mark" on a 10K run).
     """
     __tablename__ = "run_photos"
-    
+
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     run_id = Column(Integer, nullable=False, index=True)
     user_id = Column(Integer, nullable=False, index=True)
-    photo_data = Column(String, nullable=False)  # base64-encoded JPEG
+    photo_data = Column(String, nullable=False)  # base64-encoded JPEG (full size)
+    thumb_data = Column(String, nullable=True)  # base64-encoded JPEG (~360px)
     distance_marker_km = Column(Float, nullable=False)  # e.g. 2.0, 5.0
     caption = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
@@ -438,7 +439,8 @@ class WalkPhoto(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     walk_id = Column(Integer, nullable=False, index=True)
     user_id = Column(Integer, nullable=False, index=True)
-    photo_data = Column(String, nullable=False)  # base64-encoded JPEG
+    photo_data = Column(String, nullable=False)  # base64-encoded JPEG (full size)
+    thumb_data = Column(String, nullable=True)  # base64-encoded JPEG (~360px)
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
     distance_marker_km = Column(Float, nullable=True)
