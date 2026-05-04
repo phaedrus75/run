@@ -113,9 +113,7 @@ export function CommunityHomeScreen({ navigation }: Props) {
         <View style={styles.strap}>
           <Text style={styles.strapTitle}>The path and the album.</Text>
           <Text style={styles.strapBody}>
-            Community in ZenRun is built around moments and places, not
-            metrics or rankings. Where you ran. What you saw. Who you saw it
-            with.
+            ZenRun is built around places, scenic runs, and walks.
           </Text>
         </View>
       </ScrollView>
