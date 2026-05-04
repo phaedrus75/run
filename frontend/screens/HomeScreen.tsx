@@ -449,14 +449,16 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
         {personalRecords && <PersonalRecords records={personalRecords} />}
 
-        {/* 🏅 Milestones — compact strip linking out to the full Honors screen.
-            We slice the tail of `unlocked` because each category is declared
-            low-tier → high-tier, so the tail naturally surfaces the user's
-            highest-tier badges. (No true `unlocked_at` exists yet.) */}
+        {/* 🏅 Recent milestones — the 6 most-recently unlocked badges.
+            Backed by user_achievements.unlocked_at (recorded on every
+            locked → unlocked transition). Existing rows that pre-date
+            this feature are stamped lazily on the first GET /achievements
+            after deploy, so the order is approximate for legacy unlocks
+            but exact for everything earned after. */}
         {achievementsData && achievementsData.unlocked_count > 0 && (
           <View style={styles.momentsCard}>
             <View style={styles.momentsHeader}>
-              <Text style={styles.momentsTitle}>Milestones</Text>
+              <Text style={styles.momentsTitle}>Recent milestones</Text>
               <View style={styles.milestonesHeaderRight}>
                 <Text style={styles.milestonesCount}>
                   {achievementsData.unlocked_count} earned
@@ -474,9 +476,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.momentsRow}
             >
-              {achievementsData.unlocked
-                .slice(-6)
-                .reverse()
+              {[...achievementsData.unlocked]
+                .sort((a, b) => {
+                  const ta = a.unlocked_at ? new Date(a.unlocked_at).getTime() : 0;
+                  const tb = b.unlocked_at ? new Date(b.unlocked_at).getTime() : 0;
+                  return tb - ta;
+                })
+                .slice(0, 6)
                 .map((a, idx, arr) => (
                   <Pressable
                     key={a.id}

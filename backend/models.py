@@ -532,3 +532,20 @@ class NeighbourhoodReport(Base):
     run_id = Column(Integer, nullable=False, index=True)
     reason = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class UserAchievement(Base):
+    """Records the moment a user first transitioned a badge from locked
+    to unlocked. Used to show genuinely "recent" milestones on Home and
+    in any future "just earned" toast. One row per (user, achievement)."""
+
+    __tablename__ = "user_achievements"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    achievement_id = Column(String, nullable=False, index=True)
+    unlocked_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "achievement_id", name="uq_user_achievement"),
+    )

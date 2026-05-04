@@ -899,8 +899,13 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
 
 
 def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal: float = None, monthly_goal: float = None) -> dict:
-    """Get all achievements and their unlock status."""
-    from models import StepEntry, RunPhoto, User, Walk, WalkPhoto
+    """Get all achievements and their unlock status.
+
+    Records the first time a badge transitions locked → unlocked into the
+    ``user_achievements`` table so the Home "Recent milestones" strip can
+    sort by real ``unlocked_at`` instead of the index-position proxy.
+    """
+    from models import StepEntry, RunPhoto, User, Walk, WalkPhoto, UserAchievement
     from collections import defaultdict
     
     min_date = datetime(2026, 1, 1)
@@ -1032,12 +1037,21 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
         "has_consecutive_days": has_consecutive_days,
     }
     
+    # Pull existing unlock timestamps for this user so we can (a) annotate
+    # the response and (b) detect locked → unlocked transitions to record.
+    existing_unlocks: dict[str, datetime] = {}
+    if user_id is not None:
+        rows = db.query(UserAchievement).filter(UserAchievement.user_id == user_id).all()
+        existing_unlocks = {r.achievement_id: r.unlocked_at for r in rows}
+
     unlocked = []
     locked = []
-    
+    new_unlock_rows: list[UserAchievement] = []
+    now = datetime.now()
+
     for achievement_id, achievement in ACHIEVEMENTS.items():
         is_unlocked = achievement["check"](extended_stats)
-        
+
         achievement_data = {
             "id": achievement["id"],
             "name": achievement["name"],
@@ -1046,12 +1060,33 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
             "category": achievement["category"],
             "unlocked": is_unlocked,
         }
-        
+
         if is_unlocked:
+            ts = existing_unlocks.get(achievement_id)
+            if ts is None and user_id is not None:
+                # First time we've seen this badge unlocked — stamp now.
+                # Existing badges that were already unlocked before this
+                # feature shipped also get stamped on the first call after
+                # deploy; they all share roughly the same timestamp, but
+                # any future unlocks naturally sort newer than them.
+                ts = now
+                new_unlock_rows.append(UserAchievement(
+                    user_id=user_id,
+                    achievement_id=achievement_id,
+                    unlocked_at=ts,
+                ))
+            achievement_data["unlocked_at"] = ts.isoformat() if ts else None
             unlocked.append(achievement_data)
         else:
             locked.append(achievement_data)
-    
+
+    if new_unlock_rows:
+        try:
+            db.bulk_save_objects(new_unlock_rows)
+            db.commit()
+        except Exception:
+            db.rollback()
+
     return {
         "unlocked": unlocked,
         "locked": locked,

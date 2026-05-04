@@ -40,6 +40,7 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
   const [runPhotos, setRunPhotos] = useState<RunPhoto[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [fullScreenPhoto, setFullScreenPhoto] = useState<RunPhoto | null>(null);
+  const [fullScreenFull, setFullScreenFull] = useState<string | null>(null);
 
   const fetchScenicRuns = useCallback(async () => {
     try {
@@ -64,11 +65,10 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
     setSelectedRun(run);
     setLoadingPhotos(true);
     try {
-      // Scenic runs feed shows the photos full-screen as the focus of the
-      // experience, so we ask for full-res up front. (TODO: switch to thumbs
-      // for the in-list grid + on-demand full-res for the lightbox the same
-      // way WalkDetail / EditRunModal now do.)
-      const photos = await photoApi.getForRun(run.id, { full: true });
+      // Default response is thumbnail-only (~10 KB each). Full-res is
+      // fetched on demand when the user taps a photo into the lightbox,
+      // matching WalkDetail / EditRunModal / CircleSpace.
+      const photos = await photoApi.getForRun(run.id);
       setRunPhotos(photos);
     } catch (e) {
       console.error('Failed to fetch run photos:', e);
@@ -76,6 +76,26 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
       setLoadingPhotos(false);
     }
   };
+
+  // Fetch full-resolution image when the lightbox opens.
+  useEffect(() => {
+    let cancelled = false;
+    setFullScreenFull(null);
+    if (!fullScreenPhoto || !selectedRun) return;
+    if (fullScreenPhoto.photo_data && !fullScreenPhoto.is_thumb) {
+      setFullScreenFull(fullScreenPhoto.photo_data);
+      return;
+    }
+    (async () => {
+      try {
+        const data = await photoApi.getRunPhotoFull(selectedRun.id, fullScreenPhoto.id);
+        if (!cancelled) setFullScreenFull(data.photo_data ?? null);
+      } catch (e) {
+        console.error('Failed to fetch full photo:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fullScreenPhoto, selectedRun]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '';
@@ -266,24 +286,28 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
                         <Text style={styles.timelinePhotoCount}>{photosAtMarker.length} photos</Text>
                       )}
                     </View>
-                    {photosAtMarker.map(photo => (
-                      <TouchableOpacity
-                        key={photo.id}
-                        style={[styles.timelinePhoto, shadows.small]}
-                        onPress={() => setFullScreenPhoto(photo)}
-                        activeOpacity={0.9}
-                      >
-                        <Image
-                          source={{ uri: `data:image/jpeg;base64,${photo.photo_data}` }}
-                          style={styles.timelineImage}
-                        />
-                        {photo.caption && (
-                          <View style={styles.captionBar}>
-                            <Text style={styles.timelineCaption}>{photo.caption}</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    ))}
+                    {photosAtMarker.map(photo => {
+                      const src = photo.thumb_data || photo.photo_data;
+                      if (!src) return null;
+                      return (
+                        <TouchableOpacity
+                          key={photo.id}
+                          style={[styles.timelinePhoto, shadows.small]}
+                          onPress={() => setFullScreenPhoto(photo)}
+                          activeOpacity={0.9}
+                        >
+                          <Image
+                            source={{ uri: `data:image/jpeg;base64,${src}` }}
+                            style={styles.timelineImage}
+                          />
+                          {photo.caption && (
+                            <View style={styles.captionBar}>
+                              <Text style={styles.timelineCaption}>{photo.caption}</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
                     <View style={[styles.timelineLine, hasPhotos && styles.timelineLineActive]} />
                   </React.Fragment>
                 );
@@ -376,10 +400,19 @@ export function ScenicRunsModal({ visible, onClose }: ScenicRunsModalProps) {
             {fullScreenPhoto && (
               <View style={styles.fullScreenContent}>
                 <Image
-                  source={{ uri: `data:image/jpeg;base64,${fullScreenPhoto.photo_data}` }}
+                  source={{
+                    uri: `data:image/jpeg;base64,${fullScreenFull || fullScreenPhoto.thumb_data || fullScreenPhoto.photo_data}`,
+                  }}
                   style={styles.fullScreenImage}
                   resizeMode="contain"
                 />
+                {!fullScreenFull && (
+                  <ActivityIndicator
+                    size="small"
+                    color="#fff"
+                    style={styles.fullScreenLoader}
+                  />
+                )}
                 <View style={styles.fullScreenInfo}>
                   <Text style={styles.fullScreenMarker}>
                     {fullScreenPhoto.distance_marker_km}K mark
@@ -739,6 +772,11 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH - 32,
     height: SCREEN_WIDTH - 32,
     borderRadius: radius.md,
+  },
+  fullScreenLoader: {
+    position: 'absolute',
+    top: (SCREEN_WIDTH - 32) / 2,
+    alignSelf: 'center',
   },
   fullScreenInfo: {
     alignItems: 'center',

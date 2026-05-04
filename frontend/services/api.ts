@@ -295,6 +295,7 @@ export interface Achievement {
   emoji: string;
   category: string;
   unlocked: boolean;
+  unlocked_at?: string | null;
 }
 
 export interface AchievementsData {
