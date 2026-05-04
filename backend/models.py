@@ -71,6 +71,13 @@ class Run(Base):
     elevation_gain_m = Column(Float, nullable=True)
     started_at = Column(DateTime, nullable=True)
 
+    # Neighbourhood (opt-in share to city feed)
+    neighbourhood_visibility = Column(String, nullable=True, default="off")  # off | neighbourhood
+    neighbourhood_published_at = Column(DateTime, nullable=True)
+    neighbourhood_centroid_lat = Column(Float, nullable=True)
+    neighbourhood_centroid_lng = Column(Float, nullable=True)
+    neighbourhood_city = Column(String, nullable=True)  # snapshot at publish time
+
 
 
 
@@ -145,6 +152,14 @@ class User(Base):
     
     # 🛡️ Admin flag
     is_admin = Column(Boolean, default=False, server_default='false')
+
+    # 🌳 Neighbourhood (city-level discovery; uses existing handle)
+    neighbourhood_opt_in = Column(Boolean, default=False, server_default='false')
+    home_city = Column(String, nullable=True)
+    home_country = Column(String, nullable=True)  # ISO-2
+    home_lat = Column(Float, nullable=True)
+    home_lng = Column(Float, nullable=True)
+    neighbourhood_widen_radius_km = Column(Integer, default=0, server_default='0')
 
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
@@ -454,3 +469,64 @@ class PublicWalk(Base):
     tags = Column(String, nullable=True)  # JSON array of tag strings
     source = Column(String, nullable=True)  # 'osm' | 'curated'
     cached_at = Column(DateTime, server_default=func.now())
+
+
+class GeocodeCache(Base):
+    """Reverse-geocode cache keyed by rounded lat/lng to limit Nominatim calls."""
+    __tablename__ = "geocode_cache"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    lat_key = Column(Float, nullable=False, index=True)
+    lng_key = Column(Float, nullable=False, index=True)
+    city = Column(String, nullable=False)
+    country = Column(String, nullable=True)
+    centroid_lat = Column(Float, nullable=True)
+    centroid_lng = Column(Float, nullable=True)
+    raw_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("lat_key", "lng_key", name="uq_geocode_lat_lng"),)
+
+
+class NeighbourhoodSave(Base):
+    __tablename__ = "neighbourhood_saves"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    run_id = Column(Integer, nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("user_id", "run_id", name="uq_neighbourhood_save_user_run"),)
+
+
+class NeighbourhoodIRanThis(Base):
+    __tablename__ = "neighbourhood_iran_this"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    run_id = Column(Integer, nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("user_id", "run_id", name="uq_neighbourhood_iran_user_run"),)
+
+
+class NeighbourhoodBlockedHandle(Base):
+    """Viewer hides runs from these handles in their neighbourhood feed."""
+    __tablename__ = "neighbourhood_blocked_handles"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    blocked_handle = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("user_id", "blocked_handle", name="uq_neighbourhood_block_user_handle"),)
+
+
+class NeighbourhoodReport(Base):
+    __tablename__ = "neighbourhood_reports"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    reporter_id = Column(Integer, nullable=False, index=True)
+    run_id = Column(Integer, nullable=False, index=True)
+    reason = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

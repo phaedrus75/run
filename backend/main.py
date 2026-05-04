@@ -40,7 +40,27 @@ def _get_real_client_ip(request: Request) -> str:
 
 # 📦 Import our modules
 from database import engine, get_db, Base
-from models import Run, Weight, User, UserGoals, StepEntry, PasswordResetToken, CircleCheckin, RunPhoto, WeeklyReflection, GymWorkout, Exercise, Walk, WalkPhoto, PublicWalk
+from models import (
+    Run,
+    Weight,
+    User,
+    UserGoals,
+    StepEntry,
+    PasswordResetToken,
+    CircleCheckin,
+    RunPhoto,
+    WeeklyReflection,
+    GymWorkout,
+    Exercise,
+    Walk,
+    WalkPhoto,
+    PublicWalk,
+    GeocodeCache,
+    NeighbourhoodSave,
+    NeighbourhoodIRanThis,
+    NeighbourhoodBlockedHandle,
+    NeighbourhoodReport,
+)
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
     create_user, authenticate_user, get_user_by_email, get_user_by_id,
@@ -272,6 +292,81 @@ def run_migrations():
                     CREATE INDEX IF NOT EXISTS idx_public_walks_osm ON public_walks(osm_id)
                 """))
 
+                # Neighbourhood (users + runs + social tables)
+                for stmt in [
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS neighbourhood_opt_in BOOLEAN DEFAULT false",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS home_city VARCHAR",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS home_country VARCHAR",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS home_lat DOUBLE PRECISION",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS home_lng DOUBLE PRECISION",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS neighbourhood_widen_radius_km INTEGER DEFAULT 0",
+                ]:
+                    conn.execute(text(stmt))
+                for stmt in [
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_visibility VARCHAR DEFAULT 'off'",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_published_at TIMESTAMP",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_centroid_lat DOUBLE PRECISION",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_centroid_lng DOUBLE PRECISION",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS neighbourhood_city VARCHAR",
+                ]:
+                    conn.execute(text(stmt))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS geocode_cache (
+                        id SERIAL PRIMARY KEY,
+                        lat_key DOUBLE PRECISION NOT NULL,
+                        lng_key DOUBLE PRECISION NOT NULL,
+                        city VARCHAR NOT NULL,
+                        country VARCHAR,
+                        centroid_lat DOUBLE PRECISION,
+                        centroid_lng DOUBLE PRECISION,
+                        raw_json TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(lat_key, lng_key)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS neighbourhood_saves (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        run_id INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, run_id)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_neighbourhood_saves_run ON neighbourhood_saves(run_id)
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS neighbourhood_iran_this (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        run_id INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, run_id)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_neighbourhood_iran_run ON neighbourhood_iran_this(run_id)
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS neighbourhood_blocked_handles (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        blocked_handle VARCHAR NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, blocked_handle)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS neighbourhood_reports (
+                        id SERIAL PRIMARY KEY,
+                        reporter_id INTEGER NOT NULL,
+                        run_id INTEGER NOT NULL,
+                        reason VARCHAR,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+
                 conn.commit()
                 
                 migration_email = os.getenv("MIGRATION_USER_EMAIL")
@@ -309,6 +404,26 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE runs ADD COLUMN user_id INTEGER"))
                     conn.commit()
                     print("Migration: user_id added to runs")
+
+                def _sqlite_col(table: str, col: str, ddl: str):
+                    r = conn.execute(text(f"PRAGMA table_info({table})"))
+                    cols = [row[1] for row in r]
+                    if col not in cols:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+                        conn.commit()
+                        print(f"Migration: {col} added to {table}")
+
+                _sqlite_col("users", "neighbourhood_opt_in", "neighbourhood_opt_in BOOLEAN DEFAULT 0")
+                _sqlite_col("users", "home_city", "home_city VARCHAR")
+                _sqlite_col("users", "home_country", "home_country VARCHAR")
+                _sqlite_col("users", "home_lat", "home_lat FLOAT")
+                _sqlite_col("users", "home_lng", "home_lng FLOAT")
+                _sqlite_col("users", "neighbourhood_widen_radius_km", "neighbourhood_widen_radius_km INTEGER DEFAULT 0")
+                _sqlite_col("runs", "neighbourhood_visibility", "neighbourhood_visibility VARCHAR DEFAULT 'off'")
+                _sqlite_col("runs", "neighbourhood_published_at", "neighbourhood_published_at TIMESTAMP")
+                _sqlite_col("runs", "neighbourhood_centroid_lat", "neighbourhood_centroid_lat FLOAT")
+                _sqlite_col("runs", "neighbourhood_centroid_lng", "neighbourhood_centroid_lng FLOAT")
+                _sqlite_col("runs", "neighbourhood_city", "neighbourhood_city VARCHAR")
         except Exception as e:
             print(f"Migration note: {e}")
     
@@ -1616,7 +1731,37 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
         "pr_type": pr_type,
         "celebrations": celebrations or [],
         "photo_count": photo_count,
+        "route_polyline": getattr(run, "route_polyline", None),
+        "start_lat": getattr(run, "start_lat", None),
+        "start_lng": getattr(run, "start_lng", None),
+        "end_lat": getattr(run, "end_lat", None),
+        "end_lng": getattr(run, "end_lng", None),
+        "elevation_gain_m": getattr(run, "elevation_gain_m", None),
+        "started_at": getattr(run, "started_at", None),
+        "neighbourhood_visibility": getattr(run, "neighbourhood_visibility", None) or "off",
+        "neighbourhood_published_at": getattr(run, "neighbourhood_published_at", None),
     }
+
+
+def _run_centroid_lat_lng(run: Run):
+    """Approximate route centre for neighbourhood distance / widen filter."""
+    from services.overpass import decode_polyline
+
+    poly = getattr(run, "route_polyline", None) or None
+    if poly:
+        pts = decode_polyline(poly)
+        if pts:
+            return (
+                sum(p[0] for p in pts) / len(pts),
+                sum(p[1] for p in pts) / len(pts),
+            )
+    slat, slng = getattr(run, "start_lat", None), getattr(run, "start_lng", None)
+    if slat is not None and slng is not None:
+        return float(slat), float(slng)
+    elat, elng = getattr(run, "end_lat", None), getattr(run, "end_lng", None)
+    if elat is not None and elng is not None:
+        return float(elat), float(elng)
+    return None, None
 
 
 def check_personal_best(db: Session, new_run: Run) -> tuple:
@@ -2096,6 +2241,604 @@ def check_handle_available(
     handle = handle.strip().lower()
     existing = db.query(User).filter(User.handle == handle).first()
     return {"handle": handle, "available": existing is None}
+
+
+# ==========================================
+# 🌳 NEIGHBOURHOOD
+# ==========================================
+
+ALLOWED_WIDEN_KM = (0, 25, 50, 100)
+
+
+@app.get("/me/neighbourhood")
+@app.get("/me/neighborhood", include_in_schema=False)
+def get_me_neighbourhood(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Neighbourhood settings + latest GPS hint for city picker."""
+    latest = (
+        db.query(Run)
+        .filter(
+            Run.user_id == current_user.id,
+            (Run.route_polyline.isnot(None)) | (Run.start_lat.isnot(None)),
+        )
+        .order_by(Run.completed_at.desc())
+        .first()
+    )
+    lat_hint = lng_hint = None
+    if latest:
+        la, ln = _run_centroid_lat_lng(latest)
+        if la is not None and ln is not None:
+            lat_hint, lng_hint = la, ln
+    return {
+        "opted_in": bool(getattr(current_user, "neighbourhood_opt_in", False)),
+        "handle": current_user.handle,
+        "home_city": getattr(current_user, "home_city", None),
+        "home_country": getattr(current_user, "home_country", None),
+        "home_lat": getattr(current_user, "home_lat", None),
+        "home_lng": getattr(current_user, "home_lng", None),
+        "widen_radius_km": int(getattr(current_user, "neighbourhood_widen_radius_km", 0) or 0),
+        "latest_run_centroid_lat": lat_hint,
+        "latest_run_centroid_lng": lng_hint,
+    }
+
+
+@app.patch("/me/neighbourhood")
+@app.patch("/me/neighborhood", include_in_schema=False)
+def patch_me_neighbourhood(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    opted_in = body.get("opted_in")
+    if opted_in is not None:
+        current_user.neighbourhood_opt_in = bool(opted_in)
+    if "home_city" in body:
+        v = body.get("home_city")
+        current_user.home_city = (v or "").strip()[:120] or None
+    if "home_country" in body:
+        v = body.get("home_country")
+        current_user.home_country = (v or "").strip().upper()[:2] or None
+    if "home_lat" in body:
+        current_user.home_lat = body.get("home_lat")
+    if "home_lng" in body:
+        current_user.home_lng = body.get("home_lng")
+    if "widen_radius_km" in body:
+        w = int(body.get("widen_radius_km") or 0)
+        if w not in ALLOWED_WIDEN_KM:
+            raise HTTPException(status_code=400, detail="widen_radius_km must be 0, 25, 50, or 100")
+        current_user.neighbourhood_widen_radius_km = w
+
+    if current_user.neighbourhood_opt_in:
+        if not current_user.handle:
+            raise HTTPException(
+                status_code=400,
+                detail="HANDLE_REQUIRED",
+            )
+        if not (current_user.home_city or "").strip():
+            raise HTTPException(status_code=400, detail="home_city is required when opted in")
+        if current_user.home_lat is None or current_user.home_lng is None:
+            raise HTTPException(status_code=400, detail="home_lat and home_lng are required when opted in")
+
+    db.commit()
+    db.refresh(current_user)
+    return get_me_neighbourhood(db=db, current_user=current_user)
+
+
+@app.post("/me/neighbourhood/suggest")
+@app.post("/me/neighborhood/suggest", include_in_schema=False)
+@limiter.limit("30/minute")
+def post_me_neighbourhood_suggest(
+    request: Request,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Reverse-geocode a lat/lng into city + centroid; cached."""
+    from services.geocode import round_key, reverse_geocode
+
+    try:
+        lat = float(body.get("lat"))
+        lng = float(body.get("lng"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="lat and lng required")
+
+    lat_k, lng_k = round_key(lat, lng)
+    cached = (
+        db.query(GeocodeCache)
+        .filter(GeocodeCache.lat_key == lat_k, GeocodeCache.lng_key == lng_k)
+        .first()
+    )
+    if cached:
+        return {
+            "city": cached.city,
+            "country": cached.country,
+            "lat": cached.centroid_lat or lat_k,
+            "lng": cached.centroid_lng or lng_k,
+            "cached": True,
+        }
+
+    res = reverse_geocode(lat, lng)
+    if not res:
+        raise HTTPException(status_code=502, detail="Geocoding unavailable; try manual city entry.")
+
+    row = GeocodeCache(
+        lat_key=lat_k,
+        lng_key=lng_k,
+        city=res["city"],
+        country=res.get("country"),
+        centroid_lat=res.get("centroid_lat"),
+        centroid_lng=res.get("centroid_lng"),
+        raw_json=res.get("raw"),
+    )
+    db.add(row)
+    db.commit()
+    return {
+        "city": res["city"],
+        "country": res.get("country"),
+        "lat": res.get("centroid_lat") or lat_k,
+        "lng": res.get("centroid_lng") or lng_k,
+        "cached": False,
+    }
+
+
+def _neighbourhood_feed_item(
+    db: Session,
+    run: Run,
+    author_handle: str,
+    viewer_id: int,
+    thumb_b64: Optional[str],
+):
+    saves = db.query(func.count(NeighbourhoodSave.id)).filter(NeighbourhoodSave.run_id == run.id).scalar() or 0
+    iran = db.query(func.count(NeighbourhoodIRanThis.id)).filter(NeighbourhoodIRanThis.run_id == run.id).scalar() or 0
+    vs = db.query(NeighbourhoodSave).filter(
+        NeighbourhoodSave.run_id == run.id, NeighbourhoodSave.user_id == viewer_id
+    ).first()
+    vi = db.query(NeighbourhoodIRanThis).filter(
+        NeighbourhoodIRanThis.run_id == run.id, NeighbourhoodIRanThis.user_id == viewer_id
+    ).first()
+    return {
+        "run_id": run.id,
+        "handle": author_handle,
+        "city": run.neighbourhood_city,
+        "distance_km": run.distance_km,
+        "duration_seconds": run.duration_seconds,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "photo_thumb_data": thumb_b64,
+        "saves_count": int(saves),
+        "i_ran_this_count": int(iran),
+        "viewer_has_saved": vs is not None,
+        "viewer_has_run_this": vi is not None,
+    }
+
+
+def _viewer_neighbourhood_ready(u: User) -> bool:
+    return bool(
+        getattr(u, "neighbourhood_opt_in", False)
+        and (u.home_city or "").strip()
+        and u.handle
+        and u.home_lat is not None
+        and u.home_lng is not None
+    )
+
+
+def _neighbourhood_run_visible(db: Session, run: Run, author: User, viewer: User) -> bool:
+    from services.overpass import haversine_km
+
+    if not author or not author.handle:
+        return False
+    blocked = (
+        db.query(NeighbourhoodBlockedHandle)
+        .filter(
+            NeighbourhoodBlockedHandle.user_id == viewer.id,
+            NeighbourhoodBlockedHandle.blocked_handle == author.handle.lower(),
+        )
+        .first()
+    )
+    if blocked:
+        return False
+    home_city_l = (viewer.home_city or "").strip().lower()
+    city_ok = (run.neighbourhood_city or "").strip().lower() == home_city_l
+    widen_ok = False
+    if (getattr(viewer, "neighbourhood_widen_radius_km", 0) or 0) > 0 and viewer.home_lat is not None:
+        cla, cln = run.neighbourhood_centroid_lat, run.neighbourhood_centroid_lng
+        if cla is not None and cln is not None:
+            widen_ok = (
+                haversine_km(
+                    (float(viewer.home_lat), float(viewer.home_lng)),
+                    (float(cla), float(cln)),
+                )
+                <= int(viewer.neighbourhood_widen_radius_km or 0)
+            )
+    return city_ok or widen_ok
+
+
+def _get_neighbourhood_run_or_404(db: Session, run_id: int, viewer: User):
+    if not _viewer_neighbourhood_ready(viewer):
+        raise HTTPException(status_code=403, detail="Complete neighbourhood setup first.")
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.neighbourhood_visibility != "neighbourhood":
+        raise HTTPException(status_code=404, detail="Not found")
+    author = db.query(User).filter(User.id == run.user_id).first()
+    if not author or not author.handle:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not _neighbourhood_run_visible(db, run, author, viewer):
+        raise HTTPException(status_code=404, detail="Not found")
+    return run, author
+
+
+@app.get("/me/neighbourhood/search")
+@app.get("/me/neighborhood/search", include_in_schema=False)
+@limiter.limit("30/minute")
+def get_me_neighbourhood_search(
+    request: Request,
+    q: str = Query(..., min_length=2, max_length=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    from services.geocode import search_places
+
+    return {"results": search_places(q, limit=8)}
+
+
+@app.get("/neighbourhood/feed")
+@app.get("/neighborhood/feed", include_in_schema=False)
+def neighbourhood_feed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+    limit: int = Query(20, ge=1, le=50),
+    include_widen: bool = Query(False),
+    published_before: Optional[str] = None,
+    before_run_id: Optional[int] = None,
+):
+    from services.overpass import haversine_km
+
+    if not _viewer_neighbourhood_ready(current_user):
+        raise HTTPException(status_code=403, detail="Complete neighbourhood setup (handle, city, opt-in) first.")
+
+    blocked_rows = db.query(NeighbourhoodBlockedHandle.blocked_handle).filter(
+        NeighbourhoodBlockedHandle.user_id == current_user.id
+    ).all()
+    blocked = {r[0].lower() for r in blocked_rows if r[0]}
+
+    home_city_l = (current_user.home_city or "").strip().lower()
+    widen_km = int(getattr(current_user, "neighbourhood_widen_radius_km", 0) or 0)
+    vlat, vlng = current_user.home_lat, current_user.home_lng
+
+    base = (
+        db.query(Run, User)
+        .join(User, User.id == Run.user_id)
+        .filter(
+            Run.neighbourhood_visibility == "neighbourhood",
+            Run.neighbourhood_published_at.isnot(None),
+            Run.user_id != current_user.id,
+            User.handle.isnot(None),
+            User.handle != "",
+        )
+    )
+    if blocked:
+        base = base.filter(func.lower(User.handle).notin_(list(blocked)))
+
+    rows = base.order_by(Run.neighbourhood_published_at.desc(), Run.id.desc()).limit(400).all()
+
+    def city_match(r: Run) -> bool:
+        return (r.neighbourhood_city or "").strip().lower() == home_city_l
+
+    def within_widen(r: Run) -> bool:
+        if not include_widen or widen_km <= 0 or vlat is None or vlng is None:
+            return False
+        if r.neighbourhood_centroid_lat is not None and r.neighbourhood_centroid_lng is not None:
+            cla, cln = float(r.neighbourhood_centroid_lat), float(r.neighbourhood_centroid_lng)
+        else:
+            cla, cln = _run_centroid_lat_lng(r)
+        if cla is None or cln is None:
+            return False
+        return haversine_km((vlat, vlng), (cla, cln)) <= widen_km
+
+    filtered: List = []
+    for run, author in rows:
+        if city_match(run) or within_widen(run):
+            filtered.append((run, author))
+
+    # cursor: skip until older than (published_before, before_run_id)
+    if published_before and before_run_id is not None:
+        from datetime import datetime as dtmod
+
+        try:
+            pb = dtmod.fromisoformat(published_before.replace("Z", "+00:00"))
+        except ValueError:
+            pb = None
+        if pb is not None:
+            new_f = []
+            for run, author in filtered:
+                rp = run.neighbourhood_published_at
+                if rp is None:
+                    continue
+                if rp < pb or (rp == pb and run.id < before_run_id):
+                    new_f.append((run, author))
+            filtered = new_f
+
+    page = filtered[:limit]
+    next_cursor = None
+    if len(filtered) > limit:
+        last_run, _ = filtered[limit - 1]
+        next_cursor = {
+            "published_before": last_run.neighbourhood_published_at.isoformat()
+            if last_run.neighbourhood_published_at
+            else None,
+            "before_run_id": last_run.id,
+        }
+
+    run_ids = [r.id for r, _ in page]
+    thumbs = {}
+    if run_ids:
+        photos = (
+            db.query(RunPhoto)
+            .filter(RunPhoto.run_id.in_(run_ids))
+            .order_by(RunPhoto.run_id, RunPhoto.distance_marker_km)
+            .all()
+        )
+        seen = set()
+        for p in photos:
+            if p.run_id in seen:
+                continue
+            seen.add(p.run_id)
+            data = p.photo_data or ""
+            thumbs[p.run_id] = data[:12000] if len(data) > 12000 else data
+
+    items = [
+        _neighbourhood_feed_item(db, run, author.handle, current_user.id, thumbs.get(run.id))
+        for run, author in page
+    ]
+    return {"items": items, "next_cursor": next_cursor}
+
+
+@app.get("/neighbourhood/saved")
+@app.get("/neighborhood/saved", include_in_schema=False)
+def neighbourhood_saved_feed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+    limit: int = Query(30, ge=1, le=100),
+):
+    if not _viewer_neighbourhood_ready(current_user):
+        raise HTTPException(status_code=403, detail="Complete neighbourhood setup first.")
+
+    saves = (
+        db.query(NeighbourhoodSave, Run, User)
+        .join(Run, Run.id == NeighbourhoodSave.run_id)
+        .join(User, User.id == Run.user_id)
+        .filter(NeighbourhoodSave.user_id == current_user.id, Run.neighbourhood_visibility == "neighbourhood")
+        .order_by(NeighbourhoodSave.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    run_ids = [r.id for _, r, _ in saves]
+    thumbs = {}
+    if run_ids:
+        for p in (
+            db.query(RunPhoto)
+            .filter(RunPhoto.run_id.in_(run_ids))
+            .order_by(RunPhoto.run_id, RunPhoto.distance_marker_km)
+            .all()
+        ):
+            if p.run_id not in thumbs:
+                data = p.photo_data or ""
+                thumbs[p.run_id] = data[:12000] if len(data) > 12000 else data
+    items = [
+        _neighbourhood_feed_item(db, run, author.handle, current_user.id, thumbs.get(run.id))
+        for _, run, author in saves
+    ]
+    return {"items": items}
+
+
+@app.get("/neighbourhood/runs/{run_id}")
+@app.get("/neighborhood/runs/{run_id}", include_in_schema=False)
+def neighbourhood_run_detail(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    run, author = _get_neighbourhood_run_or_404(db, run_id, current_user)
+
+    photos = db.query(RunPhoto).filter(RunPhoto.run_id == run.id).order_by(RunPhoto.distance_marker_km).all()
+    photo_payload = [
+        {
+            "id": p.id,
+            "distance_marker_km": p.distance_marker_km,
+            "caption": p.caption,
+            "photo_data": p.photo_data,
+        }
+        for p in photos
+    ]
+    saves = db.query(func.count(NeighbourhoodSave.id)).filter(NeighbourhoodSave.run_id == run.id).scalar() or 0
+    iran = db.query(func.count(NeighbourhoodIRanThis.id)).filter(NeighbourhoodIRanThis.run_id == run.id).scalar() or 0
+    vs = db.query(NeighbourhoodSave).filter(
+        NeighbourhoodSave.run_id == run.id, NeighbourhoodSave.user_id == current_user.id
+    ).first()
+    vi = db.query(NeighbourhoodIRanThis).filter(
+        NeighbourhoodIRanThis.run_id == run.id, NeighbourhoodIRanThis.user_id == current_user.id
+    ).first()
+
+    return {
+        "run_id": run.id,
+        "handle": author.handle,
+        "city": run.neighbourhood_city,
+        "distance_km": run.distance_km,
+        "duration_seconds": run.duration_seconds,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "route_polyline": run.route_polyline,
+        "notes": run.notes,
+        "photos": photo_payload,
+        "saves_count": int(saves),
+        "i_ran_this_count": int(iran),
+        "viewer_has_saved": vs is not None,
+        "viewer_has_run_this": vi is not None,
+    }
+
+
+@app.post("/runs/{run_id}/share-neighbourhood")
+@app.post("/runs/{run_id}/share-neighborhood", include_in_schema=False)
+def share_run_neighbourhood(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    if not _viewer_neighbourhood_ready(current_user):
+        raise HTTPException(status_code=403, detail="Opt in to neighbourhood and set your home city first.")
+
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    cla, cln = _run_centroid_lat_lng(run)
+    if cla is None:
+        raise HTTPException(status_code=400, detail="Run has no route or start location to share.")
+
+    run.neighbourhood_visibility = "neighbourhood"
+    from datetime import datetime as dtmod
+
+    run.neighbourhood_published_at = dtmod.utcnow()
+    run.neighbourhood_centroid_lat = cla
+    run.neighbourhood_centroid_lng = cln
+    run.neighbourhood_city = (current_user.home_city or "").strip()[:120]
+    db.commit()
+    db.refresh(run)
+    return format_run_response(run, db=db)
+
+
+@app.delete("/runs/{run_id}/share-neighbourhood")
+@app.delete("/runs/{run_id}/share-neighborhood", include_in_schema=False)
+def unshare_run_neighbourhood(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    run.neighbourhood_visibility = "off"
+    run.neighbourhood_published_at = None
+    run.neighbourhood_centroid_lat = None
+    run.neighbourhood_centroid_lng = None
+    run.neighbourhood_city = None
+    db.commit()
+    db.refresh(run)
+    return format_run_response(run, db=db)
+
+
+@app.post("/neighbourhood/runs/{run_id}/save")
+@app.post("/neighborhood/runs/{run_id}/save", include_in_schema=False)
+def neighbourhood_save_add(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    _get_neighbourhood_run_or_404(db, run_id, current_user)
+
+    existing = (
+        db.query(NeighbourhoodSave)
+        .filter(NeighbourhoodSave.run_id == run_id, NeighbourhoodSave.user_id == current_user.id)
+        .first()
+    )
+    if not existing:
+        db.add(NeighbourhoodSave(run_id=run_id, user_id=current_user.id))
+        db.commit()
+    return {"status": "saved"}
+
+
+@app.delete("/neighbourhood/runs/{run_id}/save")
+@app.delete("/neighborhood/runs/{run_id}/save", include_in_schema=False)
+def neighbourhood_save_remove(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    db.query(NeighbourhoodSave).filter(
+        NeighbourhoodSave.run_id == run_id, NeighbourhoodSave.user_id == current_user.id
+    ).delete()
+    db.commit()
+    return {"status": "removed"}
+
+
+@app.post("/neighbourhood/runs/{run_id}/i-ran-this")
+@app.post("/neighborhood/runs/{run_id}/i-ran-this", include_in_schema=False)
+def neighbourhood_iran_add(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    _get_neighbourhood_run_or_404(db, run_id, current_user)
+
+    existing = (
+        db.query(NeighbourhoodIRanThis)
+        .filter(NeighbourhoodIRanThis.run_id == run_id, NeighbourhoodIRanThis.user_id == current_user.id)
+        .first()
+    )
+    if not existing:
+        db.add(NeighbourhoodIRanThis(run_id=run_id, user_id=current_user.id))
+        db.commit()
+    return {"status": "marked"}
+
+
+@app.delete("/neighbourhood/runs/{run_id}/i-ran-this")
+@app.delete("/neighborhood/runs/{run_id}/i-ran-this", include_in_schema=False)
+def neighbourhood_iran_remove(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    db.query(NeighbourhoodIRanThis).filter(
+        NeighbourhoodIRanThis.run_id == run_id, NeighbourhoodIRanThis.user_id == current_user.id
+    ).delete()
+    db.commit()
+    return {"status": "removed"}
+
+
+@app.post("/neighbourhood/runs/{run_id}/report")
+@app.post("/neighborhood/runs/{run_id}/report", include_in_schema=False)
+def neighbourhood_report_run(
+    run_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Report a shared run; hides that author from the reporter's feed."""
+    run = db.query(Run).filter(Run.id == run_id).first()
+    if not run or run.neighbourhood_visibility != "neighbourhood":
+        raise HTTPException(status_code=404, detail="Not found")
+    author = db.query(User).filter(User.id == run.user_id).first()
+    if not author or not author.handle:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    reason = body.get("reason")
+    if reason:
+        reason = _sanitize_text(str(reason), max_length=500)
+
+    db.add(
+        NeighbourhoodReport(
+            reporter_id=current_user.id,
+            run_id=run_id,
+            reason=reason,
+        )
+    )
+    bh = (
+        db.query(NeighbourhoodBlockedHandle)
+        .filter(
+            NeighbourhoodBlockedHandle.user_id == current_user.id,
+            NeighbourhoodBlockedHandle.blocked_handle == author.handle.lower(),
+        )
+        .first()
+    )
+    if not bh:
+        db.add(
+            NeighbourhoodBlockedHandle(
+                user_id=current_user.id,
+                blocked_handle=author.handle.lower(),
+            )
+        )
+    db.commit()
+    return {"status": "reported"}
 
 
 # ==========================================

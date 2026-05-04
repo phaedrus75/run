@@ -158,6 +158,9 @@ class RunResponse(BaseModel):
     
     # 📸 Photo count for scenic runs
     photo_count: int = 0
+
+    neighbourhood_visibility: Optional[str] = "off"
+    neighbourhood_published_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True

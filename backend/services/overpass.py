@@ -90,6 +90,36 @@ def encode_polyline(points: List[Tuple[float, float]]) -> str:
     return "".join(out)
 
 
+def decode_polyline(encoded: str) -> List[Tuple[float, float]]:
+    """Decode Google Encoded Polyline (precision 5) to [(lat, lng), ...]."""
+    if not encoded or not isinstance(encoded, str):
+        return []
+    index = 0
+    lat = 0
+    lng = 0
+    points: List[Tuple[float, float]] = []
+    length = len(encoded)
+
+    def read_varint() -> int:
+        nonlocal index
+        result = 0
+        shift = 0
+        while index < length:
+            b = ord(encoded[index]) - 63
+            index += 1
+            result |= (b & 0x1F) << shift
+            shift += 5
+            if b < 0x20:
+                break
+        return ~(result >> 1) if (result & 1) else (result >> 1)
+
+    while index < length:
+        lat += read_varint()
+        lng += read_varint()
+        points.append((lat / 1e5, lng / 1e5))
+    return points
+
+
 def bbox_around(lat: float, lng: float, radius_km: float) -> Tuple[float, float, float, float]:
     """Return (south, west, north, east) approx bbox around a point."""
     deg_per_km_lat = 1.0 / 111.0
