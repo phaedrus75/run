@@ -21,6 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -105,17 +106,32 @@ export function GoButton() {
 
   return (
     <>
-      {/* The tab bar button itself */}
+      {/* The tab bar button itself — a raised 3D pill that floats above the
+          bar. Composed of a soft outer glow, a hard outer shadow, a gradient
+          fill, and a thin inner highlight to give it a tactile look. */}
       <View style={styles.wrapper}>
-        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+        {/* Soft halo behind the button (suggests a lifted object). */}
+        <View style={styles.halo} pointerEvents="none" />
+
+        <Animated.View style={[styles.btnShadow, { transform: [{ scale: pulseAnim }] }]}>
           <Pressable
             onPress={open}
             style={({ pressed }) => [
-              styles.btn,
+              styles.btnPressable,
               { transform: [{ scale: pressed ? 0.93 : 1 }] },
             ]}
           >
-            <Ionicons name="add" size={32} color="#fff" />
+            <LinearGradient
+              colors={['#FFB36B', '#F97316', '#D85B0F']}
+              start={{ x: 0.2, y: 0 }}
+              end={{ x: 0.8, y: 1 }}
+              style={styles.btnGradient}
+            >
+              {/* Thin top-edge highlight to catch the eye like a glossy
+                  surface. */}
+              <View style={styles.btnHighlight} pointerEvents="none" />
+              <Ionicons name="add" size={36} color="#fff" />
+            </LinearGradient>
           </Pressable>
         </Animated.View>
       </View>
@@ -162,21 +178,65 @@ export function GoButton() {
   );
 }
 
+const BTN_SIZE = 68;
+const HALO_SIZE = BTN_SIZE + 28;
+const GO_ORANGE = '#F97316';
+
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    top: -20,
+    top: -26,
   },
-  btn: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: colors.primary,
+  halo: {
+    position: 'absolute',
+    width: HALO_SIZE,
+    height: HALO_SIZE,
+    borderRadius: HALO_SIZE / 2,
+    backgroundColor: GO_ORANGE,
+    opacity: 0.14,
+    top: -14,
+  },
+  btnShadow: {
+    width: BTN_SIZE,
+    height: BTN_SIZE,
+    borderRadius: BTN_SIZE / 2,
+    // Strong, slightly downward-offset shadow so the button reads as
+    // floating above the tab bar.
+    shadowColor: '#9A3D0A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  btnPressable: {
+    width: BTN_SIZE,
+    height: BTN_SIZE,
+    borderRadius: BTN_SIZE / 2,
+  },
+  btnGradient: {
+    width: BTN_SIZE,
+    height: BTN_SIZE,
+    borderRadius: BTN_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.large,
+    overflow: 'hidden',
+    // Hairline white border on top of the gradient — the "rim" of a 3D
+    // button.
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  btnHighlight: {
+    // A small bright sliver at the top-left to suggest a light source above
+    // and a glossy surface.
+    position: 'absolute',
+    top: 4,
+    left: 8,
+    right: 8,
+    height: 18,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.20)',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

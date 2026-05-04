@@ -26,6 +26,7 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { RunTypeButton } from './RunTypeButton';
 import { WalkMap } from './WalkMap';
 import { RetroactivePhotoPicker } from './RetroactivePhotoPicker';
+import { PhotoHeroCarousel } from './PhotoHeroCarousel';
 import { photoApi, levelApi, type Run, type RunPhoto } from '../services/api';
 import { decodePolyline } from '../services/walkLocationTracker';
 import type { RouteForRetroactive } from '../services/retroactivePhotos';
@@ -307,6 +308,16 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* 📸 Photo hero — leads the screen ("the path and the album").
+              Photos first, map second, stats third. The editor section
+              remains lower in the modal for adding/deleting. */}
+          {showsPhotoSection && photos.length > 0 && (
+            <PhotoHeroCarousel
+              photos={photos}
+              onPress={(p) => setLightboxPhoto(p as RunPhoto)}
+            />
+          )}
+
           {/* Route map (outdoor GPS-tracked runs only) */}
           {isOutdoor && routePoints.length > 0 && routeCamera && (
             <Pressable

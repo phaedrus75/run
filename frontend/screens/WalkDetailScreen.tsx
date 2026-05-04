@@ -31,6 +31,7 @@ import * as Haptics from 'expo-haptics';
 
 import { WalkMap, MapMarker } from '../components/WalkMap';
 import { EditWalkModal } from '../components/EditWalkModal';
+import { PhotoHeroCarousel } from '../components/PhotoHeroCarousel';
 import {
   walkApi,
   walkPhotoApi,
@@ -305,6 +306,24 @@ export function WalkDetailScreen({ navigation, route }: Props) {
             <Ionicons name="checkmark-circle" size={18} color={colors.success} />
             <Text style={styles.savedText}>Walk saved</Text>
           </View>
+        )}
+
+        {/* 📸 Photo hero — leads the screen ("the path and the album").
+            Photos first, map second, stats third. The editor section
+            remains lower for adding/deleting. */}
+        {photos.length > 0 && (
+          <PhotoHeroCarousel
+            photos={photos.map((p) => ({
+              id: p.id,
+              photo_data: p.photo_data,
+              distance_marker_km: p.distance_marker_km,
+              caption: p.caption,
+            }))}
+            onPress={(p) => {
+              const found = photos.find((x) => x.id === p.id);
+              if (found) setLightbox(found);
+            }}
+          />
         )}
 
         <Pressable style={styles.mapWrap} onPress={() => setMapFullscreen(true)}>

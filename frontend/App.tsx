@@ -8,6 +8,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 
@@ -35,6 +36,8 @@ import { PhotoRecoveryScreen } from './screens/PhotoRecoveryScreen';
 import { PhotoReviewScreen } from './screens/PhotoReviewScreen';
 import { AlbumScreen } from './screens/AlbumScreen';
 import { AlbumPhotoDetailScreen } from './screens/AlbumPhotoDetailScreen';
+import { CommunityHomeScreen } from './screens/CommunityHomeScreen';
+import { NeighbourhoodScreen } from './screens/NeighbourhoodScreen';
 import { GymTabScreen } from './screens/GymTabScreen';
 import { StepsTabScreen } from './screens/StepsTabScreen';
 import { WeightTabScreen } from './screens/WeightTabScreen';
@@ -142,6 +145,22 @@ function AlbumStack() {
   );
 }
 
+// ─── Community stack ──────────────────────────────────────────────────────────
+// Top-level "Community" tab — Circles (real) + Neighbourhood (placeholder).
+// CirclesList + CircleSpace remain registered in LabsStack as well so any
+// existing deep links from the Beta hub continue to work; routing within
+// the Community tab uses this stack's instances.
+function CommunityStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="CommunityHome"  component={CommunityHomeScreen}  options={{ headerShown: false }} />
+      <Stack.Screen name="Neighbourhood"  component={NeighbourhoodScreen}  options={{ headerShown: false }} />
+      <Stack.Screen name="CirclesList"    component={CirclesScreen}        options={{ headerShown: false }} />
+      <Stack.Screen name="CircleSpace"    component={CircleSpaceScreen}    options={{ headerShown: false }} />
+    </Stack.Navigator>
+  );
+}
+
 // ─── Labs stack ───────────────────────────────────────────────────────────────
 // Hub + Circles + Gym (with stats) + Steps (with stats)
 function LabsStack() {
@@ -188,30 +207,33 @@ function MainTabs() {
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        // 7-slot layout means each tab is ~14% of the screen — drop the
+        // label size a hair so longer words ("Community") don't truncate
+        // on smaller iPhones.
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginTop: 2 },
+        tabBarItemStyle: { paddingHorizontal: 0 },
+        tabBarIconStyle: { marginBottom: -2 },
         tabBarIcon: ({ focused, color, size }) => {
           let icon: keyof typeof Ionicons.glyphMap = 'home';
           switch (route.name) {
-            case 'Home':   icon = focused ? 'home'    : 'home-outline';    break;
-            case 'Runs':   icon = focused ? 'fitness' : 'fitness-outline'; break;
-            case 'Walks':  icon = focused ? 'walk'    : 'walk-outline';    break;
-            case 'Album':  icon = focused ? 'images'  : 'images-outline';  break;
-            case 'Labs':   icon = focused ? 'flask'   : 'flask-outline';   break;
+            case 'Home':      icon = focused ? 'home'    : 'home-outline';    break;
+            case 'Runs':      icon = focused ? 'fitness' : 'fitness-outline'; break;
+            case 'Walks':     icon = focused ? 'walk'    : 'walk-outline';    break;
+            case 'Album':     icon = focused ? 'images'  : 'images-outline';  break;
+            case 'Community': icon = focused ? 'people'  : 'people-outline';  break;
+            case 'Labs':      icon = focused ? 'flask'   : 'flask-outline';   break;
           }
           return <Ionicons name={icon} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="Home"   component={HomeStack}  options={{ tabBarLabel: 'Home'  }} />
-      <Tab.Screen name="Runs"   component={RunsStack}  options={{ tabBarLabel: 'Runs'  }} />
-      <Tab.Screen
-        name="Go"
-        component={GoPlaceholder}
-        options={{
-          tabBarLabel: '',
-          tabBarButton: () => <GoButton />,
-        }}
-      />
+      {/* 7-slot bottom nav with GO at the exact centre (slot 4 of 7).
+          Layout: Home | Runs | Walks | [GO] | Album | Community | Labs.
+          Three tabs left + the centre GO + three tabs right keeps the
+          GO button mathematically centred while letting both pillars of
+          the brand ("the path" and "the album") sit on either side of it. */}
+      <Tab.Screen name="Home"  component={HomeStack}  options={{ tabBarLabel: 'Home'  }} />
+      <Tab.Screen name="Runs"  component={RunsStack}  options={{ tabBarLabel: 'Runs'  }} />
       <Tab.Screen
         name="Walks"
         component={WalkStack}
@@ -222,8 +244,17 @@ function MainTabs() {
           },
         })}
       />
-      <Tab.Screen name="Album"  component={AlbumStack} options={{ tabBarLabel: 'Album' }} />
-      <Tab.Screen name="Labs"   component={LabsStack}  options={{ tabBarLabel: 'Labs'  }} />
+      <Tab.Screen
+        name="Go"
+        component={GoPlaceholder}
+        options={{
+          tabBarLabel: '',
+          tabBarButton: () => <GoButton />,
+        }}
+      />
+      <Tab.Screen name="Album"     component={AlbumStack}     options={{ tabBarLabel: 'Album'     }} />
+      <Tab.Screen name="Community" component={CommunityStack} options={{ tabBarLabel: 'Community' }} />
+      <Tab.Screen name="Labs"      component={LabsStack}      options={{ tabBarLabel: 'Labs'      }} />
     </Tab.Navigator>
   );
 }
@@ -298,16 +329,21 @@ function WatchWorkoutBridgeHost() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <AuthProvider>
-        {/* Mounted at root so the native event listener is attached before
-            auth resolves; otherwise iOS can deliver queued WCSession user
-            infos during cold launch and the events get dropped. */}
-        <WatchWorkoutBridgeHost />
-        <AppNavigator />
-      </AuthProvider>
-    </SafeAreaProvider>
+    // GestureHandlerRootView is required by react-native-gesture-handler on
+    // the new architecture (RN ≥ 0.74 / Expo SDK 54). Without it pinch-to-
+    // zoom and pan gestures on the photo viewer simply don't fire.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <AuthProvider>
+          {/* Mounted at root so the native event listener is attached before
+              auth resolves; otherwise iOS can deliver queued WCSession user
+              infos during cold launch and the events get dropped. */}
+          <WatchWorkoutBridgeHost />
+          <AppNavigator />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
