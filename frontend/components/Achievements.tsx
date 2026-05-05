@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import type { AchievementsData, Achievement } from '../services/api';
 
 interface AchievementsProps {
   data: AchievementsData;
+  onBadgePress?: (achievement: Achievement) => void;
 }
 
 /** Subsections under Path (movement) vs Album (looking back + community). */
@@ -82,7 +83,7 @@ function renderCategoryBlock(
   );
 }
 
-export function Achievements({ data }: AchievementsProps) {
+export function Achievements({ data, onBadgePress }: AchievementsProps) {
   const [showLocked, setShowLocked] = useState(false);
   const { unlocked, locked, total, unlocked_count } = data;
 
@@ -90,9 +91,11 @@ export function Achievements({ data }: AchievementsProps) {
   const grouped = groupByCategory(allAchievements);
 
   const renderBadge = (achievement: Achievement) => (
-    <View
+    <Pressable
       key={achievement.id}
       style={[styles.badge, !achievement.unlocked && styles.lockedBadge]}
+      onPress={() => onBadgePress?.(achievement)}
+      disabled={!onBadgePress}
     >
       <Text style={[styles.badgeEmoji, !achievement.unlocked && styles.lockedEmoji]}>
         {achievement.emoji}
@@ -104,7 +107,7 @@ export function Achievements({ data }: AchievementsProps) {
         {achievement.description}
       </Text>
       {achievement.unlocked && <View style={styles.unlockedDot} />}
-    </View>
+    </Pressable>
   );
 
   const pathCats = PATH_CATEGORY_ORDER.filter(c =>

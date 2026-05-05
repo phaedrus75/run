@@ -68,9 +68,18 @@ from auth import (
     create_access_token, get_current_user, require_auth
 )
 from schemas import (
-    RunCreate, RunUpdate, RunResponse, 
-    StatsResponse, MotivationalMessage, WeeklyStreakProgress,
-    RUN_DISTANCES, LEVEL_DISTANCES, LEVEL_MAX, LEVEL_ORDER, LEVEL_INFO, LEVEL_GOALS
+    RunCreate,
+    RunUpdate,
+    RunResponse,
+    StatsResponse,
+    MotivationalMessage,
+    WeeklyStreakProgress,
+    RUN_DISTANCES,
+    LEVEL_DISTANCES,
+    LEVEL_MAX,
+    LEVEL_ORDER,
+    LEVEL_INFO,
+    LEVEL_GOALS,
 )
 import crud
 
@@ -1217,7 +1226,15 @@ def create_run(
     is_pr = any(c["type"] == "personal_best" for c in celebrations)
     pr_type = next((c["type"] for c in celebrations if c["type"] == "personal_best"), None)
     
-    return format_run_response(db_run, is_personal_best=is_pr, pr_type=pr_type, celebrations=celebrations, db=db)
+    milestones = _milestone_unlocks_after_activity(db, current_user)
+    return format_run_response(
+        db_run,
+        is_personal_best=is_pr,
+        pr_type=pr_type,
+        celebrations=celebrations,
+        db=db,
+        milestone_unlocks=milestones,
+    )
 
 
 @app.get("/runs", response_model=List[RunResponse])
@@ -1908,7 +1925,39 @@ def get_steps_summary(
 # 🛠️ HELPER FUNCTIONS
 # ==========================================
 
-def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str = None, celebrations: list = None, db: Session = None, photo_count_override: int = None) -> dict:
+def _milestone_unlocks_after_activity(db: Session, current_user: User) -> list:
+    """Recompute achievements after a run/walk write; return badges that just unlocked."""
+    from achievements import get_achievements
+
+    stats = crud.get_stats_summary(db, user_id=current_user.id)
+    level = getattr(current_user, "runner_level", "breath") or "breath"
+    level_defaults = LEVEL_GOALS.get(level, LEVEL_GOALS["breath"])
+    yearly_goal = level_defaults["yearly_km"]
+    monthly_goal = level_defaults["monthly_km"]
+    user_goals = db.query(UserGoals).filter(UserGoals.user_id == current_user.id).first()
+    if user_goals:
+        yearly_goal = user_goals.yearly_km_goal or yearly_goal
+        monthly_goal = user_goals.monthly_km_goal or monthly_goal
+    data = get_achievements(
+        db,
+        stats,
+        user_id=current_user.id,
+        yearly_goal=yearly_goal,
+        monthly_goal=monthly_goal,
+        return_new_unlocks=True,
+    )
+    return list(data.get("new_unlocks") or [])
+
+
+def format_run_response(
+    run: Run,
+    is_personal_best: bool = False,
+    pr_type: str = None,
+    celebrations: list = None,
+    db: Session = None,
+    photo_count_override: int = None,
+    milestone_unlocks: list = None,
+) -> dict:
     """
     Format a Run object for the API response.
 
@@ -1948,6 +1997,7 @@ def format_run_response(run: Run, is_personal_best: bool = False, pr_type: str =
         "is_personal_best": is_personal_best,
         "pr_type": pr_type,
         "celebrations": celebrations or [],
+        "milestone_unlocks": milestone_unlocks or [],
         "photo_count": photo_count,
         "route_polyline": getattr(run, "route_polyline", None),
         "start_lat": getattr(run, "start_lat", None),
@@ -3401,6 +3451,40 @@ DAILY_QUOTES = [
     {"text": "Life is a marathon, not a sprint. Pace yourself accordingly.", "author": "Amby Burfoot"},
     {"text": "Running is the greatest metaphor for life, because you get out of it what you put into it.", "author": "Oprah Winfrey"},
     {"text": "There are clubs you can't belong to, neighborhoods you can't live in, schools you can't get into, but the roads are always open.", "author": "Nike"},
+    {"text": "A lot of people run a race to see who is fastest. I run to see who has the most guts.", "author": "Steve Prefontaine"},
+    {"text": "If you want to win something, run 100 metres. If you want to experience something, run a marathon.", "author": "Emil Zátopek"},
+    {"text": "No human is limited.", "author": "Eliud Kipchoge"},
+    {"text": "Only the disciplined ones are free in life.", "author": "Eliud Kipchoge"},
+    {"text": "The marathon is a charismatic event. It has everything. It has drama. It has competition. It has camaraderie.", "author": "Fred Lebow"},
+    {"text": "The marathon can humble you.", "author": "Bill Rodgers"},
+    {"text": "You have to forget your last marathon before you try another. Your mind can't know what's coming.", "author": "Frank Shorter"},
+    {"text": "The will to win means nothing without the will to prepare.", "author": "Juma Ikangaa"},
+    {"text": "Don't dream of winning. Train for it.", "author": "Mo Farah"},
+    {"text": "Every marathon is a new beginning.", "author": "Grete Waitz"},
+    {"text": "Stadiums are for spectators. Runners have the roads, trails, and tracks.", "author": "Amby Burfoot"},
+    {"text": "Run when you can, walk if you have to, crawl if you must — just never give up.", "author": "Dean Karnazes"},
+    {"text": "Sometimes you just do things.", "author": "Scott Jurek"},
+    {"text": "I don't think limits.", "author": "Usain Bolt"},
+    {"text": "I am building a fire, and every day I train, I add more fuel. At just the right moment, I light the match.", "author": "Mia Hamm"},
+    {"text": "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", "author": "Aristotle"},
+    {"text": "He who is not courageous enough to take risks will accomplish nothing in life.", "author": "Muhammad Ali"},
+    {"text": "Energy and persistence conquer all things.", "author": "Benjamin Franklin"},
+    {"text": "Well done is better than well said.", "author": "Benjamin Franklin"},
+    {"text": "The secret of getting ahead is getting started.", "author": "Mark Twain"},
+    {"text": "You do not rise to the level of your goals. You fall to the level of your systems.", "author": "James Clear"},
+    {"text": "Small disciplines repeated with consistency lead to great achievements gained slowly over time.", "author": "John C. Maxwell"},
+    {"text": "The impediment to action advances action. What stands in the way becomes the way.", "author": "Marcus Aurelius"},
+    {"text": "Begin at once to live, and count each separate day as a separate life.", "author": "Seneca"},
+    {"text": "How long are you going to wait before you demand the best for yourself?", "author": "Epictetus"},
+    {"text": "The harder the conflict, the more glorious the triumph.", "author": "Thomas Paine"},
+    {"text": "What lies behind us and what lies before us are tiny matters compared to what lies within us.", "author": "Ralph Waldo Emerson"},
+    {"text": "The future belongs to those who believe in the beauty of their dreams.", "author": "Eleanor Roosevelt"},
+    {"text": "You are never too old to set another goal or to dream a new dream.", "author": "C.S. Lewis"},
+    {"text": "The only way to prove that you're a good sport is to lose.", "author": "Ernie Banks"},
+    {"text": "Winning doesn't always mean being first. Winning means you're doing better than you've ever done before.", "author": "Bonnie Blair"},
+    {"text": "You miss 100% of the shots you don't take.", "author": "Wayne Gretzky"},
+    {"text": "It always seems impossible until it's done.", "author": "Nelson Mandela"},
+    {"text": "The man who moves a mountain begins by carrying away small stones.", "author": "Confucius"},
 ]
 
 @app.get("/daily-wisdom")
@@ -4510,7 +4594,7 @@ def get_scenic_runs(
 # 🚶 WALK ENDPOINTS
 # ==========================================
 
-def _walk_to_dict(walk: Walk, photo_count: int = 0) -> dict:
+def _walk_to_dict(walk: Walk, photo_count: int = 0, milestone_unlocks: Optional[list] = None) -> dict:
     return {
         "id": walk.id,
         "user_id": walk.user_id,
@@ -4530,6 +4614,7 @@ def _walk_to_dict(walk: Walk, photo_count: int = 0) -> dict:
         "category": walk.category,
         "public_walk_id": walk.public_walk_id,
         "photo_count": photo_count,
+        "milestone_unlocks": milestone_unlocks or [],
     }
 
 
@@ -4587,7 +4672,8 @@ def create_walk_endpoint(
         category=payload.get("category"),
         public_walk_id=payload.get("public_walk_id"),
     )
-    return _walk_to_dict(walk)
+    milestones = _milestone_unlocks_after_activity(db, current_user)
+    return _walk_to_dict(walk, milestone_unlocks=milestones)
 
 
 @app.get("/walks")

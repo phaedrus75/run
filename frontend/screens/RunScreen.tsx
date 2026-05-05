@@ -30,7 +30,8 @@ import { MAX_PHOTOS_PER_ACTIVITY } from '../constants/photos';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { RunTypeButton } from '../components/RunTypeButton';
 import { Timer } from '../components/Timer';
-import { runApi, photoApi, getDistance, levelApi } from '../services/api';
+import { runApi, photoApi, getDistance, levelApi, type MilestoneUnlock } from '../services/api';
+import { MilestoneUnlockSequence } from '../components/MilestoneUnlockSequence';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -98,6 +99,9 @@ export function RunScreen({ navigation }: RunScreenProps) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const breatheAnim = useRef(new Animated.Value(0.85)).current;
   const confettiRef = useRef<any>(null);
+  const [milestoneQueue, setMilestoneQueue] = useState<MilestoneUnlock[]>([]);
+  const [showMilestoneSequence, setShowMilestoneSequence] = useState(false);
+  const [deferredRunResult, setDeferredRunResult] = useState<RunResult | null>(null);
 
   useEffect(() => {
     levelApi.get().then(data => {
@@ -169,14 +173,32 @@ export function RunScreen({ navigation }: RunScreenProps) {
     const paceSecs = Math.floor(paceSeconds % 60);
     const paceStr = `${paceMins}:${paceSecs.toString().padStart(2, '0')}`;
 
-    openCelebration({
+    const result: RunResult = {
       runId: run.id,
       distance: runType.toUpperCase(),
       category: category === 'treadmill' ? 'Treadmill' : 'Outdoor',
       formattedDuration: run.formatted_duration,
       pace: paceStr,
       celebrations: run.celebrations || [],
-    });
+    };
+
+    const milestones: MilestoneUnlock[] = run.milestone_unlocks ?? [];
+    if (milestones.length > 0) {
+      setDeferredRunResult(result);
+      setMilestoneQueue(milestones);
+      setShowMilestoneSequence(true);
+    } else {
+      openCelebration(result);
+    }
+  };
+
+  const onMilestoneSequenceComplete = () => {
+    setShowMilestoneSequence(false);
+    setMilestoneQueue([]);
+    if (deferredRunResult) {
+      openCelebration(deferredRunResult);
+      setDeferredRunResult(null);
+    }
   };
 
   const getDistanceMarkers = (distanceKm: number): number[] => {
@@ -711,6 +733,12 @@ export function RunScreen({ navigation }: RunScreenProps) {
           )}
         </View>
       </Modal>
+
+      <MilestoneUnlockSequence
+        visible={showMilestoneSequence}
+        items={milestoneQueue}
+        onComplete={onMilestoneSequenceComplete}
+      />
     </SafeAreaView>
   );
 }

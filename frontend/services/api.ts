@@ -83,6 +83,7 @@ export interface Run {
   is_personal_best?: boolean;
   pr_type?: string | null;
   celebrations?: Celebration[];
+  milestone_unlocks?: MilestoneUnlock[];
   photo_count?: number;
   // GPS fields (outdoor GPS-tracked runs only)
   route_polyline?: string | null;
@@ -148,6 +149,7 @@ export interface Walk {
   category: string | null;
   public_walk_id: number | null;
   photo_count?: number;
+  milestone_unlocks?: MilestoneUnlock[];
 }
 
 export interface WalkPhoto {
@@ -297,6 +299,15 @@ export interface Achievement {
   category: string;
   unlocked: boolean;
   unlocked_at?: string | null;
+}
+
+/** Milestone badge returned on run/walk create when it first unlocks. */
+export interface MilestoneUnlock {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  category: string;
 }
 
 export interface AchievementsData {

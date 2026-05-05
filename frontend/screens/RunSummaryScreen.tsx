@@ -49,7 +49,8 @@ import {
   encodePolyline,
   TrackedPoint,
 } from '../services/walkLocationTracker';
-import { runApi } from '../services/api';
+import { runApi, type MilestoneUnlock } from '../services/api';
+import { MilestoneUnlockSequence } from '../components/MilestoneUnlockSequence';
 import {
   PhotoEntry,
   linkActivityId,
@@ -103,6 +104,8 @@ export function RunSummaryScreen({ navigation, route }: Props) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+  const [milestoneQueue, setMilestoneQueue] = useState<MilestoneUnlock[]>([]);
+  const [showMilestoneSequence, setShowMilestoneSequence] = useState(false);
 
   // Re-read the session whenever this screen gets focus (e.g. coming back
   // from the review screen with caption / delete edits).
@@ -172,7 +175,13 @@ export function RunSummaryScreen({ navigation, route }: Props) {
 
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
 
-      navigation.replace('ActivityHome');
+      const miles = run.milestone_unlocks ?? [];
+      if (miles.length > 0) {
+        setMilestoneQueue(miles);
+        setShowMilestoneSequence(true);
+      } else {
+        navigation.replace('ActivityHome');
+      }
     } catch (e: any) {
       // Save failed before the run was created. The session (with photos
       // safely on disk) becomes a draft that retries from boot.
@@ -353,6 +362,16 @@ export function RunSummaryScreen({ navigation, route }: Props) {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <MilestoneUnlockSequence
+        visible={showMilestoneSequence}
+        items={milestoneQueue}
+        onComplete={() => {
+          setShowMilestoneSequence(false);
+          setMilestoneQueue([]);
+          navigation.replace('ActivityHome');
+        }}
+      />
     </SafeAreaView>
   );
 }

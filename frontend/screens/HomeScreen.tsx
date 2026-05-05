@@ -34,6 +34,8 @@ import {
   WeekSummaryCard,
   PersonalRecords,
 } from '../components';
+import { AchievementDetailModal } from '../components/AchievementDetailModal';
+import { MilestoneUnlockSequence } from '../components/MilestoneUnlockSequence';
 import { AppHeader } from '../components/AppHeader';
 import { WeeklyReflection } from '../components/WeeklyReflection';
 import { 
@@ -52,6 +54,9 @@ import {
   type PersonalRecords as PersonalRecordsData,
   type AchievementsData,
   type AlbumPhoto,
+  type Achievement,
+  type MilestoneUnlock,
+  type Celebration,
 } from '../services/api';
 
 interface HomeScreenProps {
@@ -62,13 +67,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   // 🔐 Auth context
   const { user } = useAuth();
   
-  // 🎯 Route params for celebration
   const route = useRoute();
-  const { celebrations } = (route.params as { celebrations?: Array<{type: string; title: string; message: string}> }) || {};
-  
-  // 🎊 Confetti ref
+  const pendingCelebrationsAfterMilestones = useRef<Celebration[] | null>(null);
+
   const confettiRef = useRef<any>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [homeMilestoneQueue, setHomeMilestoneQueue] = useState<MilestoneUnlock[]>([]);
+  const [showHomeMilestoneSequence, setShowHomeMilestoneSequence] = useState(false);
+  const [homeBadgeDetail, setHomeBadgeDetail] = useState<Achievement | null>(null);
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
@@ -198,14 +204,37 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     }, [fetchData])
   );
   
-  // 🎊 Trigger confetti for celebrations
+  // 🎊 Milestone badges from navigation (e.g. watch) then PR confetti
   useEffect(() => {
-    if (celebrations && celebrations.length > 0) {
+    const raw = route.params as {
+      celebrations?: Celebration[];
+      milestone_unlocks?: MilestoneUnlock[];
+    } | null;
+    const m = raw?.milestone_unlocks;
+    const c = raw?.celebrations;
+
+    if (m && m.length > 0) {
+      pendingCelebrationsAfterMilestones.current = c && c.length > 0 ? c : null;
+      setHomeMilestoneQueue(m);
+      setShowHomeMilestoneSequence(true);
+      navigation.setParams({ milestone_unlocks: undefined, celebrations: undefined });
+      return;
+    }
+    if (c && c.length > 0) {
       setShowConfetti(true);
-      // Clear the params so confetti doesn't show again on re-render
       navigation.setParams({ celebrations: undefined });
     }
-  }, [celebrations, navigation]);
+  }, [route.params, navigation]);
+
+  const onHomeMilestoneSequenceComplete = () => {
+    setShowHomeMilestoneSequence(false);
+    setHomeMilestoneQueue([]);
+    const pend = pendingCelebrationsAfterMilestones.current;
+    pendingCelebrationsAfterMilestones.current = null;
+    if (pend && pend.length > 0) {
+      setShowConfetti(true);
+    }
+  };
   
   // 🔄 Pull to refresh
   const onRefresh = useCallback(() => {
@@ -449,7 +478,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
         {personalRecords && <PersonalRecords records={personalRecords} />}
 
-        {/* 🏅 Recent milestones — the 6 most-recently unlocked badges.
+        {/* 🏅 Recent milestones — last 10 unlocked badges (newest first).
             Backed by user_achievements.unlocked_at (recorded on every
             locked → unlocked transition). Existing rows that pre-date
             this feature are stamped lazily on the first GET /achievements
@@ -482,11 +511,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   const tb = b.unlocked_at ? new Date(b.unlocked_at).getTime() : 0;
                   return tb - ta;
                 })
-                .slice(0, 6)
+                .slice(0, 10)
                 .map((a, idx, arr) => (
                   <Pressable
                     key={a.id}
-                    onPress={() => navigation.navigate('Honors')}
+                    onPress={() => setHomeBadgeDetail(a)}
                     style={[
                       styles.milestoneTile,
                       idx === arr.length - 1 && { marginRight: 0 },
@@ -506,7 +535,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
 
       </ScrollView>
-      
+
+      <MilestoneUnlockSequence
+        visible={showHomeMilestoneSequence}
+        items={homeMilestoneQueue}
+        onComplete={onHomeMilestoneSequenceComplete}
+      />
+      <AchievementDetailModal
+        visible={homeBadgeDetail !== null}
+        achievement={homeBadgeDetail}
+        onClose={() => setHomeBadgeDetail(null)}
+      />
+
       {/* 🎊 Confetti for Personal Bests! */}
       {showConfetti && (
         <ConfettiCannon

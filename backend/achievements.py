@@ -1330,7 +1330,14 @@ def get_goals_progress(db: Session, yearly_goal: float = None, monthly_goal: flo
     }
 
 
-def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal: float = None, monthly_goal: float = None) -> dict:
+def get_achievements(
+    db: Session,
+    stats: dict,
+    user_id: int = None,
+    yearly_goal: float = None,
+    monthly_goal: float = None,
+    return_new_unlocks: bool = False,
+) -> dict:
     """Get all achievements and their unlock status.
 
     Records the first time a badge transitions locked → unlocked into the
@@ -1672,12 +1679,29 @@ def get_achievements(db: Session, stats: dict, user_id: int = None, yearly_goal:
         except Exception:
             db.rollback()
 
-    return {
+    result: dict = {
         "unlocked": unlocked,
         "locked": locked,
         "total": achievement_total_active,
         "unlocked_count": len(unlocked),
     }
+    if return_new_unlocks:
+        fresh: list[dict] = []
+        for row in new_unlock_rows:
+            meta = ACHIEVEMENTS.get(row.achievement_id)
+            if not meta or meta.get("legacy"):
+                continue
+            fresh.append(
+                {
+                    "id": meta["id"],
+                    "name": meta["name"],
+                    "description": meta["description"],
+                    "emoji": meta["emoji"],
+                    "category": meta["category"],
+                }
+            )
+        result["new_unlocks"] = fresh
+    return result
 
 
 def check_new_pr(db: Session, run: Run) -> Optional[dict]:

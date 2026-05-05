@@ -123,6 +123,16 @@ class Celebration(BaseModel):
     message: str  # "You beat your 5k record!"
 
 
+class MilestoneUnlockItem(BaseModel):
+    """Badge first unlocked on this activity (path/album milestones)."""
+
+    id: str
+    name: str
+    description: str
+    emoji: str
+    category: str
+
+
 class RunResponse(BaseModel):
     """
     📤 Schema for RETURNING run data
@@ -155,6 +165,9 @@ class RunResponse(BaseModel):
     
     # 🎉 Celebrations - all achievements unlocked by this run
     celebrations: List[Celebration] = []
+
+    # 🏅 Milestone badges that transitioned locked → unlocked on this save
+    milestone_unlocks: List[MilestoneUnlockItem] = []
     
     # 📸 Photo count for scenic runs
     photo_count: int = 0

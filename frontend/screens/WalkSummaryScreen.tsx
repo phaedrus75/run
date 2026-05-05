@@ -40,7 +40,8 @@ import {
   encodePolyline,
   TrackedPoint,
 } from '../services/walkLocationTracker';
-import { walkApi } from '../services/api';
+import { walkApi, type MilestoneUnlock } from '../services/api';
+import { MilestoneUnlockSequence } from '../components/MilestoneUnlockSequence';
 import {
   PhotoEntry,
   linkActivityId,
@@ -85,6 +86,9 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+  const [milestoneQueue, setMilestoneQueue] = useState<MilestoneUnlock[]>([]);
+  const [showMilestoneSequence, setShowMilestoneSequence] = useState(false);
+  const [savedWalkId, setSavedWalkId] = useState<number | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -154,7 +158,14 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
-      navigation.replace('WalkDetail', { walkId: walk.id, justSaved: true });
+      const miles = walk.milestone_unlocks ?? [];
+      if (miles.length > 0) {
+        setSavedWalkId(walk.id);
+        setMilestoneQueue(miles);
+        setShowMilestoneSequence(true);
+      } else {
+        navigation.replace('WalkDetail', { walkId: walk.id, justSaved: true });
+      }
     } catch (e: any) {
       // Save failed mid-flight. Persist as a draft so the walk is not lost —
       // `drainPendingPhoneActivities` retries on the next auth-ready boot.
@@ -354,6 +365,22 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <MilestoneUnlockSequence
+        visible={showMilestoneSequence}
+        items={milestoneQueue}
+        onComplete={() => {
+          setShowMilestoneSequence(false);
+          setMilestoneQueue([]);
+          const id = savedWalkId;
+          setSavedWalkId(null);
+          if (id != null) {
+            navigation.replace('WalkDetail', { walkId: id, justSaved: true });
+          } else {
+            navigation.popToTop();
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

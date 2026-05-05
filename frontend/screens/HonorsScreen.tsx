@@ -9,7 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { PersonalRecords } from '../components/PersonalRecords';
 import { Achievements } from '../components/Achievements';
-import { statsApi, type PersonalRecords as PRType, type AchievementsData } from '../services/api';
+import { AchievementDetailModal } from '../components/AchievementDetailModal';
+import { statsApi, type PersonalRecords as PRType, type AchievementsData, type Achievement } from '../services/api';
 import { colors, spacing, typography } from '../theme/colors';
 
 export function HonorsScreen({ navigation }: { navigation: any }) {
@@ -17,6 +18,7 @@ export function HonorsScreen({ navigation }: { navigation: any }) {
   const [achievements, setAchievements] = useState<AchievementsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [badgeDetail, setBadgeDetail] = useState<Achievement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,13 +61,20 @@ export function HonorsScreen({ navigation }: { navigation: any }) {
         ) : (
           <>
             {records && <PersonalRecords records={records} />}
-            {achievements && <Achievements data={achievements} />}
+            {achievements && (
+              <Achievements data={achievements} onBadgePress={a => setBadgeDetail(a)} />
+            )}
             {!records && !achievements && (
               <Text style={styles.empty}>Nothing here yet — keep showing up.</Text>
             )}
           </>
         )}
       </ScrollView>
+      <AchievementDetailModal
+        visible={badgeDetail !== null}
+        achievement={badgeDetail}
+        onClose={() => setBadgeDetail(null)}
+      />
     </SafeAreaView>
   );
 }
