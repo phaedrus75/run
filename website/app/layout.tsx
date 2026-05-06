@@ -7,11 +7,11 @@ import AuthNav from '../components/AuthNav';
 export const metadata: Metadata = {
   title: 'ZenRun — Show up. Reflect.',
   description:
-    'A running journal built around two halves of one practice: the path you take, and the album you enjoy afterwards. Log a run in 2 seconds, capture scenic photos, build your rhythm.',
+    'ZenRun is the journal you maintain of your runs and walks — stitched together with your photos, your routes, and your story of showing up.',
   openGraph: {
     title: 'ZenRun — Show up. Reflect.',
     description:
-      'Your running journal. Mindfulness, photos, and reflection — three things kept close together as one practice.',
+      'Your watch knows the pace. ZenRun knows the place. A running journal where photos, routes, and memory live next to the numbers.',
     url: 'https://zenrun.co',
     siteName: 'ZenRun',
     type: 'website',
@@ -66,9 +66,8 @@ function Footer() {
               <span className="text-xl font-bold text-white">ZenRun</span>
             </div>
             <p className="text-sm leading-relaxed max-w-md">
-              Show up. Reflect. A running journal built around two halves of one
-              practice &mdash; the path you take, and the album you enjoy
-              afterwards.
+              Show up. Reflect. A running journal for the path you take and
+              the album you keep.
             </p>
           </div>
           <div>

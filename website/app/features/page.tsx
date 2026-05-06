@@ -38,17 +38,22 @@ const PILLARS: Pillar[] = [
     categories: [
       {
         category: 'Run Logging',
-        philosophy: 'Run first. Log later. Get on with your day.',
+        philosophy: 'Run for the moment. Keep the rest in the journal.',
         items: [
           {
+            icon: '🗺️',
+            title: 'The photo run',
+            desc: 'GPS from your phone or wrist. Stop on the bridge, take the photo, keep going. ZenRun drops it on your route at the right km, and the album builds itself.',
+          },
+          {
             icon: '⏱️',
-            title: '2-Second Logging',
-            desc: 'Pick your distance, enter your time, done. Use your Apple Watch or not. Run however you want, log it when you\'re back.',
+            title: 'Or just log it in 2 seconds',
+            desc: 'No phone? No watch? Pick your distance, type the time, done. The journal accepts a fast log as gladly as a photo run.',
           },
           {
             icon: '🏃',
             title: '9 Distances',
-            desc: '1K through 21K — including 1K, 2K, 3K, 5K, 8K, 10K, 15K, 18K, and 21K. Outdoor or treadmill. Pick the one that fits your day.',
+            desc: '1K through 21K — 1K, 2K, 3K, 5K, 8K, 10K, 15K, 18K, and 21K. Outdoor or treadmill. Pick the one that fits your day.',
           },
           {
             icon: '📝',
@@ -111,7 +116,7 @@ const PILLARS: Pillar[] = [
           {
             icon: '🎉',
             title: 'Quiet Celebrations',
-            desc: 'A small moment of confetti when you maintain your rhythm or hit a goal. No fanfare. Just a nod.',
+            desc: 'A small moment of confetti when you keep your rhythm or unlock a milestone. No fanfare. No leaderboard. Just a nod from the app to the runner.',
           },
         ],
       },
@@ -210,7 +215,7 @@ const PILLARS: Pillar[] = [
           {
             icon: '⚡',
             title: 'Personal Records',
-            desc: 'Your fastest time at each distance, tracked automatically. Filter by outdoor or treadmill. The opponent is yourself, the way you used to be.',
+            desc: 'Your fastest at each distance, tracked automatically. There when you want to see it. The opponent is yourself, the way you used to be — never the runner three streets over.',
           },
           {
             icon: '🏆',
@@ -249,9 +254,9 @@ const COMMUNITY_SCALES: Scale[] = [
   {
     icon: '🏘️',
     title: 'The neighbourhood',
-    badge: 'Coming soon',
+    badge: '',
     badgeAccent: 'teal',
-    desc: 'Pseudonymous ZenRunners in your city. Share an album, save someone else\'s, run it yourself. Discovery, not ranking.',
+    desc: 'Find fellow ZenRunners in your city. Share an album, save someone else\'s, run it yourself. Discovery, not ranking.',
     bullets: [
       'A handle, not your real name',
       'Albums opt-in per run',
@@ -317,8 +322,8 @@ export default function FeaturesPage() {
           </h1>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
             ZenRun lives in two places: the path you take, and the album you
-            enjoy afterwards. Every feature on this page belongs to one of
-            them &mdash; if it doesn&apos;t, it shouldn&apos;t exist.
+            keep. Every feature on this page belongs to one of them &mdash;
+            if it doesn&apos;t, it shouldn&apos;t exist.
           </p>
         </div>
       </section>
@@ -381,9 +386,11 @@ export default function FeaturesPage() {
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-4xl">{scale.icon}</div>
-                    <span className={`text-[10px] font-semibold tracking-[0.2em] uppercase ${accentText} ${accentBg} px-2.5 py-1 rounded-full`}>
-                      {scale.badge}
-                    </span>
+                    {scale.badge && (
+                      <span className={`text-[10px] font-semibold tracking-[0.2em] uppercase ${accentText} ${accentBg} px-2.5 py-1 rounded-full`}>
+                        {scale.badge}
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{scale.title}</h3>
                   <p className="text-sm text-gray-500 leading-relaxed mb-4">{scale.desc}</p>
@@ -438,8 +445,7 @@ export default function FeaturesPage() {
           </div>
 
           <p className="text-center text-sm text-gray-400 mt-10 max-w-xl mx-auto">
-            We rank places, never people. Nothing comparative ever lands on a
-            runner&apos;s profile.
+            We rank places, never people.
           </p>
         </div>
       </section>
@@ -452,7 +458,8 @@ export default function FeaturesPage() {
               Ready to just run?
             </h2>
             <p className="text-gray-500 mb-8">
-              No credit card. No setup. Download and log your first run in under a minute.
+              No credit card. No setup. Download and log your first run in
+              under a minute &mdash; and your first photo run on your next outing.
             </p>
             <a
               href="/#download"

@@ -138,8 +138,8 @@ function LoginForm() {
             {mode === 'reset' && 'Enter reset code'}
           </h1>
           <p className="text-gray-500">
-            {mode === 'login' && 'Sign in with your ZenRun account to view circle members\' profiles.'}
-            {mode === 'forgot' && 'Enter your email and we\'ll send you a 6-digit reset code.'}
+            {mode === 'login' && 'Sign in with your ZenRun account to view your journal and your circles.'}
+            {mode === 'forgot' && 'Drop your email; we\'ll send a 6-digit reset code.'}
             {mode === 'reset' && 'Check your email for the code we just sent.'}
           </p>
         </div>

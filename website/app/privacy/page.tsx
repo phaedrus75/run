@@ -9,19 +9,24 @@ export default function PrivacyPage() {
   return (
     <div className="max-w-3xl mx-auto px-6 py-20 md:py-28">
       <h1 className="text-4xl font-extrabold text-gray-900 mb-2">Privacy Policy</h1>
-      <p className="text-sm text-gray-400 mb-12">Last updated: February 22, 2026</p>
+      <p className="text-sm text-gray-400 mb-12">Last updated: May 6, 2026</p>
 
       <div className="prose prose-gray max-w-none space-y-8 text-[15px] leading-relaxed text-gray-600">
         <section>
           <h2 className="text-xl font-bold text-gray-900 mb-3">1. Information We Collect</h2>
           <p>
-            When you create a ZenRun account, we collect your email address, display name,
-            and an optional handle. When you use the app, we store the running data you
-            enter (distance, time, date), step counts, weight entries, and goal settings.
+            When you create a ZenRun account, we collect your email address,
+            display name, and an optional handle. When you use the app, we
+            store the running and walking data you log: distance, time,
+            date, category, and (for GPS-tracked activities) the route. We
+            also store step counts, weight entries, scenic photos, and goal
+            settings if you use those features.
           </p>
           <p>
-            We do <strong>not</strong> collect GPS or location data. We do <strong>not</strong> access
-            your phone&apos;s health, contacts, camera, or microphone.
+            We do <strong>not</strong> track your location in the background.
+            We do <strong>not</strong> follow you around the web. Health data
+            is read from Apple Health only when you grant access, and only
+            for the run or walk you&apos;re recording.
           </p>
         </section>
 
@@ -49,9 +54,10 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-xl font-bold text-gray-900 mb-3">4. Circles & Social Features</h2>
           <p>
-            When you join a circle, other members can see your display name, handle,
-            monthly run count, and monthly km total. They cannot see your weight, steps,
-            or individual run details.
+            When you join a circle, other members can see your display name,
+            handle, recent activity, and shared scenic photos. You choose
+            what to share. You can leave a circle at any time and your
+            activity stops appearing immediately.
           </p>
         </section>
 

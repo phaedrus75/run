@@ -23,7 +23,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Does ZenRun use GPS?',
-        a: 'No. ZenRun deliberately does not track your location. Run without your phone if you want. Log it when you\'re back.',
+        a: 'Yes, when you choose to. Outdoor runs and walks can be tracked from your phone or Apple Watch — the route is saved to your album, with heart rate and pace alongside it. You can also skip GPS entirely and just log a run in two seconds when you\'re back. Either is welcome.',
       },
     ],
   },
@@ -90,7 +90,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'What data does ZenRun collect?',
-        a: 'Only what you explicitly log: runs, times, scenic photos, step days, and weight (if you choose to track it). We don\'t track location, browsing, or any background data.',
+        a: 'Only what you log: runs, walks, times, scenic photos, step days, and weight (if you choose to track it). For GPS-tracked activities we store the route you ran. We don\'t track your location in the background and we don\'t follow you around the web.',
       },
     ],
   },

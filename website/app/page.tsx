@@ -14,10 +14,9 @@ export default function Home() {
                 Your <span className="text-coral">joyful</span> running journal
               </h1>
               <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-10 max-w-lg">
-                Running apps turned running into a spreadsheet. ZenRun is the
-                journal you fill in afterwards &mdash; logged in 2 seconds,
-                stitched together with your photos, your routes, and the slow
-                story of showing up.
+                ZenRun is the journal you maintain of your runs and walks
+                &mdash; stitched together with your photos, your routes, and
+                your story of showing up.
               </p>
               <div id="download" className="flex flex-wrap gap-4">
                 <a
@@ -106,30 +105,59 @@ export default function Home() {
         </div>
       </section>
 
-      {/* The Problem */}
+      {/* The Problem — pace is data, the run is a story */}
       <section className="bg-white py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6">
+          <p className="text-xs font-semibold tracking-[0.25em] uppercase text-coral mb-5">
+            Pace is data. The run is a story.
+          </p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
-            Running has been hijacked by metrics.
+            Numbers helped you train. They never helped you remember.
           </h2>
           <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
             <p>
-              Open any popular running app and the numbers come at you mid-stride &mdash;
-              live pace, zone alarms, cadence prompts, segment leaderboards, the unspoken
-              pressure to perform for an audience while your lungs are still warming up.
+              Pace, splits, heart-rate zones &mdash; they have their place.
+              They tell you when you&apos;re getting fitter, when you went too
+              hard, how you&apos;re improving over time. That&apos;s all useful.
             </p>
             <p>
-              Easy runs get pushed too fast because the pace is being watched. Recovery
-              jogs become zone-2 audits. The last 200 metres turn into a sprint to fix
-              an average. The run we set out for &mdash; the one that was supposed to feel
-              good &mdash; quietly disappears under the dashboard.
-            </p>
-            <p className="text-gray-900 font-semibold">
-              What started as tools to help runners have become tools that own them.
-              The run worth having, it turns out, is the one you stayed present in &mdash;
-              and the one you can still remember a year later.
+              But somewhere along the way, the numbers started overshadowing
+              the run itself. Your view of a one-legged egret meditating on
+              the lake at km 4. Sunlight dancing through the trees on a crisp
+              Sunday morning. The friend who ran beside you. The reason you
+              laced up at all. None of that fits into a chart.
             </p>
           </div>
+          <blockquote className="mt-10 border-l-2 border-coral pl-6 text-2xl md:text-3xl font-semibold text-gray-900 leading-snug">
+            &ldquo;Pace is a number. The run is a memory.&rdquo;
+          </blockquote>
+        </div>
+      </section>
+
+      {/* The Pitch — what ZenRun does instead */}
+      <section className="bg-warm-bg py-20 md:py-28">
+        <div className="max-w-3xl mx-auto px-6">
+          <p className="text-xs font-semibold tracking-[0.25em] uppercase text-coral mb-5">
+            What we believe
+          </p>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
+            ZenRun&apos;s bet is simple: a run is worth more than its splits.
+          </h2>
+          <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
+            <p>
+              Stop on the bridge. Take the photo. Note how it felt. Forget
+              the pace for a minute. ZenRun keeps the numbers &mdash;
+              distance, time, heart rate, zones &mdash; quietly, in the
+              journal afterwards.
+            </p>
+            <p className="text-gray-900 font-semibold">
+              A run becomes joyful again when you have somewhere meaningful
+              to look back at it.
+            </p>
+          </div>
+          <blockquote className="mt-10 border-l-2 border-teal pl-6 text-2xl md:text-3xl font-semibold text-gray-900 leading-snug">
+            &ldquo;A photo at the bridge &gt; a PR you can&apos;t remember.&rdquo;
+          </blockquote>
         </div>
       </section>
 
@@ -140,8 +168,8 @@ export default function Home() {
             A different philosophy
           </h2>
           <p className="text-lg text-gray-500 mb-14">
-            ZenRun is built on ideas from runners and thinkers who understood
-            something the fitness industry forgot.
+            ZenRun stands on the shoulders of runners and writers who already
+            knew something the fitness industry forgot.
           </p>
 
           <div className="space-y-12">
@@ -193,33 +221,36 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Bringing the joy back */}
+      {/* The album is the difference */}
       <section className="bg-warm-bg py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6">
-          <p className="text-xs font-semibold tracking-[0.25em] uppercase text-coral mb-4">
-            What we believe
+          <p className="text-xs font-semibold tracking-[0.25em] uppercase text-teal mb-4">
+            The album
           </p>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
-            Reflection is what brings the joy back.
+            The numbers stay. The memories get a place to live.
           </h2>
           <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
             <p>
-              We believe metrics have made running less joyful. The numbers
-              were meant to help; instead they pulled attention away from the
-              run itself.
+              Most running apps end at the save screen. ZenRun starts there.
             </p>
             <p>
-              ZenRun&apos;s bet is the opposite shape. Enjoy the moment while you run.
-              Take pictures of what you see. Let the numbers settle quietly into
-              the journal afterwards &mdash; pace, heart rate, zones, all of it.
+              Every run gets an album entry: the map of where you went, the
+              photos you took at km 4, the way it felt, a one-line note if
+              you want one. Pace, heart rate, zones, energy, VO₂ Max &mdash;
+              kept too, but quietly, below the photo. They read like journal
+              entries. Not like a dashboard.
             </p>
             <p className="text-gray-900 font-semibold">
-              The photo you took at km 4. The route you traced through the park.
-              The pace you settled into, read the next morning like a journal
-              entry. A run becomes joyful again when you have somewhere
-              meaningful to look back at it.
+              A year from now, you&apos;ll remember the route through the park
+              because it&apos;s still there, in the album, with the morning
+              light and the egret on the lake. The split for that day will
+              be there too. You probably won&apos;t look at it.
             </p>
           </div>
+          <blockquote className="mt-10 border-l-2 border-teal pl-6 text-2xl md:text-3xl font-semibold text-gray-900 leading-snug">
+            &ldquo;Numbers fade. The photo doesn&apos;t.&rdquo;
+          </blockquote>
         </div>
       </section>
 
@@ -227,13 +258,13 @@ export default function Home() {
       <section className="bg-warm-surface py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
-            Consistency is the only metric that matters.
+            Showing up is the metric we love.
           </h2>
           <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto mb-12">
-            The single most important factor in running progress isn&apos;t pace
-            or any single number. Runners who show up regularly &mdash; even
-            with imperfect sessions &mdash; build lasting fitness. Chasing
-            perfect data on every run is what slows you down.
+            The single biggest factor in running progress isn&apos;t pace, or
+            any single number. Runners who show up regularly &mdash; even with
+            imperfect sessions &mdash; build lasting fitness. Runners who
+            chase perfect data on every run usually quit.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             <div className="bg-white rounded-2xl p-6">
@@ -274,13 +305,12 @@ export default function Home() {
             <span className="text-teal">Reflect.</span>
           </h2>
           <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto mb-5">
-            ZenRun brings mindfulness, photos, and reflection into running
-            &mdash; three things kept close together as one practice.
+            ZenRun keeps two things side by side that running apps usually
+            separate: the act, and the memory of it. The path, and the album.
           </p>
           <p className="text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto">
-            They create a virtuous loop: showing up makes the moments. The
-            moments become an album. The album is what pulls you back out
-            tomorrow.
+            They feed each other. Showing up makes the moments. The moments
+            become an album. The album is what pulls you back out tomorrow.
           </p>
         </div>
       </section>
@@ -296,20 +326,21 @@ export default function Home() {
               Show up.
             </h2>
             <p className="text-lg text-gray-600 leading-relaxed">
-              The important thing is to put the shoes on and get out the door.
-              ZenRun stays out of your way. Logging takes two seconds. The
-              watch app, if you use it, is a quiet companion. Show up enough
-              times and you stop calling yourself someone who runs sometimes
-              &mdash; you become a runner.
+              The shoes-on, out-the-door part of running. ZenRun stays out of
+              your way: run with your phone as you take pictures; the watch
+              app, if you use it, is a quiet companion; the data lives in the
+              journal, not in your face. Show up enough times and you stop
+              calling yourself someone who runs sometimes &mdash; you become
+              a runner.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                icon: '⏱️',
-                title: 'Log in 2 seconds',
-                desc: 'Pick your distance, enter your time, done. Run however you want, log it when you\'re back.',
+                icon: '🗺️',
+                title: 'The photo run',
+                desc: 'GPS from your phone or wrist. Stop on the bridge, take the photo, keep going. ZenRun drops it on your route at the right km, and the album builds itself.',
               },
               {
                 icon: '🌳',
@@ -319,22 +350,22 @@ export default function Home() {
               {
                 icon: '⌚',
                 title: 'Quiet Apple Watch companion',
-                desc: 'One tap to start a run or walk. GPS captured in the background. The watch face stays out of your face.',
+                desc: 'One tap to start. GPS captured in the background. The wrist stays calm so the run stays the run.',
               },
               {
                 icon: '🚶',
                 title: 'Walks count too',
-                desc: 'Walks are first-class citizens. Same logging, same rhythm, same scenic photos. Show up however you can.',
+                desc: 'Walks are first-class. Same logging, same rhythm, same scenic photos. Show up however you can.',
               },
               {
                 icon: '🎯',
                 title: 'Goals you can keep',
-                desc: 'Yearly and monthly km targets. A simple bar shows where you are and where you should be. No judgement.',
+                desc: 'Yearly and monthly km targets. A simple bar shows where you are, where you should be, and nothing more.',
               },
               {
                 icon: '🎉',
                 title: 'Quiet celebrations',
-                desc: 'A small moment of confetti when you maintain your rhythm or hit a goal. No fanfare. Just a nod.',
+                desc: 'A small moment of confetti when you keep your rhythm or hit a goal. No fanfare. Just a nod.',
               },
             ].map((item) => (
               <div
@@ -361,11 +392,10 @@ export default function Home() {
               Reflect.
             </h2>
             <p className="text-lg text-gray-600 leading-relaxed">
-              The journal. The photos you took at km 4. The map of where you
-              went. The slow, occasional looking-back that turns runs into a
-              story. Numbers live here too &mdash; pace, heart rate, zones,
-              energy, VO₂ Max &mdash; all kept, all available, all read like
-              journal entries.
+              The journal. The photos at km 4. The map of where you went.
+              The slow, occasional looking-back that turns runs into a story.
+              Pace, heart rate, zones, energy, VO₂ Max all live here too
+              &mdash; quietly, alongside the photos, read like journal entries.
             </p>
           </div>
 
@@ -461,13 +491,10 @@ export default function Home() {
             <div className="bg-white rounded-2xl p-8 hover:shadow-md transition-shadow border border-teal/30">
               <div className="flex items-center justify-between mb-4">
                 <div className="text-4xl">🏘️</div>
-                <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-teal bg-teal/10 px-2.5 py-1 rounded-full">
-                  Coming soon
-                </span>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">The neighbourhood</h3>
               <p className="text-sm text-gray-500 leading-relaxed mb-4">
-                Pseudonymous ZenRunners in your city. Share an album, save
+                Find fellow ZenRunners in your city. Share an album, save
                 someone else&apos;s, run it yourself. Discovery, not ranking.
               </p>
               <ul className="space-y-1.5 text-xs text-gray-500">
@@ -479,8 +506,7 @@ export default function Home() {
           </div>
 
           <p className="text-center text-sm text-gray-400 mt-10 max-w-xl mx-auto">
-            We rank places, never people. No leaderboards of users, no public
-            photo counts on a profile.
+            Discover great runs in your neighbourhood.
           </p>
         </div>
       </section>
@@ -494,12 +520,12 @@ export default function Home() {
           <ul className="space-y-5">
             {[
               'Run (or walk) 2–5 times a week and want to keep doing that for years',
-              'Value the mental clarity of running as much as the physical fitness',
+              'Like the numbers but want them to know their place',
               'Take photos on the trail and want somewhere meaningful to keep them',
-              'Care about building a sustainable practice, not chasing a PR every week',
+              'Care about a sustainable practice, not chasing a PR every week',
               'Want to share your journey with close friends, not perform for followers',
-              'Like to discover new places to run through other runners’ eyes',
-              'Believe the best run is the one you actually did',
+              'Discover new places to run through other runners’ eyes',
+              'Believe the best run is the one you actually did — and the one you’ll think about on Tuesday',
             ].map((item) => (
               <li key={item} className="flex items-start gap-4">
                 <span className="mt-1.5 w-2 h-2 rounded-full bg-coral shrink-0" />
@@ -522,20 +548,22 @@ export default function Home() {
           <div className="space-y-5 text-gray-600 leading-relaxed text-lg">
             <p>
               I&apos;ve started and stopped running more times than I can count.
-              I ran consistently for a summer 3 years ago. Since then it has been
-              on and off. Cold rainy London weather and too much at work, I hardly
-              ran at all in 2025. Then, at the beginning of this year, I set a
-              simple goal: run 1,000km this year. Not for a race. Just to see
-              if the habit could finally stick.
+              A summer three years ago, I ran consistently. Since then it&apos;s
+              been on and off: cold rainy London weather, too much at work,
+              hardly a run all of 2025. At the start of this year I set a
+              simple goal &mdash; 1,000km this year. Not for a race. Just to
+              see if the habit could finally stick.
             </p>
             <p>
-              I built ZenRun during the same period &mdash; alongside the runs,
-              through the weeks of motivation and the weeks I nearly quit again.
-              Every feature exists because I thought of it while I ran.
+              I built ZenRun during the same months &mdash; alongside the
+              runs, through the weeks of motivation and the weeks I nearly
+              quit again. Every feature exists because I thought of it while
+              I ran.
             </p>
             <p className="text-gray-900 font-semibold">
-              170km in, both the habit and the app are still going. ZenRun is a
-              running journal built by a runner who&apos;s still journaling.
+              4 months and 400km in, both the habit and the app are still
+              going. ZenRun is a running journal built by a runner who&apos;s
+              still journaling.
             </p>
           </div>
         </div>
@@ -573,11 +601,11 @@ export default function Home() {
             Show up. Reflect.
           </p>
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Start running. Stop tracking.
+            Stop the watch. Take the picture.
           </h2>
           <p className="text-lg text-gray-400 mb-10 max-w-lg mx-auto">
-            Join runners who focus on showing up, not showing off &mdash; and
-            on remembering it later.
+            Join the runners who&apos;d rather stop for the photo than chase
+            the split &mdash; and who want to remember the run a year later.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a
