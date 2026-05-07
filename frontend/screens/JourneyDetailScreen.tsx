@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Journey, journeyApi } from '../services/api';
+import { CoachChatSheet } from '../components/CoachChatSheet';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 
 interface Props {
@@ -50,6 +51,7 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [chatVisible, setChatVisible] = useState(false);
   const notesDirty = useRef(false);
 
   const fetch = useCallback(async () => {
@@ -249,6 +251,18 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
+        {/* 🌅 Guide's debrief — only on completed journeys, only if the
+         * Guide is opted in. Quiet card, journal-style. */}
+        {isCompleted && journey.completion_note ? (
+          <View style={styles.guideCard}>
+            <View style={styles.guideHeader}>
+              <Ionicons name="sparkles-outline" size={14} color={colors.textLight} />
+              <Text style={styles.guideLabel}>Guide's note</Text>
+            </View>
+            <Text style={styles.guideText}>{journey.completion_note}</Text>
+          </View>
+        ) : null}
+
         <Text style={styles.section}>Your notes</Text>
         <TextInput
           editable={isActive}
@@ -278,6 +292,26 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
             ) : (
               <Text style={styles.saveNotesText}>Save notes</Text>
             )}
+          </Pressable>
+        ) : null}
+
+        {/* 🌅 Quiet entry point to chat with the Guide *about this journey*.
+         * The chat is journey-aware globally (the active journey is in the
+         * Guide's context block), so no extra prompt-engineering is needed
+         * here — opening the sheet is enough. */}
+        {isActive ? (
+          <Pressable
+            onPress={() => setChatVisible(true)}
+            style={({ pressed }) => [
+              styles.askGuideRow,
+              { transform: [{ scale: pressed ? 0.98 : 1 }] },
+            ]}
+          >
+            <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+            <Text style={styles.askGuideText}>
+              {journey.max_days > 1 ? 'Check in with your Guide' : 'Ask your Guide'}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.primary} />
           </Pressable>
         ) : null}
 
@@ -329,6 +363,16 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           </Text>
         </View>
       </ScrollView>
+
+      <CoachChatSheet
+        visible={chatVisible}
+        onClose={() => setChatVisible(false)}
+        onOptInPress={() => {
+          setChatVisible(false);
+          // Cross-stack: CoachOptIn lives on the Home stack.
+          (navigation as any).navigate?.('Home', { screen: 'CoachOptIn' });
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -447,6 +491,50 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  guideCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  guideHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
+  guideLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    fontWeight: typography.weights.semibold,
+  },
+  guideText: {
+    fontSize: typography.sizes.md,
+    color: colors.text,
+    lineHeight: 22,
+    fontStyle: 'italic',
+  },
+  askGuideRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    alignSelf: 'flex-start',
+  },
+  askGuideText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.primary,
+    flex: 1,
   },
   section: {
     fontSize: typography.sizes.xs,

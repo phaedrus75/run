@@ -1363,6 +1363,12 @@ export const coachApi = {
       body: JSON.stringify(req),
     }),
 
+  /** 0–2 Guide-tailored journey ideas for a tier. Empty when the Guide
+   * is off, the LLM is in stub mode, or the user is too new to ground
+   * a suggestion. UI should render these above the static templates. */
+  getJourneySuggestions: (tier: string): Promise<JourneyTemplate[]> =>
+    apiFetch(`/coach/journey-suggestions?tier=${encodeURIComponent(tier)}`),
+
   getRunScript: (id: number): Promise<CoachRunScript> =>
     apiFetch(`/coach/run-script/${id}`),
 };
@@ -1390,6 +1396,8 @@ export interface Journey {
   status: string;
   plan_summary: string | null;
   notes: string | null;
+  /** Guide-written debrief, only set on completed journeys. */
+  completion_note: string | null;
   started_at: string;
   completed_at: string | null;
   accumulated_km: number;
@@ -1436,7 +1444,20 @@ export const journeyApi = {
    * runs and walks are detached, not removed. */
   delete: (id: number): Promise<{ ok: boolean; deleted_id: number }> =>
     apiFetch(`/journeys/${id}`, { method: 'DELETE' }),
+
+  /** Guide-written daily briefs for a multi-day journey. Empty for 20k/30k. */
+  listDayBriefs: (id: number): Promise<JourneyDayBrief[]> =>
+    apiFetch(`/journeys/${id}/briefs`),
 };
+
+export interface JourneyDayBrief {
+  id: number;
+  journey_id: number;
+  day_index: number;
+  text: string;
+  is_stub?: boolean;
+  generated_at: string;
+}
 
 export const publicWalkApi = {
   list: (params?: {

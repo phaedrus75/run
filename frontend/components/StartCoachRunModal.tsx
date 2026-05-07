@@ -74,10 +74,10 @@ export function StartCoachRunModal({ visible, onClose, onReady }: Props) {
       reset();
     } catch (e: any) {
       const msg = String(e?.message || '');
-      if (/Coach is not enabled/i.test(msg) || /403/.test(msg)) {
-        setError('Turn the coach on in Profile to use voice in-run.');
+      if (/(coach|guide) is not enabled/i.test(msg) || /403/.test(msg)) {
+        setError('Turn your Guide on in Profile to use voice in-run.');
       } else {
-        setError('Could not prepare the coach right now. Try again.');
+        setError('Could not prepare your Guide right now. Try again.');
       }
     } finally {
       setLoading(false);
@@ -104,9 +104,9 @@ export function StartCoachRunModal({ visible, onClose, onReady }: Props) {
         />
         <View style={styles.sheet}>
           <View style={styles.handle} />
-          <Text style={styles.title}>Run with the coach</Text>
+          <Text style={styles.title}>Run with your Guide</Text>
           <Text style={styles.subtitle}>
-            Pick a distance. The coach speaks once at the start, on each km, halfway through,
+            Pick a distance. Your Guide speaks once at the start, on each km, halfway through,
             and at the finish. You can mute it any time.
           </Text>
 
@@ -179,7 +179,7 @@ export function StartCoachRunModal({ visible, onClose, onReady }: Props) {
             ) : (
               <>
                 <Ionicons name="play" size={18} color="#fff" />
-                <Text style={styles.startBtnText}>Start coach run</Text>
+                <Text style={styles.startBtnText}>Start guided run</Text>
               </>
             )}
           </Pressable>

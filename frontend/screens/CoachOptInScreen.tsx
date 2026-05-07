@@ -62,7 +62,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
       route?.params?.onEnabled?.();
       navigation.goBack();
     } catch (e: any) {
-      Alert.alert('Could not enable coach', e?.message ?? 'Please try again.');
+      Alert.alert('Could not enable your Guide', e?.message ?? 'Please try again.');
     } finally {
       setWorking(false);
     }
@@ -70,8 +70,8 @@ export function CoachOptInScreen({ navigation, route }: Props) {
 
   const handleDisable = async () => {
     Alert.alert(
-      'Turn off the coach?',
-      'Notes already on past runs stay where they are. The coach will stop suggesting runs and writing new notes.',
+      'Turn off your Guide?',
+      'Notes already on past runs stay where they are. Your Guide will stop suggesting runs and writing new notes.',
       [
         { text: 'Keep on', style: 'cancel' },
         {
@@ -107,8 +107,8 @@ export function CoachOptInScreen({ navigation, route }: Props) {
   };
 
   const VOICE_OPTIONS: { id: string; label: string; sub: string }[] = [
-    { id: 'all', label: 'All runs', sub: 'Every run, coach-prescribed or not' },
-    { id: 'coach_runs', label: 'Coach runs only', sub: 'Quiet on ad-hoc runs' },
+    { id: 'all', label: 'All runs', sub: 'Every run, guided or not' },
+    { id: 'coach_runs', label: 'Guided runs only', sub: 'Quiet on ad-hoc runs' },
     { id: 'journeys_only', label: 'Journeys only', sub: 'Voice only on long-distance Journeys' },
     { id: 'off', label: 'Off', sub: 'Never speak during a run' },
   ];
@@ -133,7 +133,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
         >
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Coach</Text>
+        <Text style={styles.headerTitle}>Guide</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -141,14 +141,15 @@ export function CoachOptInScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>A quiet companion for the run.</Text>
+        <Text style={styles.title}>A quiet guide for the run.</Text>
         <Text style={styles.lede}>
-          The ZenRun coach is an opt-in helper. It writes a short note in your
-          journal after a run, suggests something to do today, and answers
-          questions about your own running. Calm, plain, and on by request.
+          Your Guide is an opt-in helper for the slow ultra and the everyday run.
+          It writes a short note in your journal after a run, suggests something
+          to do today, helps you plan a journey, and answers questions about your
+          own running. Calm, plain, and on by request.
         </Text>
 
-        <SectionHeader>What the coach does</SectionHeader>
+        <SectionHeader>What your Guide does</SectionHeader>
         <Bullet
           icon="book-outline"
           title="Writes a note on your album"
@@ -166,8 +167,13 @@ export function CoachOptInScreen({ navigation, route }: Props) {
         />
         <Bullet
           icon="walk-outline"
-          title="Speaks during coach-prescribed runs"
+          title="Speaks during guided runs"
           body="Short voice cues at each kilometre. Off for ad-hoc runs. Off entirely if you want."
+        />
+        <Bullet
+          icon="compass-outline"
+          title="Helps you plan a journey"
+          body="Suggests a route, writes a prep note for 50k+, and a quiet daily brief on multi-day journeys."
         />
 
         <SectionHeader>What it sees</SectionHeader>
@@ -176,7 +182,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
           captions). Your runner level, goals, and home city. That's it.
         </Text>
         <Text style={styles.body}>
-          The coach never sees your name, your handle, your email, or photos
+          Your Guide never sees your name, your handle, your email, or photos
           themselves. It does not see anything outside ZenRun.
         </Text>
 
@@ -189,7 +195,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
 
         <SectionHeader>Turning it off</SectionHeader>
         <Text style={styles.body}>
-          You can turn the coach off at any time from Profile → Coach. Notes
+          You can turn your Guide off at any time from Profile → Guide. Notes
           already on past runs stay where they are. Chat history can be
           cleared separately.
         </Text>
@@ -198,7 +204,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
           <>
             <View style={styles.statusEnabled}>
               <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={styles.statusText}>Coach is on for this account.</Text>
+              <Text style={styles.statusText}>Guide is on for this account.</Text>
             </View>
 
             <SectionHeader>Settings</SectionHeader>
@@ -222,7 +228,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
               Voice during runs
             </Text>
             <Text style={[styles.body, { marginBottom: spacing.sm }]}>
-              When you start a coach-prescribed run, the coach can speak short
+              When you start a guided run, your Guide can speak short
               cues at each kilometre.
             </Text>
             <View style={styles.radioGroup}>
@@ -263,7 +269,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
             {working ? (
               <ActivityIndicator color={colors.error} />
             ) : (
-              <Text style={styles.secondaryBtnText}>Turn coach off</Text>
+              <Text style={styles.secondaryBtnText}>Turn Guide off</Text>
             )}
           </Pressable>
         ) : (
@@ -275,7 +281,7 @@ export function CoachOptInScreen({ navigation, route }: Props) {
             {working ? (
               <ActivityIndicator color={colors.textOnPrimary} />
             ) : (
-              <Text style={styles.primaryBtnText}>Turn coach on</Text>
+              <Text style={styles.primaryBtnText}>Turn Guide on</Text>
             )}
           </Pressable>
         )}

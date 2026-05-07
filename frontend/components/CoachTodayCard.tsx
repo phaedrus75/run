@@ -59,7 +59,7 @@ export function CoachTodayCard({ onAskPress, onOptInPress, onRunPress }: Props) 
       } catch (e: any) {
         if (cancelled) return;
         const msg = String(e?.message || '');
-        if (/Coach is not enabled/i.test(msg) || /403/.test(msg)) {
+        if (/(coach|guide) is not enabled/i.test(msg) || /403/.test(msg)) {
           setState({ phase: 'opted_out' });
         } else if (/Today card is disabled/i.test(msg) || /404/.test(msg)) {
           setState({ phase: 'disabled_card' });
@@ -116,7 +116,7 @@ export function CoachTodayCard({ onAskPress, onOptInPress, onRunPress }: Props) 
             ]}
           >
             <Ionicons name="play" size={14} color="#fff" />
-            <Text style={styles.runBtnText}>Run with coach</Text>
+            <Text style={styles.runBtnText}>Run with your Guide</Text>
           </Pressable>
         ) : null}
         {onAskPress ? (
@@ -128,7 +128,7 @@ export function CoachTodayCard({ onAskPress, onOptInPress, onRunPress }: Props) 
               { opacity: pressed ? 0.7 : 1 },
             ]}
           >
-            <Text style={styles.askText}>Ask the coach</Text>
+            <Text style={styles.askText}>Ask your Guide</Text>
             <Ionicons name="chevron-forward" size={14} color={colors.primary} />
           </Pressable>
         ) : null}

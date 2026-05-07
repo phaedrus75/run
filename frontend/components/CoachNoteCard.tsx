@@ -1,12 +1,16 @@
 /**
- * 🧠 COACH NOTE CARD
+ * 🧠 GUIDE NOTE CARD
  * ===================
  *
- * Renders the AI coach's note for a saved run or walk. Lazy-fetches on
+ * Renders the Guide's note for a saved run or walk. Lazy-fetches on
  * first mount; shows nothing if the user has not opted in.
  *
  * The card is intentionally quiet. It styles like a journal annotation
  * — italic serif feel, soft surface, no emoji, no exclamation marks.
+ *
+ * The component / file are still named `Coach*` because the API and DB
+ * keep the internal `coach_*` namespace; only user-facing copy says
+ * "Guide". See AI_COACH_SCOPE.md.
  *
  * Usage:
  *   <CoachNoteCard kind="walk" activityId={walk.id} />
@@ -53,7 +57,7 @@ export function CoachNoteCard({ kind, activityId, onOptInPress }: Props) {
         if (cancelled) return;
         const msg = String(e?.message || '');
         // The backend returns 403 with this exact phrase when coach_enabled=false.
-        if (/Coach is not enabled/i.test(msg) || /403/.test(msg)) {
+        if (/(coach|guide) is not enabled/i.test(msg) || /403/.test(msg)) {
           setState({ phase: 'opted_out' });
         } else {
           setState({ phase: 'error', message: msg || 'Coach unavailable' });
@@ -71,7 +75,7 @@ export function CoachNoteCard({ kind, activityId, onOptInPress }: Props) {
       <View style={[styles.card, styles.cardQuiet]}>
         <View style={styles.headerRow}>
           <Ionicons name="sparkles-outline" size={14} color={colors.textLight} />
-          <Text style={styles.label}>Coach's note</Text>
+          <Text style={styles.label}>Guide's note</Text>
         </View>
         <ActivityIndicator color={colors.textLight} style={{ marginTop: spacing.sm }} />
       </View>
@@ -86,13 +90,13 @@ export function CoachNoteCard({ kind, activityId, onOptInPress }: Props) {
       >
         <View style={styles.headerRow}>
           <Ionicons name="sparkles-outline" size={14} color={colors.textLight} />
-          <Text style={styles.label}>Coach's note</Text>
+          <Text style={styles.label}>Guide's note</Text>
         </View>
         <Text style={styles.optInText}>
-          Turn the coach on to get a short journal note on every run and walk.
+          Turn the Guide on to get a short journal note on every run and walk.
         </Text>
         <View style={styles.optInLink}>
-          <Text style={styles.optInLinkText}>Set up the coach</Text>
+          <Text style={styles.optInLinkText}>Set up your Guide</Text>
           <Ionicons name="chevron-forward" size={14} color={colors.primary} />
         </View>
       </Pressable>
@@ -109,7 +113,7 @@ export function CoachNoteCard({ kind, activityId, onOptInPress }: Props) {
     <View style={[styles.card, styles.cardQuiet]}>
       <View style={styles.headerRow}>
         <Ionicons name="sparkles-outline" size={14} color={colors.textLight} />
-        <Text style={styles.label}>Coach's note</Text>
+        <Text style={styles.label}>Guide's note</Text>
         {note.is_stub ? (
           <View style={styles.stubBadge}>
             <Text style={styles.stubBadgeText}>preview</Text>

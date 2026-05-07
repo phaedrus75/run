@@ -80,7 +80,7 @@ export function CoachChatSheet({ visible, onClose, onOptInPress }: Props) {
       scrollToBottom();
     } catch (e: any) {
       const msg = String(e?.message || '');
-      if (/Coach is not enabled/i.test(msg) || /403/.test(msg)) {
+      if (/(coach|guide) is not enabled/i.test(msg) || /403/.test(msg)) {
         setOptedOut(true);
       }
       setHasLoadedOnce(true);
@@ -118,7 +118,7 @@ export function CoachChatSheet({ visible, onClose, onOptInPress }: Props) {
         scrollToBottom();
       } catch (e: any) {
         const msg = String(e?.message || '');
-        if (/Coach is not enabled/i.test(msg) || /403/.test(msg)) {
+        if (/(coach|guide) is not enabled/i.test(msg) || /403/.test(msg)) {
           setOptedOut(true);
         }
         // Pop the optimistic user message — the request didn't land. We
@@ -152,13 +152,13 @@ export function CoachChatSheet({ visible, onClose, onOptInPress }: Props) {
       return (
         <View style={styles.emptyBlock}>
           <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.textLight} />
-          <Text style={styles.emptyTitle}>The coach is off.</Text>
+          <Text style={styles.emptyTitle}>Your Guide is off.</Text>
           <Text style={styles.emptySubtitle}>
             Turn it on to chat about today's run, ask why something felt off, or build up to
             something longer.
           </Text>
           <Pressable style={styles.optInBtn} onPress={onOptInPress}>
-            <Text style={styles.optInBtnText}>Set up the coach</Text>
+            <Text style={styles.optInBtnText}>Set up your Guide</Text>
           </Pressable>
         </View>
       );
@@ -170,7 +170,7 @@ export function CoachChatSheet({ visible, onClose, onOptInPress }: Props) {
           <Ionicons name="sparkles-outline" size={26} color={colors.primary} />
           <Text style={styles.emptyTitle}>Ask anything.</Text>
           <Text style={styles.emptySubtitle}>
-            The coach knows your recent runs and walks. Short questions work best.
+            Your Guide knows your recent runs and walks. Short questions work best.
           </Text>
           <View style={styles.suggestions}>
             {SUGGESTIONS.map((s) => (
@@ -244,7 +244,7 @@ export function CoachChatSheet({ visible, onClose, onOptInPress }: Props) {
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-                <Text style={styles.headerTitle}>Ask the coach</Text>
+                <Text style={styles.headerTitle}>Ask your Guide</Text>
                 {stub ? (
                   <View style={styles.stubBadge}>
                     <Text style={styles.stubBadgeText}>preview</Text>

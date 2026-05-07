@@ -409,7 +409,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           activeOpacity={0.7}
         >
           <Ionicons name="sparkles-outline" size={20} color={colors.primary} />
-          <Text style={styles.linkRowText}>Coach</Text>
+          <Text style={styles.linkRowText}>Guide</Text>
           <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 

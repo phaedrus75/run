@@ -382,6 +382,17 @@ class JourneyUpdateRequest(BaseModel):
     notes: Optional[str] = Field(None, max_length=2000)
 
 
+class JourneyDayBriefResponse(BaseModel):
+    """A Guide-written brief for a specific day of a multi-day journey."""
+
+    id: int
+    journey_id: int
+    day_index: int
+    text: str
+    is_stub: bool = False
+    generated_at: datetime
+
+
 class JourneyResponse(BaseModel):
     """Full journey state including derived progress."""
 
@@ -393,6 +404,7 @@ class JourneyResponse(BaseModel):
     status: str  # active | completed | abandoned
     plan_summary: Optional[str] = None
     notes: Optional[str] = None
+    completion_note: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None
 

@@ -25,7 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { JourneyTemplate, journeyApi } from '../services/api';
+import { JourneyTemplate, coachApi, journeyApi } from '../services/api';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 
 interface Props {
@@ -46,7 +46,11 @@ const TIERS: { id: Tier; label: string; days: number }[] = [
 export function StartJourneyScreen({ navigation }: Props) {
   const [tier, setTier] = useState<Tier>('20k');
   const [allTemplates, setAllTemplates] = useState<JourneyTemplate[]>([]);
+  const [guideSuggestions, setGuideSuggestions] = useState<JourneyTemplate[]>([]);
+  const [guideLoading, setGuideLoading] = useState(false);
+  /** -1.. = picked from `guideSuggestions[idx]`; >=0 maps into `templates`. */
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [selectedSource, setSelectedSource] = useState<'guide' | 'template' | null>(null);
   const [customName, setCustomName] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -66,12 +70,39 @@ export function StartJourneyScreen({ navigation }: Props) {
     };
   }, []);
 
+  // 🌅 Pull bespoke Guide suggestions whenever the tier changes. The
+  // backend returns [] when the Guide is off, the LLM is in stub mode,
+  // or the user is too new for a meaningful suggestion — and we render
+  // nothing in that case.
+  useEffect(() => {
+    let cancelled = false;
+    setGuideLoading(true);
+    setGuideSuggestions([]);
+    (async () => {
+      try {
+        const items = await coachApi.getJourneySuggestions(tier);
+        if (!cancelled) setGuideSuggestions(items);
+      } catch {
+        if (!cancelled) setGuideSuggestions([]);
+      } finally {
+        if (!cancelled) setGuideLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tier]);
+
   const templates = allTemplates.filter((t) => t.tier === tier);
   const tierMeta = TIERS.find((t) => t.id === tier)!;
   const daysCopy = tierMeta.days === 1 ? 'in one go' : `across up to ${tierMeta.days} days`;
 
   const start = async () => {
-    const tpl = selectedIdx != null ? templates[selectedIdx] : null;
+    let tpl: JourneyTemplate | null = null;
+    if (selectedIdx != null) {
+      if (selectedSource === 'guide') tpl = guideSuggestions[selectedIdx] ?? null;
+      else if (selectedSource === 'template') tpl = templates[selectedIdx] ?? null;
+    }
     const name = customName.trim() || tpl?.name || '';
     if (!name) {
       Alert.alert('Pick a name', 'Choose one of the suggestions or write your own.');
@@ -141,6 +172,7 @@ export function StartJourneyScreen({ navigation }: Props) {
                   onPress={() => {
                     setTier(t.id);
                     setSelectedIdx(null);
+                    setSelectedSource(null);
                   }}
                   style={({ pressed }) => [
                     styles.tierChip,
@@ -162,7 +194,58 @@ export function StartJourneyScreen({ navigation }: Props) {
             {tierMeta.label} {daysCopy}.
           </Text>
 
-          <Text style={styles.section}>Pick a starter</Text>
+          {/* 🌅 Bespoke Guide suggestions, when the Guide is on and has
+            * something specific to the runner. Quietly absent otherwise. */}
+          {guideLoading ? (
+            <View style={styles.guideLoadingRow}>
+              <ActivityIndicator color={colors.textLight} size="small" />
+              <Text style={styles.guideLoadingText}>Your Guide is thinking…</Text>
+            </View>
+          ) : null}
+          {!guideLoading && guideSuggestions.length > 0 ? (
+            <>
+              <View style={styles.guideSectionRow}>
+                <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
+                <Text style={styles.guideSection}>From your Guide</Text>
+              </View>
+              <View style={styles.cardList}>
+                {guideSuggestions.map((tpl, idx) => {
+                  const selected =
+                    selectedSource === 'guide' && selectedIdx === idx;
+                  return (
+                    <Pressable
+                      key={`guide-${tpl.name}`}
+                      onPress={() => {
+                        setSelectedIdx(idx);
+                        setSelectedSource('guide');
+                        if (!customName) setCustomName('');
+                      }}
+                      style={({ pressed }) => [
+                        styles.tplCard,
+                        styles.guideCard,
+                        selected && styles.tplCardSelected,
+                        { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                      ]}
+                    >
+                      <View style={styles.tplHeader}>
+                        <Text style={[styles.tplName, selected && styles.tplNameSelected]}>
+                          {tpl.name}
+                        </Text>
+                        {selected ? (
+                          <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                        ) : null}
+                      </View>
+                      <Text style={styles.tplBlurb}>{tpl.blurb}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          <Text style={styles.section}>
+            {guideSuggestions.length > 0 ? 'Or pick a starter' : 'Pick a starter'}
+          </Text>
           {templates.length === 0 ? (
             <View style={styles.noTplCard}>
               <Text style={styles.noTplText}>
@@ -172,12 +255,14 @@ export function StartJourneyScreen({ navigation }: Props) {
           ) : (
             <View style={styles.cardList}>
               {templates.map((tpl, idx) => {
-                const selected = selectedIdx === idx;
+                const selected =
+                  selectedSource === 'template' && selectedIdx === idx;
                 return (
                   <Pressable
                     key={tpl.name}
                     onPress={() => {
                       setSelectedIdx(idx);
+                      setSelectedSource('template');
                       if (!customName) setCustomName('');
                     }}
                     style={({ pressed }) => [
@@ -208,7 +293,10 @@ export function StartJourneyScreen({ navigation }: Props) {
             value={customName}
             onChangeText={(t) => {
               setCustomName(t);
-              if (t.length > 0) setSelectedIdx(null);
+              if (t.length > 0) {
+                setSelectedIdx(null);
+                setSelectedSource(null);
+              }
             }}
             placeholder="The Friday twenty / Park rounds / etc."
             placeholderTextColor={colors.textLight}
@@ -338,6 +426,32 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   cardList: { gap: spacing.sm },
+  guideSectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  guideSection: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  guideLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.xs,
+  },
+  guideLoadingText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textLight,
+    fontStyle: 'italic',
+  },
   tplCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -345,6 +459,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     ...shadows.small,
+  },
+  guideCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
   },
   tplCardSelected: {
     borderColor: colors.primary,

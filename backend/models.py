@@ -697,5 +697,27 @@ class Journey(Base):
     status = Column(String, nullable=False, default="active", index=True)
     plan_summary = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
+    # 🌅 Guide-written reflection on the completed journey. Generated once on
+    # auto-complete (or manual complete) and immutable thereafter. NULL while
+    # the journey is active or abandoned.
+    completion_note = Column(Text, nullable=True)
     started_at = Column(DateTime, server_default=func.now(), nullable=False)
     completed_at = Column(DateTime, nullable=True)
+
+
+class JourneyDayBrief(Base):
+    """🌅 Per-day Guide brief for multi-day journeys (50k/60k/75k/100k).
+
+    Generated once per (journey, day_index) on the first activity save of
+    that day. Day 1 is the start day. Stored verbatim — re-reading the
+    brief later returns the exact same text the runner saw that morning.
+    """
+    __tablename__ = "journey_day_briefs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    journey_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    day_index = Column(Integer, nullable=False)  # 1-based: day 1 / day 2 / day 3
+    text = Column(Text, nullable=False)
+    is_stub = Column(Boolean, default=False)
+    generated_at = Column(DateTime, server_default=func.now(), nullable=False)

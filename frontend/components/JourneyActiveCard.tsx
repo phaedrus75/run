@@ -15,7 +15,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Journey, journeyApi } from '../services/api';
+import { Journey, JourneyDayBrief, journeyApi } from '../services/api';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 
 interface Props {
@@ -28,6 +28,7 @@ interface Props {
 export function JourneyActiveCard({ onPress, refreshKey }: Props) {
   const [loading, setLoading] = useState(true);
   const [journey, setJourney] = useState<Journey | null>(null);
+  const [todayBrief, setTodayBrief] = useState<JourneyDayBrief | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +36,22 @@ export function JourneyActiveCard({ onPress, refreshKey }: Props) {
     (async () => {
       try {
         const j = await journeyApi.getActive();
-        if (!cancelled) setJourney(j);
+        if (cancelled) return;
+        setJourney(j);
+        if (j && (j.max_days || 1) > 1) {
+          // Multi-day journey: pull today's Guide brief if it exists.
+          try {
+            const briefs = await journeyApi.listDayBriefs(j.id);
+            const day = j.days_active || 1;
+            const todays =
+              briefs.find((b) => b.day_index === day) ?? briefs[briefs.length - 1] ?? null;
+            if (!cancelled) setTodayBrief(todays);
+          } catch {
+            if (!cancelled) setTodayBrief(null);
+          }
+        } else {
+          if (!cancelled) setTodayBrief(null);
+        }
       } catch {
         if (!cancelled) setJourney(null);
       } finally {
@@ -89,6 +105,13 @@ export function JourneyActiveCard({ onPress, refreshKey }: Props) {
             : `day ${Math.min(journey.days_active || 1, journey.max_days)} of ${journey.max_days}`}
         </Text>
       </View>
+      {/* 🌅 Today's Guide brief, only on multi-day journeys, only when one
+       * has been generated for today. Quiet, two-line max. */}
+      {todayBrief ? (
+        <Text style={styles.briefText} numberOfLines={3}>
+          {todayBrief.text}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -167,5 +190,15 @@ const styles = StyleSheet.create({
   metaTextSecondary: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
+  },
+  briefText: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight ?? colors.border,
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 18,
   },
 });

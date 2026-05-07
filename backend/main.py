@@ -69,6 +69,7 @@ from models import (
     CoachRunScript,
     CoachTodayCard,
     Journey,
+    JourneyDayBrief,
 )
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
@@ -102,6 +103,7 @@ from schemas import (
     JourneyUpdateRequest,
     JourneyResponse,
     JourneyTemplate,
+    JourneyDayBriefResponse,
     JOURNEY_TIERS,
     JOURNEY_TIER_MAX_DAYS,
 )
@@ -548,6 +550,12 @@ def run_migrations():
                     CREATE INDEX IF NOT EXISTS idx_journeys_user_status
                         ON journeys(user_id, status)
                 """))
+                # Guide reflections (Phase G): completion note + future
+                # day-briefs. completion_note is single-shot; day briefs
+                # land in their own table below.
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS completion_note TEXT"
+                ))
                 conn.execute(text(
                     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS journey_id INTEGER"
                 ))
@@ -561,6 +569,23 @@ def run_migrations():
                 conn.execute(text("""
                     CREATE INDEX IF NOT EXISTS idx_walks_journey
                         ON walks(journey_id)
+                """))
+
+                # Per-day Guide briefs (Phase G).
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS journey_day_briefs (
+                        id SERIAL PRIMARY KEY,
+                        journey_id INTEGER NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        day_index INTEGER NOT NULL,
+                        text TEXT NOT NULL,
+                        is_stub BOOLEAN DEFAULT FALSE,
+                        generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_journey_day_briefs
+                        ON journey_day_briefs(journey_id, day_index)
                 """))
 
                 conn.commit()
@@ -643,6 +668,7 @@ def run_migrations():
                 _sqlite_col("runs", "journey_id", "journey_id INTEGER")
                 _sqlite_col("walks", "journey_id", "journey_id INTEGER")
                 _sqlite_col("journeys", "max_days", "max_days INTEGER NOT NULL DEFAULT 1")
+                _sqlite_col("journeys", "completion_note", "completion_note TEXT")
 
                 # SQLAlchemy create_all() at the end of run_migrations() will
                 # create the coach_messages / coach_run_scripts /
@@ -5264,7 +5290,7 @@ def _require_coach_enabled(user: User):
     if not getattr(user, "coach_enabled", False):
         raise HTTPException(
             status_code=403,
-            detail="Coach is not enabled for this account. Opt in from the Coach screen.",
+            detail="Guide is not enabled for this account. Opt in from Profile → Guide.",
         )
 
 
@@ -5552,6 +5578,32 @@ def create_run_script(
 
     plan = _sanitize_text(payload.plan_summary, max_length=400)
 
+    # 🌅 If the user has an active journey within window, this run is
+    # going to auto-attach to it — make the script journey-aware. We
+    # promote the activity layer to "journey" and prepend a journey
+    # progress line to the plan summary so the LLM mentions it.
+    active_journey = _get_active_journey(db, current_user.id)
+    if active_journey is not None:
+        expires = _journey_expires_at(active_journey)
+        within_window = expires is None or datetime.utcnow() <= expires
+        if within_window:
+            progress = _journey_progress(db, active_journey)
+            accumulated = float(progress.get("accumulated_km", 0.0))
+            target = float(active_journey.target_distance_km or 0.0)
+            remaining = max(0.0, target - accumulated)
+            journey_prefix = (
+                f"This run will count toward the active journey "
+                f"\"{active_journey.name}\" ({active_journey.tier}): "
+                f"{accumulated:.1f} of {target:.0f} km accumulated, "
+                f"{remaining:.1f} km still to go. "
+            )
+            plan = (journey_prefix + (plan or "")).strip()
+            # Walks during a journey keep the walk activity layer (the
+            # walking guidance still applies); runs flip to "journey"
+            # which explicitly invites journey-shaped pacing.
+            if activity in ("outdoor_run", "treadmill"):
+                activity = "journey"
+
     try:
         lines = coach.generate_run_script(
             db,
@@ -5614,6 +5666,37 @@ def get_run_script(
         created_at=row.created_at,
         is_stub=not llm.is_live(),
     )
+
+
+@app.get("/coach/journey-suggestions", response_model=List[JourneyTemplate])
+def get_journey_suggestions(
+    tier: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return 0–2 bespoke journey ideas tailored to the user, for the
+    Start Journey picker. Falls back to an empty list when the Guide is
+    off, in stub mode, or the LLM returns invalid output. The static
+    template list always lives below these.
+    """
+    if tier not in JOURNEY_TIERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"tier must be one of: {list(JOURNEY_TIERS.keys())}",
+        )
+    if not getattr(current_user, "coach_enabled", False):
+        return []
+    try:
+        items = coach.generate_journey_suggestions(
+            db,
+            current_user,
+            tier=tier,
+            target_distance_km=JOURNEY_TIERS[tier],
+        )
+    except Exception as exc:  # pragma: no cover
+        print(f"[guide] journey suggestions failed for {tier}: {exc}")
+        return []
+    return [JourneyTemplate(**item) for item in items]
 
 
 # ==========================================
@@ -5688,6 +5771,7 @@ def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
         status=journey.status,
         plan_summary=journey.plan_summary,
         notes=journey.notes,
+        completion_note=journey.completion_note,
         started_at=journey.started_at,
         completed_at=journey.completed_at,
         accumulated_km=progress["accumulated_km"],
@@ -5725,6 +5809,10 @@ def _attach_to_active_journey(db: Session, user_id: int, activity) -> Optional[J
     db.commit()
     db.refresh(activity)
 
+    # 🌅 If we just rolled into a new day on a multi-day journey, ensure
+    # today's brief is generated. Best-effort.
+    _try_generate_journey_day_brief(db, journey)
+
     # Re-sum and auto-complete if we crossed the target.
     progress = _journey_progress(db, journey)
     if progress["accumulated_km"] >= float(journey.target_distance_km or 0.0):
@@ -5732,7 +5820,91 @@ def _attach_to_active_journey(db: Session, user_id: int, activity) -> Optional[J
         journey.completed_at = datetime.utcnow()
         db.commit()
         db.refresh(journey)
+        # Fire the Guide debrief. Soft-fail: a missing key or LLM error
+        # just leaves completion_note NULL — the JourneyDetail screen
+        # then shows the regular "Completed" header with no extra text.
+        _try_generate_journey_completion_note(db, journey)
     return journey
+
+
+def _try_generate_journey_day_brief(db: Session, journey: Journey) -> None:
+    """If today is day N (>1) of a multi-day journey and no brief exists
+    for that day yet, generate one. Best-effort, opt-in gated.
+
+    Called from the activity-attribution path so the brief is ready by
+    the time the runner opens the JourneyActiveCard.
+    """
+    if journey.status != "active":
+        return
+    if (journey.max_days or 1) <= 1:
+        return  # one-go journeys don't get a daily brief
+    started = journey.started_at
+    if not started:
+        return
+    today = datetime.utcnow().date()
+    day_index = max(1, (today - started.date()).days + 1)
+    if day_index > int(journey.max_days):
+        return  # window has closed
+    if day_index <= 1:
+        # Day 1 brief is just the prep note — skip the auto-brief here.
+        return
+
+    existing = (
+        db.query(JourneyDayBrief)
+        .filter(
+            JourneyDayBrief.journey_id == journey.id,
+            JourneyDayBrief.day_index == day_index,
+        )
+        .first()
+    )
+    if existing is not None:
+        return
+
+    user = db.query(User).filter(User.id == journey.user_id).first()
+    if user is None or not getattr(user, "coach_enabled", False):
+        return
+
+    try:
+        text = coach.generate_journey_day_brief(db, user, journey, day_index=day_index)
+    except Exception as exc:  # pragma: no cover
+        print(f"[guide] day brief failed for journey {journey.id} day {day_index}: {exc}")
+        return
+    if not text:
+        return
+    brief = JourneyDayBrief(
+        journey_id=journey.id,
+        user_id=journey.user_id,
+        day_index=day_index,
+        text=text,
+        is_stub=not llm.is_live(),
+    )
+    db.add(brief)
+    db.commit()
+
+
+def _try_generate_journey_completion_note(db: Session, journey: Journey) -> None:
+    """Generate and persist a Guide debrief on a just-completed journey.
+
+    Skips silently if the user hasn't opted into the Guide, or if the
+    LLM call fails. Best-effort only.
+    """
+    if journey.status != "completed":
+        return
+    if journey.completion_note:
+        return  # already written
+    user = db.query(User).filter(User.id == journey.user_id).first()
+    if user is None or not getattr(user, "coach_enabled", False):
+        return
+    try:
+        text = coach.generate_journey_completion_note(db, user, journey)
+    except Exception as exc:  # pragma: no cover
+        # The Guide failing is never blocking. Log and move on.
+        print(f"[guide] journey completion note failed for journey {journey.id}: {exc}")
+        return
+    if text:
+        journey.completion_note = text
+        db.commit()
+        db.refresh(journey)
 
 
 # Static templates. Each tier gets a couple of starter framings — the
@@ -5827,7 +5999,31 @@ def create_journey(
     db.add(journey)
     db.commit()
     db.refresh(journey)
+
+    # 🌅 For 50k+ tiers, the Guide writes a one-time prep note (water,
+    # food, layers, plaster, fallback). Stored on plan_summary if the
+    # user didn't provide one of their own. Best-effort, opt-in gated.
+    if not journey.plan_summary and payload.tier in {"50k", "60k", "75k", "100k"}:
+        _try_generate_journey_prep_note(db, journey, current_user)
+
     return _journey_to_response(db, journey)
+
+
+def _try_generate_journey_prep_note(
+    db: Session, journey: Journey, user: User
+) -> None:
+    """Generate and persist a Guide prep note for a fresh 50k+ journey."""
+    if not getattr(user, "coach_enabled", False):
+        return
+    try:
+        text = coach.generate_journey_prep_note(db, user, journey)
+    except Exception as exc:  # pragma: no cover
+        print(f"[guide] prep note failed for journey {journey.id}: {exc}")
+        return
+    if text:
+        journey.plan_summary = text
+        db.commit()
+        db.refresh(journey)
 
 
 @app.get("/journeys", response_model=List[JourneyResponse])
@@ -5918,6 +6114,9 @@ def complete_journey(
     db.commit()
     db.refresh(journey)
 
+    # 🌅 Guide debrief on completion (best-effort, opt-in gated).
+    _try_generate_journey_completion_note(db, journey)
+
     # Fire any newly-unlocked milestone badges (e.g. "Journeyer 20k") so
     # the client can play the unlock sequence right after completion. We
     # don't return them in the body to keep the response shape stable;
@@ -5985,9 +6184,54 @@ def delete_journey(
         Walk.user_id == current_user.id, Walk.journey_id == journey.id
     ).update({Walk.journey_id: None})
 
+    # Drop any per-day briefs we wrote for this journey.
+    db.query(JourneyDayBrief).filter(
+        JourneyDayBrief.journey_id == journey.id,
+        JourneyDayBrief.user_id == current_user.id,
+    ).delete()
+
     db.delete(journey)
     db.commit()
     return {"ok": True, "deleted_id": journey_id}
+
+
+@app.get("/journeys/{journey_id}/briefs", response_model=List[JourneyDayBriefResponse])
+def list_journey_day_briefs(
+    journey_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """All Guide-written day briefs for a journey, in chronological order.
+
+    Multi-day journeys (50k/60k/75k/100k) get a brief on day 2 and day 3
+    if the user opts into the Guide; one-go journeys (20k/30k) return
+    an empty list.
+    """
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+
+    rows = (
+        db.query(JourneyDayBrief)
+        .filter(JourneyDayBrief.journey_id == journey.id)
+        .order_by(JourneyDayBrief.day_index.asc())
+        .all()
+    )
+    return [
+        JourneyDayBriefResponse(
+            id=r.id,
+            journey_id=r.journey_id,
+            day_index=r.day_index,
+            text=r.text,
+            is_stub=bool(r.is_stub),
+            generated_at=r.generated_at,
+        )
+        for r in rows
+    ]
 
 
 # ==========================================

@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 import coach_prompts
 import llm
-from models import Run, RunPhoto, User, UserGoals, Walk, WalkPhoto
+from models import Journey, Run, RunPhoto, User, UserGoals, Walk, WalkPhoto
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,16 @@ def build_user_context(
         .all()
     )
 
+    # 🌅 Active journey, if any. The Guide is journey-aware: when a journey
+    # is in flight, the stage flips to `journeying` and we drop a single
+    # plain-text line into the context block so every task knows about it.
+    active_journey: Optional[Journey] = (
+        db.query(Journey)
+        .filter(Journey.user_id == user.id, Journey.status == "active")
+        .order_by(desc(Journey.started_at))
+        .first()
+    )
+
     runs_last_60 = len(runs)
     walks_last_60 = len(walks)
     km_last_30 = sum(
@@ -111,16 +121,22 @@ def build_user_context(
     stage = coach_prompts.infer_stage(
         runner_level=getattr(user, "runner_level", None),
         runs_last_60_days=runs_last_60,
-        has_active_journey=False,  # wired in Phase 5
+        has_active_journey=active_journey is not None,
     )
 
     lines: List[str] = []
 
     # --- Identity ---
-    # The coach never sees the user's real name or handle. Friends rarely use
+    # The Guide never sees the user's real name or handle. Friends rarely use
     # your name in conversation — and we want this voice to feel like a friend.
     level = (getattr(user, "runner_level", None) or "breath").strip()
     lines.append(f"Runner level: {level}. Stage: {stage}.")
+
+    # --- Active journey (if any) ---
+    if active_journey is not None:
+        journey_line = _format_active_journey(db, active_journey)
+        if journey_line:
+            lines.append(journey_line)
 
     # --- Rhythm ---
     if days_since_last is None:
@@ -170,8 +186,83 @@ def build_user_context(
         "runs_last_60_days": runs_last_60,
         "walks_last_60_days": walks_last_60,
         "days_since_last": days_since_last,
+        "active_journey_id": active_journey.id if active_journey else None,
+        "active_journey_tier": active_journey.tier if active_journey else None,
     }
     return context_text, signals
+
+
+def _format_active_journey(db: Session, journey: Journey) -> str:
+    """One-line journey context for the Guide.
+
+    Reads as: "Journey: 30k 'The slow thirty', day 1 of 1, 7.4 of 30 km
+    accumulated, window closes tonight."
+    """
+    target = float(journey.target_distance_km or 0.0)
+    accumulated = _journey_accumulated_km(db, journey)
+    max_days = int(journey.max_days or 1)
+
+    started = journey.started_at
+    now = datetime.utcnow()
+    if started:
+        # Calendar-day style: day 1 is the start day.
+        day_index = max(1, (now.date() - started.date()).days + 1)
+    else:
+        day_index = 1
+    day_index = min(day_index, max_days)
+
+    if max_days <= 1:
+        when = "today is the day"
+    else:
+        when = f"day {day_index} of {max_days}"
+
+    # Window status (calendar-day end).
+    expires_at = None
+    if started and max_days:
+        end_day = (started + timedelta(days=max_days - 1)).date()
+        expires_at = datetime.combine(end_day, datetime.max.time())
+    window_phrase = ""
+    if expires_at is not None:
+        if now > expires_at:
+            window_phrase = " The window has closed; the user can mark this complete or abandon it."
+        else:
+            hours_left = max(0, int((expires_at - now).total_seconds() // 3600))
+            if hours_left < 24:
+                window_phrase = f" Window closes in ~{hours_left} hour(s)."
+            else:
+                window_phrase = f" Window closes {expires_at.strftime('%a %d %b')}."
+
+    name = (journey.name or "").strip()
+    if name:
+        return (
+            f"Active journey: {journey.tier} \"{name}\", {when}, "
+            f"{accumulated:.1f} of {target:.0f} km accumulated.{window_phrase}"
+        )
+    return (
+        f"Active journey: {journey.tier}, {when}, "
+        f"{accumulated:.1f} of {target:.0f} km accumulated.{window_phrase}"
+    )
+
+
+def _journey_accumulated_km(db: Session, journey: Journey) -> float:
+    """Local re-implementation of the journey progress sum so `coach.py`
+    doesn't depend on FastAPI app helpers.
+
+    Mirrors `_journey_progress` in main.py.
+    """
+    run_total = (
+        db.query(func.coalesce(func.sum(Run.distance_km), 0.0))
+        .filter(Run.journey_id == journey.id, Run.user_id == journey.user_id)
+        .scalar()
+        or 0.0
+    )
+    walk_total = (
+        db.query(func.coalesce(func.sum(Walk.distance_km), 0.0))
+        .filter(Walk.journey_id == journey.id, Walk.user_id == journey.user_id)
+        .scalar()
+        or 0.0
+    )
+    return float(run_total) + float(walk_total)
 
 
 def _format_recent_activity(runs: List[Run], walks: List[Walk]) -> str:
@@ -489,6 +580,306 @@ def _kmword(km: int) -> str:
         15: "Fifteen", 20: "Twenty", 25: "Twenty-five", 30: "Thirty",
     }
     return words.get(km, str(km))
+
+
+# ---------------------------------------------------------------------------
+# Tasks for Journeys (Phase G — Guide for the slow ultra)
+# ---------------------------------------------------------------------------
+
+JOURNEY_NOTE_MAX_TOKENS = 350
+JOURNEY_BRIEF_MAX_TOKENS = 250
+JOURNEY_PREP_MAX_TOKENS = 350
+JOURNEY_SUGGESTIONS_MAX_TOKENS = 600
+
+
+def generate_journey_completion_note(db: Session, user: User, journey: Journey) -> str:
+    """Write a 3–5 sentence reflection on a just-completed journey.
+
+    Reads the contributing runs+walks (via journey_id) and produces a
+    journal-style debrief. Returns the text trimmed; caller persists it
+    to `journey.completion_note`.
+    """
+    context_text, signals = build_user_context(db, user)
+    journey_block = _format_journey_for_completion(db, journey)
+    full_context = context_text + "\n\n" + journey_block
+
+    system = coach_prompts.compose_system_prompt(
+        task="journey_complete",
+        activity="journey",
+        stage="journeying",
+        user_context=full_context,
+    )
+    user_message = (
+        "Write the debrief for this completed journey. 3 to 5 sentences. "
+        "Reference one specific thing from the contributing activities. "
+        "End softly."
+    )
+    text = llm.complete(
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=JOURNEY_NOTE_MAX_TOKENS,
+        temperature=0.6,
+    )
+    return _clean_text(text)
+
+
+def generate_journey_day_brief(
+    db: Session,
+    user: User,
+    journey: Journey,
+    *,
+    day_index: int,
+) -> str:
+    """Write the start-of-day brief for day N of a multi-day journey.
+
+    `day_index` is 1-based. Returns the brief text trimmed; caller
+    persists to `journey_day_briefs`.
+    """
+    context_text, signals = build_user_context(db, user)
+    journey_block = _format_journey_for_day_brief(db, journey, day_index)
+    full_context = context_text + "\n\n" + journey_block
+
+    system = coach_prompts.compose_system_prompt(
+        task="journey_brief",
+        activity="journey",
+        stage="journeying",
+        user_context=full_context,
+    )
+    user_message = (
+        f"Write the morning brief for day {day_index} of {journey.max_days}. "
+        "2 to 4 sentences. Reference yesterday if there was activity, "
+        "suggest a soft range for today, never command."
+    )
+    text = llm.complete(
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=JOURNEY_BRIEF_MAX_TOKENS,
+        temperature=0.6,
+    )
+    return _clean_text(text)
+
+
+def generate_journey_prep_note(db: Session, user: User, journey: Journey) -> str:
+    """One-time prep checklist for 50k+ journeys, generated at start.
+
+    Caller stores on `journey.plan_summary` if it's empty.
+    """
+    context_text, signals = build_user_context(db, user)
+    journey_block = (
+        f"This journey: tier={journey.tier}, target={journey.target_distance_km:.0f} km, "
+        f"window={journey.max_days} day(s), name=\"{journey.name}\"."
+    )
+    full_context = context_text + "\n\n" + journey_block
+
+    system = coach_prompts.compose_system_prompt(
+        task="journey_prep",
+        activity="journey",
+        stage="journeying",
+        user_context=full_context,
+    )
+    user_message = (
+        "Write the prep note for this journey. Plain English, plain food. "
+        "Cover water, food, layers, charged phone, plaster, and a route fallback."
+    )
+    text = llm.complete(
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=JOURNEY_PREP_MAX_TOKENS,
+        temperature=0.6,
+    )
+    return _clean_text(text)
+
+
+def generate_journey_suggestions(
+    db: Session,
+    user: User,
+    *,
+    tier: str,
+    target_distance_km: float,
+) -> List[Dict[str, Any]]:
+    """Generate 1–2 bespoke journey ideas tailored to the user.
+
+    Caller renders these above the static template list in StartJourney.
+    On any parse failure, returns []; the UI quietly hides the section.
+    """
+    context_text, signals = build_user_context(db, user)
+    tier_block = (
+        f"Selected tier: {tier} (target {target_distance_km:.0f} km, "
+        f"{1 if tier in ('20k', '30k') else 3} day window)."
+    )
+    full_context = context_text + "\n\n" + tier_block
+
+    system = coach_prompts.compose_system_prompt(
+        task="journey_suggestions",
+        activity="journey",
+        stage=signals["stage"],
+        user_context=full_context,
+    )
+    user_message = (
+        f"Suggest one or two journey ideas for the {tier} tier. "
+        "Output JSON only."
+    )
+    raw = llm.complete(
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=JOURNEY_SUGGESTIONS_MAX_TOKENS,
+        temperature=0.7,
+    )
+    return _parse_journey_suggestions(raw, tier=tier, target_distance_km=target_distance_km)
+
+
+def _parse_journey_suggestions(
+    raw: str, *, tier: str, target_distance_km: float
+) -> List[Dict[str, Any]]:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:]
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("journey_suggestions JSON parse failed; returning empty list")
+        return []
+    items = parsed.get("suggestions") if isinstance(parsed, dict) else None
+    if not isinstance(items, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in items[:2]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        blurb = str(item.get("blurb", "")).strip()
+        if not name or not blurb:
+            continue
+        try:
+            target = float(item.get("target_distance_km") or target_distance_km)
+        except (TypeError, ValueError):
+            target = target_distance_km
+        out.append(
+            {
+                "tier": tier,
+                "name": name[:80],
+                "blurb": blurb[:240],
+                "target_distance_km": target,
+            }
+        )
+    return out
+
+
+def _format_journey_for_completion(db: Session, journey: Journey) -> str:
+    """Plain-text block describing the just-completed journey for the LLM."""
+    runs = (
+        db.query(Run)
+        .filter(Run.journey_id == journey.id, Run.user_id == journey.user_id)
+        .order_by(Run.completed_at.asc())
+        .all()
+    )
+    walks = (
+        db.query(Walk)
+        .filter(Walk.journey_id == journey.id, Walk.user_id == journey.user_id)
+        .order_by(Walk.started_at.asc())
+        .all()
+    )
+
+    items: List[str] = []
+    for r in runs:
+        when = (r.completed_at or datetime.utcnow()).strftime("%a %d %b")
+        bits = [f"{when}: run {r.distance_km:.1f}km"]
+        if r.category and r.category != "outdoor":
+            bits.append(f"({r.category})")
+        if r.mood:
+            bits.append(f"felt {r.mood}")
+        if r.notes:
+            bits.append(f"note: {r.notes[:80]}")
+        items.append("- " + " — ".join(bits))
+    for w in walks:
+        when = (w.started_at or datetime.utcnow()).strftime("%a %d %b")
+        bits = [f"{when}: walk {w.distance_km:.1f}km"]
+        if w.mood:
+            bits.append(f"felt {w.mood}")
+        if w.notes:
+            bits.append(f"note: {w.notes[:80]}")
+        items.append("- " + " — ".join(bits))
+
+    accumulated = sum((r.distance_km or 0.0) for r in runs) + sum(
+        (w.distance_km or 0.0) for w in walks
+    )
+    distinct_days = len(
+        {
+            (r.completed_at.date() if r.completed_at else None)
+            for r in runs
+            if r.completed_at
+        }
+        | {
+            (w.started_at.date() if w.started_at else None)
+            for w in walks
+            if w.started_at
+        }
+    )
+
+    header = (
+        f"This journey just completed: tier={journey.tier}, target="
+        f"{journey.target_distance_km:.0f} km, window={journey.max_days} day(s), "
+        f"name=\"{journey.name}\". Accumulated: {accumulated:.1f} km across "
+        f"{len(runs) + len(walks)} activit(ies) over {max(1, distinct_days)} day(s)."
+    )
+    if not items:
+        return header
+    return header + "\nContributing activities (chronological):\n" + "\n".join(items)
+
+
+def _format_journey_for_day_brief(
+    db: Session, journey: Journey, day_index: int
+) -> str:
+    """Plain-text journey state up to the start of `day_index` for the brief."""
+    started = journey.started_at or datetime.utcnow()
+    today = (started + timedelta(days=day_index - 1)).date()
+    yesterday = (started + timedelta(days=day_index - 2)).date() if day_index > 1 else None
+
+    runs = (
+        db.query(Run)
+        .filter(Run.journey_id == journey.id, Run.user_id == journey.user_id)
+        .order_by(Run.completed_at.asc())
+        .all()
+    )
+    walks = (
+        db.query(Walk)
+        .filter(Walk.journey_id == journey.id, Walk.user_id == journey.user_id)
+        .order_by(Walk.started_at.asc())
+        .all()
+    )
+
+    accumulated = sum((r.distance_km or 0.0) for r in runs) + sum(
+        (w.distance_km or 0.0) for w in walks
+    )
+    target = float(journey.target_distance_km or 0.0)
+    remaining = max(0.0, target - accumulated)
+    days_left = max(0, journey.max_days - day_index + 1)
+
+    yesterday_block = ""
+    if yesterday is not None:
+        y_runs = [r for r in runs if r.completed_at and r.completed_at.date() == yesterday]
+        y_walks = [w for w in walks if w.started_at and w.started_at.date() == yesterday]
+        y_total = sum(r.distance_km or 0.0 for r in y_runs) + sum(
+            w.distance_km or 0.0 for w in y_walks
+        )
+        moods = [a.mood for a in (y_runs + y_walks) if getattr(a, "mood", None)]
+        mood_str = f" Mood: {moods[0]}." if moods else ""
+        if y_total > 0:
+            yesterday_block = (
+                f"\nYesterday (day {day_index - 1}): {y_total:.1f} km across "
+                f"{len(y_runs) + len(y_walks)} activit(ies).{mood_str}"
+            )
+        else:
+            yesterday_block = f"\nYesterday (day {day_index - 1}): nothing logged."
+
+    return (
+        f"Today is day {day_index} of {journey.max_days} of journey \"{journey.name}\" "
+        f"(tier {journey.tier}). Target: {target:.0f} km. "
+        f"Accumulated so far: {accumulated:.1f} km. Remaining: {remaining:.1f} km "
+        f"with {days_left} day(s) left.{yesterday_block}"
+    )
 
 
 # ---------------------------------------------------------------------------
