@@ -43,6 +43,7 @@ import { useActivityPhotoCapture } from '../services/useActivityPhotoCapture';
 import { openPhotosSettings, refreshMediaPermission } from '../services/photoArchiver';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 import { PhotoSessionSyncDot } from '../components/PhotoSessionSyncDot';
+import { useCoachVoice } from '../services/useCoachVoice';
 
 const RUN_ACCENT = '#F97316'; // orange
 
@@ -64,6 +65,18 @@ export function ActiveRunScreen({ navigation, route }: Props) {
     clear: clearPhotoSession,
   } = useActivityPhotoCapture(runTracker, 'run');
   const startedOnceRef = useRef(false);
+
+  // 🎙 Coach voice (Phase 4): if the active run was started from a coach
+  // recommendation, ActiveRun receives `coachScriptId` and we drive TTS
+  // off the live distance from runTracker. The hook is inert when no
+  // scriptId is present — regular runs stay silent.
+  const coachScriptId: number | null = route?.params?.coachScriptId ?? null;
+  const coachVoice = useCoachVoice({
+    scriptId: coachScriptId,
+    distanceKm: snapshot.distanceKm,
+    isTracking: snapshot.isTracking,
+    isPaused: snapshot.isPaused,
+  });
 
   useEffect(() => {
     const unsub = runTracker.subscribe(setSnapshot);
@@ -92,6 +105,7 @@ export function ActiveRunScreen({ navigation, route }: Props) {
               text: 'Discard',
               style: 'destructive',
               onPress: async () => {
+                coachVoice.stop();
                 await runTracker.discard();
                 await clearPhotoSession({ discard: true });
                 navigation.dispatch(e.data.action);
@@ -158,6 +172,7 @@ export function ActiveRunScreen({ navigation, route }: Props) {
         text: 'Discard',
         style: 'destructive',
         onPress: async () => {
+          coachVoice.stop();
           await runTracker.discard();
           await clearPhotoSession({ discard: true });
           navigation.goBack();
@@ -167,9 +182,11 @@ export function ActiveRunScreen({ navigation, route }: Props) {
         text: 'Save',
         onPress: async () => {
           const final = await runTracker.stop();
+          coachVoice.speakFinish();
           navigation.replace('RunSummary', {
             snapshot: serialiseSnapshot(final),
             sessionId: getSessionId(),
+            coachScriptId,
           });
         },
       },

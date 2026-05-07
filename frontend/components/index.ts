@@ -22,6 +22,7 @@ export { MilestoneUnlockSequence } from './MilestoneUnlockSequence';
 export { CoachNoteCard } from './CoachNoteCard';
 export { CoachTodayCard } from './CoachTodayCard';
 export { CoachChatSheet } from './CoachChatSheet';
+export { StartCoachRunModal } from './StartCoachRunModal';
 export { WeightTracker } from './WeightTracker';
 export { PaceTrendChart } from './PaceTrendChart';
 export { StreakModal } from './StreakModal';

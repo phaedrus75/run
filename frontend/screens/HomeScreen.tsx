@@ -40,6 +40,7 @@ import { AppHeader } from '../components/AppHeader';
 import { WeeklyReflection } from '../components/WeeklyReflection';
 import { CoachTodayCard } from '../components/CoachTodayCard';
 import { CoachChatSheet } from '../components/CoachChatSheet';
+import { StartCoachRunModal } from '../components/StartCoachRunModal';
 import { 
   statsApi,
   levelApi,
@@ -78,6 +79,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [showHomeMilestoneSequence, setShowHomeMilestoneSequence] = useState(false);
   const [homeBadgeDetail, setHomeBadgeDetail] = useState<Achievement | null>(null);
   const [coachChatVisible, setCoachChatVisible] = useState(false);
+  const [coachRunPickerVisible, setCoachRunPickerVisible] = useState(false);
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
@@ -291,6 +293,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <CoachTodayCard
           onAskPress={() => setCoachChatVisible(true)}
           onOptInPress={() => navigation.navigate('CoachOptIn')}
+          onRunPress={() => setCoachRunPickerVisible(true)}
         />
 
         {/* Level Upgrade Banner */}
@@ -562,6 +565,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onOptInPress={() => {
           setCoachChatVisible(false);
           navigation.navigate('CoachOptIn');
+        }}
+      />
+
+      <StartCoachRunModal
+        visible={coachRunPickerVisible}
+        onClose={() => setCoachRunPickerVisible(false)}
+        onReady={({ scriptId }) => {
+          setCoachRunPickerVisible(false);
+          // Cross-tab navigation: jump from Home → Activity tab → ActiveRun.
+          // Treadmill rides on the same active screen for now (Phase 6 will
+          // split it). The script's `activity` field controls the coach's
+          // voice content regardless of GPS source.
+          navigation.getParent()?.navigate('Activity', {
+            screen: 'ActiveRun',
+            params: { coachScriptId: scriptId },
+          });
         }}
       />
 

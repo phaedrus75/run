@@ -34,6 +34,8 @@ interface Props {
   onAskPress?: () => void;
   /** Optional press for opting in if disabled (only shown when the coach is off). */
   onOptInPress?: () => void;
+  /** Tap handler for the "Run with coach" CTA. Wired in Phase 4. */
+  onRunPress?: () => void;
 }
 
 type State =
@@ -44,7 +46,7 @@ type State =
   | { phase: 'disabled_card' }
   | { phase: 'error' };
 
-export function CoachTodayCard({ onAskPress, onOptInPress }: Props) {
+export function CoachTodayCard({ onAskPress, onOptInPress, onRunPress }: Props) {
   const [state, setState] = useState<State>({ phase: 'loading' });
 
   useEffect(() => {
@@ -103,19 +105,34 @@ export function CoachTodayCard({ onAskPress, onOptInPress }: Props) {
         ) : null}
       </View>
       <Text style={styles.cardText}>{card.text}</Text>
-      {onAskPress ? (
-        <Pressable
-          onPress={onAskPress}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.askRow,
-            { opacity: pressed ? 0.7 : 1 },
-          ]}
-        >
-          <Text style={styles.askText}>Ask the coach</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-        </Pressable>
-      ) : null}
+      <View style={styles.actionRow}>
+        {onRunPress ? (
+          <Pressable
+            onPress={onRunPress}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.runBtn,
+              { opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Ionicons name="play" size={14} color="#fff" />
+            <Text style={styles.runBtnText}>Run with coach</Text>
+          </Pressable>
+        ) : null}
+        {onAskPress ? (
+          <Pressable
+            onPress={onAskPress}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.askRow,
+              { opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Text style={styles.askText}>Ask the coach</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+          </Pressable>
+        ) : null}
+      </View>
       {/* Suppress unused warning for opt-in handler (used in other phases) */}
       {false && onOptInPress ? <View /> : null}
     </View>
@@ -155,12 +172,31 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 23,
   },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  runBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: radius.lg,
+  },
+  runBtnText: {
+    color: '#fff',
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+  },
   askRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: spacing.sm,
-    alignSelf: 'flex-start',
   },
   askText: {
     fontSize: typography.sizes.sm,
