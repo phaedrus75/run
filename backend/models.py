@@ -83,6 +83,11 @@ class Run(Base):
     # this off. The owner always sees their own runs regardless.
     circles_share = Column(Boolean, nullable=True, default=True)
 
+    # 🧠 Coach's note — short post-run journal annotation written by the
+    # AI coach. Generated on first view of the summary, then cached.
+    coach_note = Column(Text, nullable=True)
+    coach_note_generated_at = Column(DateTime, nullable=True)
+
 
 
 
@@ -172,6 +177,15 @@ class User(Base):
     zen_below_since = Column(DateTime, nullable=True)
     zen_celebrated_at = Column(DateTime, nullable=True)
     zen_demoted_at = Column(DateTime, nullable=True)
+
+    # 🧠 Coach (AI companion) — opt-in, with per-surface toggles. Default
+    # off everywhere; user opts in via the dedicated screen.
+    coach_enabled = Column(Boolean, default=False, server_default='false')
+    coach_consent_at = Column(DateTime, nullable=True)
+    coach_notes_auto = Column(Boolean, default=True, server_default='true')  # auto-generate post-run notes when coach_enabled
+    coach_today_card = Column(Boolean, default=True, server_default='true')  # show Today's recommendation on Home
+    coach_voice_during_runs = Column(String, default='coach_runs', server_default='coach_runs')
+    # values: 'all' | 'coach_runs' | 'journeys_only' | 'off'
 
     # 📅 When the account was created
     created_at = Column(DateTime, server_default=func.now())
@@ -439,6 +453,10 @@ class Walk(Base):
     # Linked public route (if the user followed one)
     public_walk_id = Column(Integer, nullable=True, index=True)
 
+    # 🧠 Coach's note — short post-walk journal annotation.
+    coach_note = Column(Text, nullable=True)
+    coach_note_generated_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -580,4 +598,58 @@ class UserAchievement(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "achievement_id", name="uq_user_achievement"),
+    )
+
+
+class CoachMessage(Base):
+    """Single turn in an "Ask coach" conversation.
+
+    Per-user rolling history; we keep the last N turns when composing
+    context. role is "user" or "assistant". Older turns are pruned by
+    time, not by deletion of this row.
+    """
+    __tablename__ = "coach_messages"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    role = Column(String, nullable=False)  # "user" | "assistant"
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
+
+class CoachRunScript(Base):
+    """Pre-generated voice lines for an in-run companion session.
+
+    A script is generated when a user starts a coach-prescribed run and
+    consumed line-by-line by the client. Scripts are immutable; if the
+    plan changes, a new script is created.
+    """
+    __tablename__ = "coach_run_scripts"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    activity = Column(String, nullable=False)  # outdoor_run | treadmill | walk | journey
+    target_distance_km = Column(Float, nullable=False)
+    plan_summary = Column(Text, nullable=True)
+    lines_json = Column(Text, nullable=False)  # JSON: list of line dicts
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class CoachTodayCard(Base):
+    """Cached one-line Today's recommendation for a given user-day.
+
+    Daily cache so we don't burn an LLM call every time Home is opened.
+    Key: (user_id, day_iso). Generated lazily on the first read of the
+    day for users with coach_today_card enabled.
+    """
+    __tablename__ = "coach_today_cards"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    day_iso = Column(String, nullable=False)  # "YYYY-MM-DD" in user's local tz at generation time
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "day_iso", name="uq_coach_today_card_user_day"),
     )

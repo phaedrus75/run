@@ -18,6 +18,7 @@ You'll see interactive API documentation!
 """
 
 import os
+import logging
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -25,6 +26,8 @@ from sqlalchemy import text, func
 from typing import List, Optional
 from pydantic import BaseModel
 import json
+
+logger = logging.getLogger(__name__)
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -61,6 +64,9 @@ from models import (
     NeighbourhoodBlockedHandle,
     NeighbourhoodReport,
     RunReaction,
+    CoachMessage,
+    CoachRunScript,
+    CoachTodayCard,
 )
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
@@ -80,8 +86,20 @@ from schemas import (
     LEVEL_ORDER,
     LEVEL_INFO,
     LEVEL_GOALS,
+    CoachSettings,
+    CoachOptInRequest,
+    CoachNote,
+    CoachTodayCardResponse,
+    CoachChatTurn,
+    CoachChatRequest,
+    CoachChatResponse,
+    CoachRunScriptLine,
+    CoachRunScriptRequest,
+    CoachRunScriptResponse,
 )
 import crud
+import coach
+import llm
 
 limiter = Limiter(key_func=_get_real_client_ip)
 
@@ -435,6 +453,59 @@ def run_migrations():
                 conn.execute(text("ALTER TABLE run_photos ADD COLUMN IF NOT EXISTS thumb_data TEXT"))
                 conn.execute(text("ALTER TABLE walk_photos ADD COLUMN IF NOT EXISTS thumb_data TEXT"))
 
+                # Coach (AI companion) — opt-in flags + per-activity notes
+                for stmt in [
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_enabled BOOLEAN DEFAULT false",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_consent_at TIMESTAMP",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_notes_auto BOOLEAN DEFAULT true",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_today_card BOOLEAN DEFAULT true",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_voice_during_runs VARCHAR DEFAULT 'coach_runs'",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS coach_note TEXT",
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS coach_note_generated_at TIMESTAMP",
+                    "ALTER TABLE walks ADD COLUMN IF NOT EXISTS coach_note TEXT",
+                    "ALTER TABLE walks ADD COLUMN IF NOT EXISTS coach_note_generated_at TIMESTAMP",
+                ]:
+                    conn.execute(text(stmt))
+
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS coach_messages (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        role VARCHAR NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_coach_messages_user_time
+                        ON coach_messages(user_id, created_at DESC)
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS coach_run_scripts (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        activity VARCHAR NOT NULL,
+                        target_distance_km FLOAT NOT NULL,
+                        plan_summary TEXT,
+                        lines_json TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_coach_run_scripts_user
+                        ON coach_run_scripts(user_id, created_at DESC)
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS coach_today_cards (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        day_iso VARCHAR NOT NULL,
+                        text TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, day_iso)
+                    )
+                """))
+
                 conn.commit()
                 
                 migration_email = os.getenv("MIGRATION_USER_EMAIL")
@@ -499,6 +570,20 @@ def run_migrations():
                 _sqlite_col("runs", "circles_share", "circles_share BOOLEAN DEFAULT 1")
                 _sqlite_col("run_photos", "thumb_data", "thumb_data TEXT")
                 _sqlite_col("walk_photos", "thumb_data", "thumb_data TEXT")
+
+                # Coach (AI companion) — opt-in flags + per-activity notes
+                _sqlite_col("users", "coach_enabled", "coach_enabled BOOLEAN DEFAULT 0")
+                _sqlite_col("users", "coach_consent_at", "coach_consent_at TIMESTAMP")
+                _sqlite_col("users", "coach_notes_auto", "coach_notes_auto BOOLEAN DEFAULT 1")
+                _sqlite_col("users", "coach_today_card", "coach_today_card BOOLEAN DEFAULT 1")
+                _sqlite_col("users", "coach_voice_during_runs", "coach_voice_during_runs VARCHAR DEFAULT 'coach_runs'")
+                _sqlite_col("runs", "coach_note", "coach_note TEXT")
+                _sqlite_col("runs", "coach_note_generated_at", "coach_note_generated_at TIMESTAMP")
+                _sqlite_col("walks", "coach_note", "coach_note TEXT")
+                _sqlite_col("walks", "coach_note_generated_at", "coach_note_generated_at TIMESTAMP")
+                # SQLAlchemy create_all() at the end of run_migrations() will
+                # create the coach_messages / coach_run_scripts / coach_today_cards
+                # tables in SQLite via the model definitions.
         except Exception as e:
             print(f"Migration note: {e}")
     
@@ -5087,6 +5172,374 @@ def get_public_walk_endpoint(
     if not w:
         raise HTTPException(status_code=404, detail="Public walk not found")
     return _serialize_public_walk(w)
+
+
+# ==========================================
+# 🧠 COACH ENDPOINTS  (Phase 0)
+# ==========================================
+#
+# All coach endpoints require coach_enabled=true on the user (set via the
+# opt-in screen), except for the settings GET and the opt-in POST itself.
+#
+# When the LLM client is in stub mode (no ANTHROPIC_API_KEY), responses
+# are still produced but flagged with is_stub=true so the frontend can
+# surface a "running in eval mode" hint.
+
+
+def _require_coach_enabled(user: User):
+    if not getattr(user, "coach_enabled", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Coach is not enabled for this account. Opt in from the Coach screen.",
+        )
+
+
+def _coach_settings_response(user: User) -> CoachSettings:
+    return CoachSettings(
+        coach_enabled=bool(getattr(user, "coach_enabled", False)),
+        coach_notes_auto=bool(getattr(user, "coach_notes_auto", True)),
+        coach_today_card=bool(getattr(user, "coach_today_card", True)),
+        coach_voice_during_runs=getattr(user, "coach_voice_during_runs", "coach_runs") or "coach_runs",
+        coach_consent_at=getattr(user, "coach_consent_at", None),
+    )
+
+
+@app.get("/coach/settings", response_model=CoachSettings)
+def get_coach_settings(
+    current_user: User = Depends(require_auth),
+):
+    """Return the current user's coach settings."""
+    return _coach_settings_response(current_user)
+
+
+@app.put("/coach/settings", response_model=CoachSettings)
+def update_coach_settings(
+    payload: CoachSettings,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Update coach toggles. Cannot enable the coach here — use /coach/opt-in."""
+    if payload.coach_voice_during_runs not in {"all", "coach_runs", "journeys_only", "off"}:
+        raise HTTPException(status_code=400, detail="Invalid coach_voice_during_runs value")
+    current_user.coach_notes_auto = bool(payload.coach_notes_auto)
+    current_user.coach_today_card = bool(payload.coach_today_card)
+    current_user.coach_voice_during_runs = payload.coach_voice_during_runs
+    db.commit()
+    db.refresh(current_user)
+    return _coach_settings_response(current_user)
+
+
+@app.post("/coach/opt-in", response_model=CoachSettings)
+def opt_in_coach(
+    payload: CoachOptInRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Enable the coach for this account. The screen explains data access."""
+    if not payload.accepted:
+        raise HTTPException(status_code=400, detail="accepted must be true to opt in")
+    from datetime import datetime as _dt
+    current_user.coach_enabled = True
+    if not getattr(current_user, "coach_consent_at", None):
+        current_user.coach_consent_at = _dt.utcnow()
+    db.commit()
+    db.refresh(current_user)
+    return _coach_settings_response(current_user)
+
+
+@app.delete("/coach/opt-in")
+def opt_out_coach(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Disable the coach. Notes and history are kept (read-only) on existing runs."""
+    current_user.coach_enabled = False
+    db.commit()
+    return {"coach_enabled": False}
+
+
+# ----- Coach's note (Phase 1) -------------------------------------------------
+
+@app.get("/coach/run-note/{run_id}", response_model=CoachNote)
+@limiter.limit("30/minute")
+def get_run_coach_note(
+    request: Request,
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return (or generate-and-cache) the Coach's note for a run."""
+    _require_coach_enabled(current_user)
+    run = crud.get_run(db, run_id=run_id)
+    if not run or run.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if not run.coach_note:
+        try:
+            text_out = coach.generate_run_note(db, current_user, run=run)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("coach run-note failed: %s", exc)
+            raise HTTPException(status_code=502, detail="Coach unavailable")
+        from datetime import datetime as _dt
+        run.coach_note = text_out
+        run.coach_note_generated_at = _dt.utcnow()
+        db.commit()
+    return CoachNote(
+        activity_type="run",
+        activity_id=run.id,
+        text=run.coach_note,
+        generated_at=run.coach_note_generated_at,
+        is_stub=not llm.is_live(),
+    )
+
+
+@app.get("/coach/walk-note/{walk_id}", response_model=CoachNote)
+@limiter.limit("30/minute")
+def get_walk_coach_note(
+    request: Request,
+    walk_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return (or generate-and-cache) the Coach's note for a walk."""
+    _require_coach_enabled(current_user)
+    walk = db.query(Walk).filter(Walk.id == walk_id, Walk.user_id == current_user.id).first()
+    if not walk:
+        raise HTTPException(status_code=404, detail="Walk not found")
+    if not walk.coach_note:
+        try:
+            text_out = coach.generate_run_note(db, current_user, walk=walk)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("coach walk-note failed: %s", exc)
+            raise HTTPException(status_code=502, detail="Coach unavailable")
+        from datetime import datetime as _dt
+        walk.coach_note = text_out
+        walk.coach_note_generated_at = _dt.utcnow()
+        db.commit()
+    return CoachNote(
+        activity_type="walk",
+        activity_id=walk.id,
+        text=walk.coach_note,
+        generated_at=walk.coach_note_generated_at,
+        is_stub=not llm.is_live(),
+    )
+
+
+# ----- Today's recommendation (Phase 2) ---------------------------------------
+
+@app.get("/coach/today-card", response_model=CoachTodayCardResponse)
+@limiter.limit("60/hour")
+def get_today_card(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """One-line recommendation for the Home card. Cached per user-day."""
+    _require_coach_enabled(current_user)
+    if not getattr(current_user, "coach_today_card", True):
+        raise HTTPException(status_code=404, detail="Today card disabled in coach settings")
+    from datetime import datetime as _dt
+    day_iso = _dt.utcnow().strftime("%Y-%m-%d")
+    cached = (
+        db.query(CoachTodayCard)
+        .filter(CoachTodayCard.user_id == current_user.id, CoachTodayCard.day_iso == day_iso)
+        .first()
+    )
+    if cached:
+        return CoachTodayCardResponse(
+            text=cached.text,
+            generated_at=cached.created_at,
+            is_stub=not llm.is_live(),
+        )
+    try:
+        text_out = coach.generate_today_card(db, current_user)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("coach today-card failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Coach unavailable")
+    row = CoachTodayCard(user_id=current_user.id, day_iso=day_iso, text=text_out)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return CoachTodayCardResponse(
+        text=row.text,
+        generated_at=row.created_at,
+        is_stub=not llm.is_live(),
+    )
+
+
+# ----- Open chat (Phase 3) ----------------------------------------------------
+
+@app.post("/coach/chat", response_model=CoachChatResponse)
+@limiter.limit("20/minute")
+def coach_chat(
+    request: Request,
+    payload: CoachChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Single-turn chat. History is server-managed."""
+    _require_coach_enabled(current_user)
+    user_text = _sanitize_text(payload.message, max_length=2000).strip()
+    if not user_text:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    prior = (
+        db.query(CoachMessage)
+        .filter(CoachMessage.user_id == current_user.id)
+        .order_by(CoachMessage.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    prior.reverse()
+    history = [{"role": m.role, "content": m.content} for m in prior]
+
+    try:
+        reply_text = coach.chat(
+            db,
+            current_user,
+            user_message=user_text,
+            history=history,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("coach chat failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Coach unavailable")
+
+    db.add(CoachMessage(user_id=current_user.id, role="user", content=user_text))
+    db.add(CoachMessage(user_id=current_user.id, role="assistant", content=reply_text))
+    db.commit()
+
+    refreshed = (
+        db.query(CoachMessage)
+        .filter(CoachMessage.user_id == current_user.id)
+        .order_by(CoachMessage.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    refreshed.reverse()
+
+    return CoachChatResponse(
+        reply=reply_text,
+        history=[
+            CoachChatTurn(role=m.role, content=m.content, created_at=m.created_at)
+            for m in refreshed
+        ],
+        is_stub=not llm.is_live(),
+    )
+
+
+@app.get("/coach/chat/history", response_model=List[CoachChatTurn])
+def coach_chat_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return the recent chat history (last 20 turns)."""
+    _require_coach_enabled(current_user)
+    rows = (
+        db.query(CoachMessage)
+        .filter(CoachMessage.user_id == current_user.id)
+        .order_by(CoachMessage.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    rows.reverse()
+    return [CoachChatTurn(role=r.role, content=r.content, created_at=r.created_at) for r in rows]
+
+
+@app.delete("/coach/chat/history")
+def coach_chat_clear(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Wipe chat history for the current user."""
+    db.query(CoachMessage).filter(CoachMessage.user_id == current_user.id).delete()
+    db.commit()
+    return {"cleared": True}
+
+
+# ----- In-run companion script (Phase 4) --------------------------------------
+
+@app.post("/coach/run-script", response_model=CoachRunScriptResponse)
+@limiter.limit("30/hour")
+def create_run_script(
+    request: Request,
+    payload: CoachRunScriptRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Pre-generate the in-run companion script for a planned activity.
+
+    Called by the client at run-start (after route confirm). The client
+    caches the returned lines locally and plays them via TTS as the run
+    progresses. Server caches every script for resume / debugging.
+    """
+    _require_coach_enabled(current_user)
+    activity = payload.activity if payload.activity in {
+        "outdoor_run", "treadmill", "walk", "journey"
+    } else "outdoor_run"
+
+    plan = _sanitize_text(payload.plan_summary, max_length=400)
+
+    try:
+        lines = coach.generate_run_script(
+            db,
+            current_user,
+            plan_summary=plan,
+            target_distance_km=payload.target_distance_km,
+            activity=activity,
+            route_landmarks=payload.route_landmarks,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("coach run-script failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Coach unavailable")
+
+    row = CoachRunScript(
+        user_id=current_user.id,
+        activity=activity,
+        target_distance_km=payload.target_distance_km,
+        plan_summary=plan,
+        lines_json=json.dumps(lines),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return CoachRunScriptResponse(
+        id=row.id,
+        activity=row.activity,
+        target_distance_km=row.target_distance_km,
+        plan_summary=row.plan_summary,
+        lines=[CoachRunScriptLine(**ln) for ln in lines],
+        created_at=row.created_at,
+        is_stub=not llm.is_live(),
+    )
+
+
+@app.get("/coach/run-script/{script_id}", response_model=CoachRunScriptResponse)
+def get_run_script(
+    script_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Re-fetch a previously generated script (e.g. on app resume mid-run)."""
+    row = (
+        db.query(CoachRunScript)
+        .filter(CoachRunScript.id == script_id, CoachRunScript.user_id == current_user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Run script not found")
+    try:
+        lines = json.loads(row.lines_json)
+    except (json.JSONDecodeError, TypeError):
+        lines = []
+    return CoachRunScriptResponse(
+        id=row.id,
+        activity=row.activity,
+        target_distance_km=row.target_distance_km,
+        plan_summary=row.plan_summary,
+        lines=[CoachRunScriptLine(**ln) for ln in lines if isinstance(ln, dict)],
+        created_at=row.created_at,
+        is_stub=not llm.is_live(),
+    )
 
 
 # ==========================================

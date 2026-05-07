@@ -1241,6 +1241,132 @@ export const neighbourhoodApi = {
     apiFetch(`/neighbourhood/runs/${runId}/report`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
 };
 
+// ==========================================
+// 🧠 COACH API  (AI companion — opt-in)
+// ==========================================
+
+export interface CoachSettings {
+  coach_enabled: boolean;
+  coach_notes_auto: boolean;
+  coach_today_card: boolean;
+  /** "all" | "coach_runs" | "journeys_only" | "off" */
+  coach_voice_during_runs: string;
+  coach_consent_at: string | null;
+}
+
+export interface CoachNote {
+  /** "run" | "walk" */
+  activity_type: string;
+  activity_id: number;
+  text: string;
+  generated_at: string;
+  /** True when the LLM client is in stub mode (no API key configured server-side). */
+  is_stub: boolean;
+}
+
+export interface CoachTodayCard {
+  text: string;
+  generated_at: string;
+  is_stub: boolean;
+}
+
+export interface CoachChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string | null;
+}
+
+export interface CoachChatResponse {
+  reply: string;
+  history: CoachChatTurn[];
+  is_stub: boolean;
+}
+
+export interface CoachRunScriptLine {
+  /** "start" | "km" | "halfway" | "km_to_go" | "finish" */
+  trigger: string;
+  text: string;
+  km?: number;
+  remaining_km?: number;
+}
+
+export interface CoachRunScript {
+  id: number;
+  /** "outdoor_run" | "treadmill" | "walk" | "journey" */
+  activity: string;
+  target_distance_km: number;
+  plan_summary: string | null;
+  lines: CoachRunScriptLine[];
+  created_at: string;
+  is_stub: boolean;
+}
+
+export const coachApi = {
+  /** Current coach toggles. Always succeeds (returns defaults for opted-out users). */
+  getSettings: (): Promise<CoachSettings> => apiFetch('/coach/settings'),
+
+  /** Update toggles. Cannot enable the coach here — use optIn(). */
+  updateSettings: (s: Partial<CoachSettings>): Promise<CoachSettings> =>
+    apiFetch('/coach/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        coach_enabled: s.coach_enabled ?? false,
+        coach_notes_auto: s.coach_notes_auto ?? true,
+        coach_today_card: s.coach_today_card ?? true,
+        coach_voice_during_runs: s.coach_voice_during_runs ?? 'coach_runs',
+      }),
+    }),
+
+  /** Enable the coach for the account. Records the consent timestamp server-side. */
+  optIn: (): Promise<CoachSettings> =>
+    apiFetch('/coach/opt-in', {
+      method: 'POST',
+      body: JSON.stringify({ accepted: true }),
+    }),
+
+  /** Disable the coach. Existing notes and history remain on past activities. */
+  optOut: (): Promise<{ coach_enabled: false }> =>
+    apiFetch('/coach/opt-in', { method: 'DELETE' }),
+
+  /** Fetch (or generate-and-cache) the Coach's note for a saved run. */
+  getRunNote: (runId: number): Promise<CoachNote> =>
+    apiFetch(`/coach/run-note/${runId}`),
+
+  /** Fetch (or generate-and-cache) the Coach's note for a saved walk. */
+  getWalkNote: (walkId: number): Promise<CoachNote> =>
+    apiFetch(`/coach/walk-note/${walkId}`),
+
+  /** Today's recommendation for the Home card (UTC-day cached server-side). */
+  getTodayCard: (): Promise<CoachTodayCard> => apiFetch('/coach/today-card'),
+
+  /** Send a message to the coach. History is server-managed. */
+  sendChat: (message: string): Promise<CoachChatResponse> =>
+    apiFetch('/coach/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+
+  getChatHistory: (): Promise<CoachChatTurn[]> => apiFetch('/coach/chat/history'),
+
+  clearChat: (): Promise<{ cleared: true }> =>
+    apiFetch('/coach/chat/history', { method: 'DELETE' }),
+
+  /** Pre-generate the in-run companion script for a planned activity. */
+  createRunScript: (req: {
+    activity: string;
+    target_distance_km: number;
+    plan_summary: string;
+    route_landmarks?: string[];
+  }): Promise<CoachRunScript> =>
+    apiFetch('/coach/run-script', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  getRunScript: (id: number): Promise<CoachRunScript> =>
+    apiFetch(`/coach/run-script/${id}`),
+};
+
 export const publicWalkApi = {
   list: (params?: {
     region?: string;

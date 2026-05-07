@@ -33,6 +33,7 @@ import * as Haptics from 'expo-haptics';
 import { WalkMap, MapMarker } from '../components/WalkMap';
 import { EditWalkModal } from '../components/EditWalkModal';
 import { PhotoHeroCarousel } from '../components/PhotoHeroCarousel';
+import { CoachNoteCard } from '../components/CoachNoteCard';
 import {
   walkApi,
   walkPhotoApi,
@@ -472,6 +473,14 @@ export function WalkDetailScreen({ navigation, route }: Props) {
             <Text style={styles.notesText}>{walk.notes}</Text>
           </View>
         ) : null}
+
+        <CoachNoteCard
+          kind="walk"
+          activityId={walk.id}
+          onOptInPress={() =>
+            navigation.getParent()?.navigate('Home', { screen: 'CoachOptIn' })
+          }
+        />
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>

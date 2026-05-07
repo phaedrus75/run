@@ -403,6 +403,16 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={[styles.linkRow, shadows.small]}
+          onPress={() => navigation.navigate('CoachOptIn')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="sparkles-outline" size={20} color={colors.primary} />
+          <Text style={styles.linkRowText}>Coach</Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
+
         {/* Runner Level */}
         <View style={[styles.section, shadows.small]}>
           <Text style={styles.sectionTitle}>Runner Level</Text>

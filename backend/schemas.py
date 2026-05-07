@@ -233,3 +233,99 @@ class WeeklyStreakProgress(BaseModel):
     missed_last_week: bool = False
 
 
+# ==========================================
+# 🧠 COACH SCHEMAS
+# ==========================================
+
+
+class CoachSettings(BaseModel):
+    """User-facing coach toggles. Mirrors User.coach_* columns."""
+
+    coach_enabled: bool = False
+    coach_notes_auto: bool = True
+    coach_today_card: bool = True
+    coach_voice_during_runs: str = "coach_runs"  # all | coach_runs | journeys_only | off
+    coach_consent_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CoachOptInRequest(BaseModel):
+    """Sent when the user accepts the coach opt-in screen."""
+
+    accepted: bool = Field(..., description="Must be true to opt in.")
+
+
+class CoachNote(BaseModel):
+    """Post-activity note returned to the client."""
+
+    activity_type: str  # "run" | "walk"
+    activity_id: int
+    text: str
+    generated_at: datetime
+    is_stub: bool = False  # true if produced by the LLM stub backend
+
+
+class CoachTodayCardResponse(BaseModel):
+    """One-line recommendation for the Home card."""
+
+    text: str
+    generated_at: datetime
+    is_stub: bool = False
+
+
+class CoachChatTurn(BaseModel):
+    """One message in a coach chat exchange."""
+
+    role: str  # "user" | "assistant"
+    content: str
+    created_at: Optional[datetime] = None
+
+
+class CoachChatRequest(BaseModel):
+    """Send a new user message to the coach. Server replays prior history
+    from the database; clients don't need to track it."""
+
+    message: str = Field(..., min_length=1, max_length=2000)
+
+
+class CoachChatResponse(BaseModel):
+    """The coach's reply plus the resulting (recent) history."""
+
+    reply: str
+    history: List[CoachChatTurn] = []
+    is_stub: bool = False
+
+
+class CoachRunScriptLine(BaseModel):
+    """A single voice line in the in-run companion script."""
+
+    trigger: str  # "start" | "km" | "halfway" | "km_to_go" | "finish"
+    text: str
+    km: Optional[int] = None
+    remaining_km: Optional[int] = None
+
+
+class CoachRunScriptRequest(BaseModel):
+    """Pre-generate the in-run companion script for a planned activity."""
+
+    activity: str = Field("outdoor_run", description="outdoor_run | treadmill | walk | journey")
+    target_distance_km: float = Field(..., gt=0, le=120)
+    plan_summary: str = Field(..., min_length=1, max_length=400)
+    route_landmarks: Optional[List[str]] = Field(None, description="Optional named cues, e.g. 'Teddington Lock at km 6'")
+
+
+class CoachRunScriptResponse(BaseModel):
+    """The pre-generated script. Cached server-side so the client can
+    re-fetch on resume without re-generating."""
+
+    id: int
+    activity: str
+    target_distance_km: float
+    plan_summary: Optional[str] = None
+    lines: List[CoachRunScriptLine]
+    created_at: datetime
+    is_stub: bool = False
+
+
