@@ -38,6 +38,8 @@ import { AchievementDetailModal } from '../components/AchievementDetailModal';
 import { MilestoneUnlockSequence } from '../components/MilestoneUnlockSequence';
 import { AppHeader } from '../components/AppHeader';
 import { WeeklyReflection } from '../components/WeeklyReflection';
+import { CoachTodayCard } from '../components/CoachTodayCard';
+import { CoachChatSheet } from '../components/CoachChatSheet';
 import { 
   statsApi,
   levelApi,
@@ -75,6 +77,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [homeMilestoneQueue, setHomeMilestoneQueue] = useState<MilestoneUnlock[]>([]);
   const [showHomeMilestoneSequence, setShowHomeMilestoneSequence] = useState(false);
   const [homeBadgeDetail, setHomeBadgeDetail] = useState<Achievement | null>(null);
+  const [coachChatVisible, setCoachChatVisible] = useState(false);
   
   // 📊 State for our data
   const [stats, setStats] = useState<Stats | null>(null);
@@ -283,6 +286,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.wisdomAuthor}>— {dailyWisdom.author}</Text>
           </View>
         )}
+
+        {/* 🧠 Coach's note for today — quiet by default, only renders if opted in */}
+        <CoachTodayCard
+          onAskPress={() => setCoachChatVisible(true)}
+          onOptInPress={() => navigation.navigate('CoachOptIn')}
+        />
 
         {/* Level Upgrade Banner */}
         {upgradeInfo?.eligible && upgradeInfo.nextLevel && (
@@ -545,6 +554,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         visible={homeBadgeDetail !== null}
         achievement={homeBadgeDetail}
         onClose={() => setHomeBadgeDetail(null)}
+      />
+
+      <CoachChatSheet
+        visible={coachChatVisible}
+        onClose={() => setCoachChatVisible(false)}
+        onOptInPress={() => {
+          setCoachChatVisible(false);
+          navigation.navigate('CoachOptIn');
+        }}
       />
 
       {/* 🎊 Confetti for Personal Bests! */}

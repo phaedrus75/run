@@ -42,6 +42,7 @@ import {
 } from '../services/walkLocationTracker';
 import { walkApi, type MilestoneUnlock } from '../services/api';
 import { MilestoneUnlockSequence } from '../components/MilestoneUnlockSequence';
+import { CoachNoteCard } from '../components/CoachNoteCard';
 import {
   PhotoEntry,
   linkActivityId,
@@ -158,13 +159,14 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      // Transition to the post-save inline view: map/stats stay, mood/note
+      // form is replaced by the coach's note. The user taps "Done" to land
+      // on the full WalkDetail screen.
+      setSavedWalkId(walk.id);
       const miles = walk.milestone_unlocks ?? [];
       if (miles.length > 0) {
-        setSavedWalkId(walk.id);
         setMilestoneQueue(miles);
         setShowMilestoneSequence(true);
-      } else {
-        navigation.replace('WalkDetail', { walkId: walk.id, justSaved: true });
       }
     } catch (e: any) {
       // Save failed mid-flight. Persist as a draft so the walk is not lost —
@@ -299,70 +301,111 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
             </Pressable>
           )}
 
-          <Text style={styles.section}>How did it feel?</Text>
-          <View style={styles.moodRow}>
-            {MOODS.map((m) => (
-              <Pressable
-                key={m.id}
-                onPress={() => {
-                  try {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  } catch {}
-                  setMood(mood === m.id ? null : m.id);
-                }}
-                style={({ pressed }) => [
-                  styles.moodChip,
-                  mood === m.id && styles.moodChipActive,
-                  { transform: [{ scale: pressed ? 0.95 : 1 }] },
-                ]}
-              >
-                <Text style={styles.moodEmoji}>{m.emoji}</Text>
-                <Text
-                  style={[
-                    styles.moodLabel,
-                    mood === m.id && styles.moodLabelActive,
-                  ]}
-                >
-                  {m.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {savedWalkId == null ? (
+            <>
+              <Text style={styles.section}>How did it feel?</Text>
+              <View style={styles.moodRow}>
+                {MOODS.map((m) => (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => {
+                      try {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      } catch {}
+                      setMood(mood === m.id ? null : m.id);
+                    }}
+                    style={({ pressed }) => [
+                      styles.moodChip,
+                      mood === m.id && styles.moodChipActive,
+                      { transform: [{ scale: pressed ? 0.95 : 1 }] },
+                    ]}
+                  >
+                    <Text style={styles.moodEmoji}>{m.emoji}</Text>
+                    <Text
+                      style={[
+                        styles.moodLabel,
+                        mood === m.id && styles.moodLabelActive,
+                      ]}
+                    >
+                      {m.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
 
-          <Text style={styles.section}>Note (optional)</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="A line about the walk…"
-            placeholderTextColor={colors.textLight}
-            style={styles.noteInput}
-            maxLength={300}
-            multiline
-          />
+              <Text style={styles.section}>Note (optional)</Text>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder="A line about the walk…"
+                placeholderTextColor={colors.textLight}
+                style={styles.noteInput}
+                maxLength={300}
+                multiline
+              />
+            </>
+          ) : (
+            <View style={styles.savedBlock}>
+              <View style={styles.savedRow}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                <Text style={styles.savedTitle}>Saved.</Text>
+              </View>
+              <CoachNoteCard
+                kind="walk"
+                activityId={savedWalkId}
+                onOptInPress={() =>
+                  navigation
+                    .getParent()
+                    ?.navigate('Home', { screen: 'CoachOptIn' })
+                }
+              />
+            </View>
+          )}
         </ScrollView>
 
         <View style={styles.footer}>
-          <Pressable onPress={handleDiscard} style={styles.discardBtn}>
-            <Text style={styles.discardText}>Discard</Text>
-          </Pressable>
-          <Pressable
-            onPress={handleSave}
-            disabled={saving}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              saving && { opacity: 0.6 },
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-          >
-            {saving ? (
-              <ActivityIndicator color={colors.textOnPrimary} />
-            ) : (
-              <>
-                <Ionicons name="checkmark" size={18} color={colors.textOnPrimary} />
-                <Text style={styles.primaryBtnText}>Save walk</Text>
-              </>
-            )}
-          </Pressable>
+          {savedWalkId == null ? (
+            <>
+              <Pressable onPress={handleDiscard} style={styles.discardBtn}>
+                <Text style={styles.discardText}>Discard</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSave}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  saving && { opacity: 0.6 },
+                  { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator color={colors.textOnPrimary} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={18} color={colors.textOnPrimary} />
+                    <Text style={styles.primaryBtnText}>Save walk</Text>
+                  </>
+                )}
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              onPress={() => {
+                const id = savedWalkId;
+                if (id != null) {
+                  navigation.replace('WalkDetail', { walkId: id, justSaved: true });
+                } else {
+                  navigation.popToTop();
+                }
+              }}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>Done</Text>
+            </Pressable>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -372,13 +415,8 @@ export function WalkSummaryScreen({ navigation, route }: Props) {
         onComplete={() => {
           setShowMilestoneSequence(false);
           setMilestoneQueue([]);
-          const id = savedWalkId;
-          setSavedWalkId(null);
-          if (id != null) {
-            navigation.replace('WalkDetail', { walkId: id, justSaved: true });
-          } else {
-            navigation.popToTop();
-          }
+          // Stay on the saved view so the user can read the coach note;
+          // they'll tap "Done" to land on WalkDetail.
         }}
       />
     </SafeAreaView>
@@ -567,5 +605,19 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textSecondary,
     fontSize: typography.sizes.md,
+  },
+  savedBlock: {
+    marginTop: spacing.lg,
+  },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: spacing.sm,
+  },
+  savedTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
   },
 });

@@ -51,6 +51,7 @@ import {
 } from '../services/walkLocationTracker';
 import { runApi, type MilestoneUnlock } from '../services/api';
 import { MilestoneUnlockSequence } from '../components/MilestoneUnlockSequence';
+import { CoachNoteCard } from '../components/CoachNoteCard';
 import {
   PhotoEntry,
   linkActivityId,
@@ -106,6 +107,7 @@ export function RunSummaryScreen({ navigation, route }: Props) {
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [milestoneQueue, setMilestoneQueue] = useState<MilestoneUnlock[]>([]);
   const [showMilestoneSequence, setShowMilestoneSequence] = useState(false);
+  const [savedRunId, setSavedRunId] = useState<number | null>(null);
 
   // Re-read the session whenever this screen gets focus (e.g. coming back
   // from the review screen with caption / delete edits).
@@ -175,12 +177,15 @@ export function RunSummaryScreen({ navigation, route }: Props) {
 
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
 
+      // Transition to the post-save inline view: map/stats stay, mood/note
+      // form is replaced by the coach's note. The milestone sequence still
+      // overlays on top if there are unlocks; once dismissed the user lands
+      // back on the saved view and taps "Done" to leave.
+      setSavedRunId(run.id);
       const miles = run.milestone_unlocks ?? [];
       if (miles.length > 0) {
         setMilestoneQueue(miles);
         setShowMilestoneSequence(true);
-      } else {
-        navigation.replace('ActivityHome');
       }
     } catch (e: any) {
       // Save failed before the run was created. The session (with photos
@@ -303,63 +308,97 @@ export function RunSummaryScreen({ navigation, route }: Props) {
             </Pressable>
           )}
 
-          <Text style={styles.section}>How did it feel?</Text>
-          <View style={styles.moodRow}>
-            {MOODS.map((m) => (
-              <Pressable
-                key={m.id}
-                onPress={() => {
-                  try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-                  setMood(mood === m.id ? null : m.id);
-                }}
-                style={({ pressed }) => [
-                  styles.moodChip,
-                  mood === m.id && styles.moodChipActive,
-                  { transform: [{ scale: pressed ? 0.95 : 1 }] },
-                ]}
-              >
-                <Text style={styles.moodEmoji}>{m.emoji}</Text>
-                <Text style={[styles.moodLabel, mood === m.id && styles.moodLabelActive]}>
-                  {m.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {savedRunId == null ? (
+            <>
+              <Text style={styles.section}>How did it feel?</Text>
+              <View style={styles.moodRow}>
+                {MOODS.map((m) => (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => {
+                      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+                      setMood(mood === m.id ? null : m.id);
+                    }}
+                    style={({ pressed }) => [
+                      styles.moodChip,
+                      mood === m.id && styles.moodChipActive,
+                      { transform: [{ scale: pressed ? 0.95 : 1 }] },
+                    ]}
+                  >
+                    <Text style={styles.moodEmoji}>{m.emoji}</Text>
+                    <Text style={[styles.moodLabel, mood === m.id && styles.moodLabelActive]}>
+                      {m.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
 
-          <Text style={styles.section}>Note (optional)</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="A line about the run…"
-            placeholderTextColor={colors.textLight}
-            style={styles.noteInput}
-            maxLength={300}
-            multiline
-          />
+              <Text style={styles.section}>Note (optional)</Text>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder="A line about the run…"
+                placeholderTextColor={colors.textLight}
+                style={styles.noteInput}
+                maxLength={300}
+                multiline
+              />
+            </>
+          ) : (
+            <View style={styles.savedBlock}>
+              <View style={styles.savedRow}>
+                <Ionicons name="checkmark-circle" size={20} color={RUN_ACCENT} />
+                <Text style={styles.savedTitle}>Saved.</Text>
+              </View>
+              <CoachNoteCard
+                kind="run"
+                activityId={savedRunId}
+                onOptInPress={() =>
+                  navigation
+                    .getParent()
+                    ?.navigate('Home', { screen: 'CoachOptIn' })
+                }
+              />
+            </View>
+          )}
         </ScrollView>
 
         <View style={styles.footer}>
-          <Pressable onPress={handleDiscard} style={styles.discardBtn}>
-            <Text style={styles.discardText}>Discard</Text>
-          </Pressable>
-          <Pressable
-            onPress={handleSave}
-            disabled={saving}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              saving && { opacity: 0.6 },
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="checkmark" size={18} color="#fff" />
-                <Text style={styles.primaryBtnText}>Save run</Text>
-              </>
-            )}
-          </Pressable>
+          {savedRunId == null ? (
+            <>
+              <Pressable onPress={handleDiscard} style={styles.discardBtn}>
+                <Text style={styles.discardText}>Discard</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSave}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  saving && { opacity: 0.6 },
+                  { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={18} color="#fff" />
+                    <Text style={styles.primaryBtnText}>Save run</Text>
+                  </>
+                )}
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              onPress={() => navigation.replace('ActivityHome')}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>Done</Text>
+            </Pressable>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -369,7 +408,8 @@ export function RunSummaryScreen({ navigation, route }: Props) {
         onComplete={() => {
           setShowMilestoneSequence(false);
           setMilestoneQueue([]);
-          navigation.replace('ActivityHome');
+          // Stay on the saved view so the user can read the coach note;
+          // they'll tap "Done" to leave.
         }}
       />
     </SafeAreaView>
@@ -552,4 +592,18 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
   emptyText: { color: colors.textSecondary, fontSize: typography.sizes.md },
+  savedBlock: {
+    marginTop: spacing.lg,
+  },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: spacing.sm,
+  },
+  savedTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
 });
