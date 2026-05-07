@@ -75,6 +75,13 @@ export interface UploadDrainResult {
  * Drain every session's pending photo uploads. Returns aggregate counts.
  * Multiple concurrent calls are coalesced — a second call while one is in
  * flight will trigger a single follow-up drain when the first finishes.
+ *
+ * Also recovers from stranded `'uploading'` state at the top of the run:
+ * if the previous app process died between marking a photo `'uploading'`
+ * and the network call resolving, the manifest persists with that state
+ * and `isUploadable` would otherwise skip it forever. Since the
+ * `draining` guard above proves no in-process drain is currently running,
+ * any `'uploading'` we see here is definitionally from a dead process.
  */
 export async function drainPendingUploads(): Promise<UploadDrainResult> {
   if (draining) {
@@ -84,6 +91,7 @@ export async function drainPendingUploads(): Promise<UploadDrainResult> {
   draining = true;
   const acc: UploadDrainResult = { attempted: 0, succeeded: 0, failed: 0, skipped: 0 };
   try {
+    await resetStrandedUploads();
     const sessions = await listSessions();
     for (const summary of sessions) {
       if (summary.serverActivityId === null) continue;
@@ -105,6 +113,37 @@ export async function drainPendingUploads(): Promise<UploadDrainResult> {
     }
   }
   return acc;
+}
+
+/**
+ * Walk every session and flip any photo stuck in `'uploading'` back to
+ * `'pending'` so the next drain pass picks it up. Without this, a crash
+ * mid-upload (e.g. an unhandled JS error in a modal that's open while a
+ * background upload is in flight) leaves photos forever orphaned in the
+ * uploading state.
+ *
+ * Called only from the global `drainPendingUploads` entry point so we're
+ * never racing the active uploader.
+ */
+async function resetStrandedUploads(): Promise<void> {
+  for (const summary of await listSessions()) {
+    if (summary.pendingUploadCount === 0) continue;
+    const m = await loadManifest(summary.sessionId);
+    if (!m) continue;
+    for (const entry of m.photos) {
+      if (entry.upload.status !== 'uploading') continue;
+      await updatePhoto(m.sessionId, entry.id, {
+        upload: {
+          ...entry.upload,
+          status: 'pending',
+          // Don't bump attempts — the previous attempt never actually got
+          // a server response, so it shouldn't burn our retry budget.
+          nextRetryAt: undefined,
+          error: undefined,
+        },
+      });
+    }
+  }
 }
 
 /** Drain a single session. Exposed so callers (e.g. the save flow) can
