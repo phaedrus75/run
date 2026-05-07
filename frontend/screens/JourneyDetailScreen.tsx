@@ -3,16 +3,21 @@
  * =========================
  *
  * Single Journey deep-dive: progress, plan, contributing activities,
- * notes, and lifecycle controls (complete / abandon).
+ * notes, and lifecycle controls.
  *
- * Active journey: the user can edit notes, mark complete, or abandon.
- * Completed/abandoned: read-only view.
+ * Status-driven UI:
+ * - planned    : countdown to scheduled date, prep checklist, readiness
+ *                note, and "Start it now" / "Reschedule" / "Cancel" CTAs.
+ * - active     : the user can edit notes, mark complete, or abandon.
+ * - completed  : Guide debrief, read-only.
+ * - abandoned  : read-only with a "Delete journey" option.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -23,10 +28,45 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { Journey, journeyApi } from '../services/api';
 import { CoachChatSheet } from '../components/CoachChatSheet';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
+
+function parseIsoDate(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const parts = s.split('-');
+  if (parts.length !== 3) return null;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return null;
+  return new Date(y, m - 1, d);
+}
+
+function isoDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function daysUntil(target: Date): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const t = new Date(target);
+  t.setHours(0, 0, 0, 0);
+  return Math.round((t.getTime() - today.getTime()) / 86400000);
+}
+
+function formatScheduledDate(d: Date): string {
+  return d.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+}
 
 interface Props {
   navigation: any;
@@ -52,6 +92,8 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
   const [notesDraft, setNotesDraft] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [showRescheduler, setShowRescheduler] = useState(false);
   const notesDirty = useRef(false);
 
   const fetch = useCallback(async () => {
@@ -142,13 +184,16 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
 
   const onDelete = () => {
     if (!journey) return;
+    const isPlanned = journey.status === 'planned';
     Alert.alert(
-      'Delete journey?',
-      'The journey is removed for good. Your runs and walks stay — they just stop being linked to it.',
+      isPlanned ? 'Cancel this journey?' : 'Delete journey?',
+      isPlanned
+        ? 'This removes the journey from your to-do list. You can plan a new one any time.'
+        : 'The journey is removed for good. Your runs and walks stay — they just stop being linked to it.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: isPlanned ? 'Keep it' : 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: isPlanned ? 'Cancel journey' : 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -161,6 +206,51 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
         },
       ],
     );
+  };
+
+  const onStartNow = () => {
+    if (!journey) return;
+    Alert.alert(
+      'Start this journey now?',
+      'The window opens immediately. Every run and walk you save from now on counts toward the line.',
+      [
+        { text: 'Not yet', style: 'cancel' },
+        {
+          text: 'Start',
+          style: 'default',
+          onPress: async () => {
+            setStarting(true);
+            try {
+              const next = await journeyApi.start(journey.id);
+              setJourney(next);
+            } catch (e: any) {
+              const msg = String(e?.message || '');
+              if (/already have an active/i.test(msg)) {
+                Alert.alert(
+                  'Already on a journey',
+                  'Another journey is already active. Finish or abandon it first.',
+                );
+              } else {
+                Alert.alert('Could not start', msg || 'Try again in a moment.');
+              }
+            } finally {
+              setStarting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const onPickReschedule = async (_event: any, selected?: Date) => {
+    if (Platform.OS !== 'ios') setShowRescheduler(false);
+    if (!journey || !selected) return;
+    try {
+      const next = await journeyApi.schedule(journey.id, isoDateString(selected));
+      setJourney(next);
+    } catch (e: any) {
+      Alert.alert('Could not reschedule', String(e?.message || ''));
+    }
   };
 
   const pct = useMemo(() => {
@@ -178,8 +268,13 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
     );
   }
 
+  const isPlanned = journey.status === 'planned';
   const isActive = journey.status === 'active';
   const isCompleted = journey.status === 'completed';
+  const isAbandoned = journey.status === 'abandoned';
+
+  const scheduledDate = parseIsoDate(journey.scheduled_for);
+  const scheduledDays = scheduledDate ? daysUntil(scheduledDate) : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -202,12 +297,19 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           <Text
             style={[
               styles.statusText,
+              isPlanned && styles.statusPlanned,
               isActive && styles.statusActive,
               isCompleted && styles.statusCompleted,
-              !isActive && !isCompleted && styles.statusAbandoned,
+              isAbandoned && styles.statusAbandoned,
             ]}
           >
-            {isActive ? 'Active' : isCompleted ? 'Completed' : 'Abandoned'}
+            {isPlanned
+              ? 'Planned'
+              : isActive
+              ? 'Active'
+              : isCompleted
+              ? 'Completed'
+              : 'Abandoned'}
           </Text>
         </View>
 
@@ -215,26 +317,62 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           <Text style={styles.planSummary}>{journey.plan_summary}</Text>
         ) : null}
 
-        <View style={styles.bigStat}>
-          <Text style={styles.bigStatValue}>
-            {journey.accumulated_km.toFixed(1)}{' '}
-            <Text style={styles.bigStatTarget}>/ {journey.target_distance_km.toFixed(0)} km</Text>
-          </Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${pct}%` }]} />
-          </View>
-          <View style={styles.metaRow}>
-            <Text style={styles.metaItem}>
-              {journey.activity_count} activit{journey.activity_count === 1 ? 'y' : 'ies'}
+        {/* ── Planned-state hero: countdown + scheduled date ─────────────── */}
+        {isPlanned ? (
+          <View style={styles.bigStat}>
+            <Text style={styles.bigStatValue}>
+              {scheduledDays == null
+                ? 'When?'
+                : scheduledDays <= 0
+                ? 'Today'
+                : scheduledDays === 1
+                ? 'Tomorrow'
+                : `${scheduledDays} days`}
+              {scheduledDays != null && scheduledDays > 1 ? (
+                <Text style={styles.bigStatTarget}> to go</Text>
+              ) : null}
             </Text>
-            <Text style={styles.metaDot}> · </Text>
-            <Text style={styles.metaItem}>
-              {journey.days_active} day{journey.days_active === 1 ? '' : 's'}
-            </Text>
-            <Text style={styles.metaDot}> · </Text>
-            <Text style={styles.metaItem}>{Math.round(pct)}%</Text>
+            {scheduledDate ? (
+              <Text style={styles.scheduledDateLine}>
+                Scheduled for {formatScheduledDate(scheduledDate)}
+              </Text>
+            ) : (
+              <Text style={styles.scheduledDateLine}>No date set yet.</Text>
+            )}
+            <View style={styles.metaRow}>
+              <Text style={styles.metaItem}>
+                {journey.target_distance_km.toFixed(0)} km
+              </Text>
+              <Text style={styles.metaDot}> · </Text>
+              <Text style={styles.metaItem}>
+                {journey.max_days <= 1 ? '1 day' : `up to ${journey.max_days} days`}
+              </Text>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.bigStat}>
+            <Text style={styles.bigStatValue}>
+              {journey.accumulated_km.toFixed(1)}{' '}
+              <Text style={styles.bigStatTarget}>
+                / {journey.target_distance_km.toFixed(0)} km
+              </Text>
+            </Text>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${pct}%` }]} />
+            </View>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaItem}>
+                {journey.activity_count} activit{journey.activity_count === 1 ? 'y' : 'ies'}
+              </Text>
+              <Text style={styles.metaDot}> · </Text>
+              <Text style={styles.metaItem}>
+                {journey.days_active} day{journey.days_active === 1 ? '' : 's'}
+              </Text>
+              <Text style={styles.metaDot}> · </Text>
+              <Text style={styles.metaItem}>{Math.round(pct)}%</Text>
+            </View>
+          </View>
+        )}
 
         {isActive ? (
           <View style={styles.hintCard}>
@@ -251,6 +389,99 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
+        {/* ── Planned: readiness note + prep checklist + CTAs ─────────── */}
+        {isPlanned && journey.readiness_note ? (
+          <View style={styles.guideCard}>
+            <View style={styles.guideHeader}>
+              <Ionicons name="sparkles-outline" size={14} color={colors.textLight} />
+              <Text style={styles.guideLabel}>From your Guide</Text>
+            </View>
+            <Text style={styles.guideText}>{journey.readiness_note}</Text>
+          </View>
+        ) : null}
+
+        {isPlanned && journey.prep_checklist.length > 0 ? (
+          <>
+            <Text style={styles.section}>Prep checklist</Text>
+            <View style={styles.checklist}>
+              {journey.prep_checklist.map((item, idx) => (
+                <View key={`prep-${idx}`} style={styles.checklistRow}>
+                  <View style={styles.checklistDot} />
+                  <Text style={styles.checklistText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        {isPlanned ? (
+          <View style={styles.actions}>
+            <Pressable
+              onPress={onStartNow}
+              disabled={starting}
+              style={({ pressed }) => [
+                styles.completeBtn,
+                starting && { opacity: 0.6 },
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}
+            >
+              {starting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="play" size={18} color="#fff" />
+                  <Text style={styles.completeBtnText}>Start it now</Text>
+                </>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => setShowRescheduler(true)}
+              style={({ pressed }) => [
+                styles.secondaryBtn,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+              <Text style={styles.secondaryBtnText}>Reschedule</Text>
+            </Pressable>
+            {Platform.OS === 'ios' && showRescheduler ? (
+              <View style={styles.iosPickerWrap}>
+                <DateTimePicker
+                  value={scheduledDate || new Date()}
+                  mode="date"
+                  display="inline"
+                  onChange={onPickReschedule}
+                  minimumDate={new Date()}
+                />
+                <Pressable
+                  onPress={() => setShowRescheduler(false)}
+                  style={styles.iosPickerDone}
+                >
+                  <Text style={styles.iosPickerDoneText}>Done</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {Platform.OS !== 'ios' && showRescheduler ? (
+              <DateTimePicker
+                value={scheduledDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={onPickReschedule}
+                minimumDate={new Date()}
+              />
+            ) : null}
+            <Pressable
+              onPress={onDelete}
+              style={({ pressed }) => [
+                styles.abandonBtn,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}
+            >
+              <Text style={styles.abandonBtnText}>Cancel this journey</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {/* 🌅 Guide's debrief — only on completed journeys, only if the
          * Guide is opted in. Quiet card, journal-style. */}
         {isCompleted && journey.completion_note ? (
@@ -263,20 +494,24 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
-        <Text style={styles.section}>Your notes</Text>
-        <TextInput
-          editable={isActive}
-          value={notesDraft}
-          onChangeText={(t) => {
-            if (t !== notesDraft) notesDirty.current = true;
-            setNotesDraft(t);
-          }}
-          placeholder={isActive ? 'A line about today, or where you want this to go…' : 'No notes.'}
-          placeholderTextColor={colors.textLight}
-          multiline
-          maxLength={2000}
-          style={[styles.notes, !isActive && { backgroundColor: colors.surfaceAlt }]}
-        />
+        {!isPlanned ? (
+          <>
+            <Text style={styles.section}>Your notes</Text>
+            <TextInput
+              editable={isActive}
+              value={notesDraft}
+              onChangeText={(t) => {
+                if (t !== notesDraft) notesDirty.current = true;
+                setNotesDraft(t);
+              }}
+              placeholder={isActive ? 'A line about today, or where you want this to go…' : 'No notes.'}
+              placeholderTextColor={colors.textLight}
+              multiline
+              maxLength={2000}
+              style={[styles.notes, !isActive && { backgroundColor: colors.surfaceAlt }]}
+            />
+          </>
+        ) : null}
         {isActive ? (
           <Pressable
             onPress={() => void onSaveNotes()}
@@ -357,10 +592,18 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
         ) : null}
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Started {new Date(journey.started_at).toLocaleDateString()}
-            {journey.completed_at ? `  ·  finished ${new Date(journey.completed_at).toLocaleDateString()}` : ''}
-          </Text>
+          {isPlanned ? (
+            <Text style={styles.footerText}>
+              Planned. The journey window opens the moment you start it.
+            </Text>
+          ) : (
+            <Text style={styles.footerText}>
+              Started {new Date(journey.started_at).toLocaleDateString()}
+              {journey.completed_at
+                ? `  ·  finished ${new Date(journey.completed_at).toLocaleDateString()}`
+                : ''}
+            </Text>
+          )}
         </View>
       </ScrollView>
 
@@ -429,6 +672,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.semibold,
     color: colors.textSecondary,
   },
+  statusPlanned: { color: colors.warning },
   statusActive: { color: colors.primary },
   statusCompleted: { color: colors.success },
   statusAbandoned: { color: colors.textLight },
@@ -454,6 +698,71 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.regular,
     color: colors.textSecondary,
+  },
+  scheduledDateLine: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  checklist: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    ...shadows.small,
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: spacing.sm,
+  },
+  checklistDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+    marginTop: 8,
+  },
+  checklistText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.surface,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  secondaryBtnText: {
+    color: colors.primary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+  },
+  iosPickerWrap: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    ...shadows.small,
+  },
+  iosPickerDone: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  iosPickerDoneText: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    fontWeight: typography.weights.bold,
   },
   progressBar: {
     height: 8,

@@ -385,6 +385,11 @@ JOURNEY_TIER_MAX_DAYS = {
     "100k": 3,
 }
 
+# Lifecycle states. `planned` is the new default — the runner schedules a
+# journey from the preview screen, then explicitly flips to `active` when
+# they're ready to start.
+JOURNEY_STATUSES = {"planned", "active", "completed", "abandoned"}
+
 
 class JourneyTemplate(BaseModel):
     """Suggested starter journey for the picker. The coach generates
@@ -396,13 +401,71 @@ class JourneyTemplate(BaseModel):
     target_distance_km: float
 
 
+class JourneyPreviewRequest(BaseModel):
+    """Generate (without persisting) the preview info shown when the user
+    taps a Guide suggestion or static template card. Returns readiness +
+    a discrete prep checklist + a suggested scheduled date.
+
+    The frontend holds the result in memory and posts the same data back
+    on commit — saves a duplicate LLM call and keeps the preview
+    deterministic from the user's perspective.
+    """
+
+    tier: str = Field(..., description="One of: 20k, 30k, 50k, 60k, 75k, 100k")
+    name: str = Field(..., min_length=1, max_length=120)
+    blurb: Optional[str] = Field(None, max_length=400)
+
+
+class JourneyPreviewResponse(BaseModel):
+    """Read-only preview payload for `JourneyPreviewScreen`."""
+
+    tier: str
+    target_distance_km: float
+    max_days: int
+    name: str
+    plan_summary: str
+    readiness_note: str
+    prep_checklist: List[str]
+    # Default scheduled day suggested by the server (next Saturday for 1-day
+    # tiers, next weekend for multi-day). ISO date string `YYYY-MM-DD` in UTC.
+    suggested_scheduled_for: str
+    is_stub: bool = False
+
+
 class JourneyCreateRequest(BaseModel):
-    """Start a new active journey. The user can have at most one active
-    journey at a time; the API will reject if another is already active."""
+    """Plan or start a new journey.
+
+    Default is `as_planned=True` — the new flow is preview → plan → start
+    later. The frontend can also pass `as_planned=False` to flip straight
+    to active (the legacy "start now" path). Many planned journeys are
+    allowed; only one active per user at a time.
+    """
 
     name: str = Field(..., min_length=1, max_length=120)
     tier: str = Field(..., description="One of: 20k, 30k, 50k, 60k, 75k, 100k")
     plan_summary: Optional[str] = Field(None, max_length=400)
+    # New plan-then-start fields. Optional so older clients keep working
+    # (legacy clients call create with no schedule + as_planned defaulting
+    # off via this flag).
+    as_planned: bool = Field(
+        True,
+        description="If true (default), creates the journey in 'planned' "
+        "state with the optional scheduled_for date. If false, the "
+        "journey is immediately active.",
+    )
+    scheduled_for: Optional[str] = Field(
+        None,
+        description="ISO date `YYYY-MM-DD` for the planned start day.",
+    )
+    # Optional Guide-generated content forwarded from the preview screen.
+    # Skipping these is fine; the server will fill them in for 50k+ tiers
+    # at create time the same way it has been for prep notes.
+    readiness_note: Optional[str] = Field(None, max_length=600)
+    prep_checklist: Optional[List[str]] = Field(
+        None,
+        description="Discrete prep checklist items. Each item is a short "
+        "phrase; max 12 items, max 120 chars each.",
+    )
 
 
 class JourneyUpdateRequest(BaseModel):
@@ -410,6 +473,16 @@ class JourneyUpdateRequest(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=120)
     notes: Optional[str] = Field(None, max_length=2000)
+
+
+class JourneyScheduleRequest(BaseModel):
+    """Reschedule a planned journey. Only valid for journeys in `planned`
+    state — once active/completed/abandoned the schedule is fixed."""
+
+    scheduled_for: Optional[str] = Field(
+        None,
+        description="ISO date `YYYY-MM-DD`. Pass null to clear the date.",
+    )
 
 
 class JourneyDayBriefResponse(BaseModel):
@@ -431,10 +504,14 @@ class JourneyResponse(BaseModel):
     tier: str
     target_distance_km: float
     max_days: int = 1
-    status: str  # active | completed | abandoned
+    status: str  # planned | active | completed | abandoned
     plan_summary: Optional[str] = None
     notes: Optional[str] = None
     completion_note: Optional[str] = None
+    readiness_note: Optional[str] = None
+    prep_checklist: List[str] = []
+    scheduled_for: Optional[str] = None  # YYYY-MM-DD
+    activated_at: Optional[UTCDateTime] = None
     started_at: UTCDateTime
     completed_at: Optional[UTCDateTime] = None
 

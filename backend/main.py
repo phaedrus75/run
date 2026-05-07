@@ -105,8 +105,12 @@ from schemas import (
     JourneyResponse,
     JourneyTemplate,
     JourneyDayBriefResponse,
+    JourneyPreviewRequest,
+    JourneyPreviewResponse,
+    JourneyScheduleRequest,
     JOURNEY_TIERS,
     JOURNEY_TIER_MAX_DAYS,
+    JOURNEY_STATUSES,
 )
 import crud
 import coach
@@ -557,6 +561,21 @@ def run_migrations():
                 conn.execute(text(
                     "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS completion_note TEXT"
                 ))
+                # Plan-then-start lifecycle (Phase H): planned status,
+                # readiness assessment, discrete prep checklist, optional
+                # scheduled date, and the activation timestamp.
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS readiness_note TEXT"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS prep_checklist_json TEXT"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMP"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP"
+                ))
                 conn.execute(text(
                     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS journey_id INTEGER"
                 ))
@@ -670,6 +689,11 @@ def run_migrations():
                 _sqlite_col("walks", "journey_id", "journey_id INTEGER")
                 _sqlite_col("journeys", "max_days", "max_days INTEGER NOT NULL DEFAULT 1")
                 _sqlite_col("journeys", "completion_note", "completion_note TEXT")
+                # Plan-then-start lifecycle (Phase H)
+                _sqlite_col("journeys", "readiness_note", "readiness_note TEXT")
+                _sqlite_col("journeys", "prep_checklist_json", "prep_checklist_json TEXT")
+                _sqlite_col("journeys", "scheduled_for", "scheduled_for TIMESTAMP")
+                _sqlite_col("journeys", "activated_at", "activated_at TIMESTAMP")
 
                 # SQLAlchemy create_all() at the end of run_migrations() will
                 # create the coach_messages / coach_run_scripts /
@@ -5758,11 +5782,31 @@ def _journey_expires_at(journey: Journey) -> Optional[datetime]:
 
 
 def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
-    progress = _journey_progress(db, journey)
+    # Planned journeys haven't started attributing yet — skip the progress
+    # query (and keep accumulated_km at 0) so we don't waste DB roundtrips.
+    if journey.status == "planned":
+        progress = {"accumulated_km": 0.0, "activity_count": 0, "days_active": 0}
+    else:
+        progress = _journey_progress(db, journey)
     target = float(journey.target_distance_km or 0.0)
     pct = (progress["accumulated_km"] / target * 100.0) if target > 0 else 0.0
-    expires_at = _journey_expires_at(journey)
+    expires_at = _journey_expires_at(journey) if journey.status == "active" else None
     is_expired = expires_at is not None and datetime.utcnow() > expires_at
+
+    # Decode the prep checklist (stored as JSON array of short strings).
+    checklist: List[str] = []
+    raw_checklist = getattr(journey, "prep_checklist_json", None)
+    if raw_checklist:
+        try:
+            decoded = json.loads(raw_checklist)
+            if isinstance(decoded, list):
+                checklist = [str(x) for x in decoded if isinstance(x, str)][:12]
+        except (json.JSONDecodeError, ValueError):
+            checklist = []
+
+    scheduled = getattr(journey, "scheduled_for", None)
+    scheduled_iso = scheduled.date().isoformat() if scheduled else None
+
     return JourneyResponse(
         id=journey.id,
         name=journey.name,
@@ -5773,6 +5817,10 @@ def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
         plan_summary=journey.plan_summary,
         notes=journey.notes,
         completion_note=journey.completion_note,
+        readiness_note=getattr(journey, "readiness_note", None),
+        prep_checklist=checklist,
+        scheduled_for=scheduled_iso,
+        activated_at=getattr(journey, "activated_at", None),
         started_at=journey.started_at,
         completed_at=journey.completed_at,
         accumulated_km=progress["accumulated_km"],
@@ -5974,28 +6022,65 @@ def create_journey(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Start a new active journey. Rejects if another journey is already
-    active — the user must complete or abandon it first."""
+    """Plan a new journey, or start one immediately.
+
+    Default behaviour: creates the journey in `planned` state so the user
+    can prep, schedule, and start when ready (the new flow). Pass
+    `as_planned=False` to flip straight to `active` (the legacy "start
+    now" path used when the user is ready right away).
+
+    A user can hold many planned journeys + one active. Trying to start
+    a second active journey raises 409.
+    """
     if payload.tier not in JOURNEY_TIERS:
         raise HTTPException(
             status_code=400,
             detail=f"tier must be one of: {list(JOURNEY_TIERS.keys())}",
         )
-    if _get_active_journey(db, current_user.id) is not None:
+    # Only one active per user; planned journeys can stack freely.
+    if not payload.as_planned and _get_active_journey(db, current_user.id) is not None:
         raise HTTPException(
             status_code=409,
             detail="You already have an active journey. Complete or abandon it first.",
         )
+
     name = _sanitize_text(payload.name, max_length=120)
     plan = _sanitize_text(payload.plan_summary, max_length=400) if payload.plan_summary else None
+
+    # Optional Guide-generated content forwarded from the preview screen.
+    # We sanitise here so the same trust assumptions apply as for any user
+    # text. The preview endpoint produced these — this just persists them.
+    readiness_note = (
+        _sanitize_text(payload.readiness_note, max_length=600)
+        if payload.readiness_note
+        else None
+    )
+    checklist_items: List[str] = []
+    if payload.prep_checklist:
+        for raw_item in payload.prep_checklist[:12]:
+            if not isinstance(raw_item, str):
+                continue
+            cleaned = _sanitize_text(raw_item, max_length=120)
+            if cleaned:
+                checklist_items.append(cleaned)
+
+    scheduled_dt: Optional[datetime] = _parse_iso_date(payload.scheduled_for)
+
+    status = "planned" if payload.as_planned else "active"
+    activated_at = None if payload.as_planned else datetime.utcnow()
+
     journey = Journey(
         user_id=current_user.id,
         name=name,
         tier=payload.tier,
         target_distance_km=JOURNEY_TIERS[payload.tier],
         max_days=JOURNEY_TIER_MAX_DAYS.get(payload.tier, 1),
-        status="active",
+        status=status,
         plan_summary=plan,
+        readiness_note=readiness_note,
+        prep_checklist_json=json.dumps(checklist_items) if checklist_items else None,
+        scheduled_for=scheduled_dt,
+        activated_at=activated_at,
     )
     db.add(journey)
     db.commit()
@@ -6008,6 +6093,25 @@ def create_journey(
         _try_generate_journey_prep_note(db, journey, current_user)
 
     return _journey_to_response(db, journey)
+
+
+def _parse_iso_date(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO `YYYY-MM-DD` date string into a midnight-UTC datetime.
+
+    Tolerates full ISO datetimes too (the frontend may send either). Any
+    parse failure quietly returns None so the create endpoint isn't
+    derailed by a malformed schedule field.
+    """
+    if not value:
+        return None
+    try:
+        # Accept either bare date or full datetime.
+        if "T" in value:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        y, m, d = value.split("-")
+        return datetime(int(y), int(m), int(d))
+    except (ValueError, IndexError):
+        return None
 
 
 def _try_generate_journey_prep_note(
@@ -6093,6 +6197,209 @@ def update_journey(
     return _journey_to_response(db, journey)
 
 
+@app.post("/journeys/preview", response_model=JourneyPreviewResponse)
+def preview_journey(
+    payload: JourneyPreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Generate the JourneyPreview payload for a candidate journey.
+
+    Read-only — nothing is persisted. The frontend renders the response
+    on `JourneyPreviewScreen`, then sends the same content back via
+    `POST /journeys` if the user commits.
+
+    For Guide-disabled users (or stub mode) the response still includes
+    a generic readiness line and a fallback checklist so the preview
+    screen always has something to render.
+    """
+    if payload.tier not in JOURNEY_TIERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"tier must be one of: {list(JOURNEY_TIERS.keys())}",
+        )
+    target = JOURNEY_TIERS[payload.tier]
+    max_days = JOURNEY_TIER_MAX_DAYS.get(payload.tier, 1)
+    name = _sanitize_text(payload.name, max_length=120) or _default_name_for_tier(payload.tier)
+    blurb = _sanitize_text(payload.blurb, max_length=400) if payload.blurb else None
+
+    # Plan summary: prefer the blurb the user picked from the suggestion
+    # card. Fall back to a one-line description of the tier so the preview
+    # never reads as empty.
+    plan_summary = blurb or _default_blurb_for_tier(payload.tier)
+
+    # Readiness + checklist — Guide-aware when opted in, fallback otherwise.
+    is_stub = False
+    readiness_note = ""
+    checklist: List[str] = []
+
+    if getattr(current_user, "coach_enabled", False):
+        try:
+            readiness_note = coach.generate_journey_readiness(
+                db,
+                current_user,
+                tier=payload.tier,
+                target_distance_km=target,
+                name=name,
+            )
+        except Exception as exc:  # pragma: no cover
+            print(f"[guide] readiness preview failed for {payload.tier}: {exc}")
+        try:
+            checklist = coach.generate_journey_prep_checklist(
+                db,
+                current_user,
+                tier=payload.tier,
+                target_distance_km=target,
+                name=name,
+            )
+        except Exception as exc:  # pragma: no cover
+            print(f"[guide] checklist preview failed for {payload.tier}: {exc}")
+        is_stub = not llm.is_live()
+    else:
+        is_stub = True
+
+    if not readiness_note:
+        readiness_note = _fallback_readiness_note(payload.tier)
+    if not checklist:
+        checklist = coach._fallback_prep_checklist(payload.tier)
+
+    suggested = _suggest_scheduled_for(payload.tier).date().isoformat()
+
+    return JourneyPreviewResponse(
+        tier=payload.tier,
+        target_distance_km=target,
+        max_days=max_days,
+        name=name,
+        plan_summary=plan_summary,
+        readiness_note=readiness_note,
+        prep_checklist=checklist,
+        suggested_scheduled_for=suggested,
+        is_stub=is_stub,
+    )
+
+
+def _default_name_for_tier(tier: str) -> str:
+    return {
+        "20k": "The slow twenty",
+        "30k": "The slow thirty",
+        "50k": "A weekend fifty",
+        "60k": "The unhurried sixty",
+        "75k": "Three-day seventy-five",
+        "100k": "The slow hundred",
+    }.get(tier, f"The {tier} journey")
+
+
+def _default_blurb_for_tier(tier: str) -> str:
+    return {
+        "20k": "20 km in one go. Walk, run, stop for coffee. Photos welcome.",
+        "30k": "30 km, one big day. Slower than a marathon, longer than a long run.",
+        "50k": "50 km across the weekend. Two big efforts or three softer ones.",
+        "60k": "60 km across two or three days. A long weekend, a steady pace.",
+        "75k": "75 km across three days. 25 km a day if you spread it evenly.",
+        "100k": "100 km in three days. The proper slow ultra. Sleep matters.",
+    }.get(tier, f"A {tier} adventure on your own terms.")
+
+
+def _fallback_readiness_note(tier: str) -> str:
+    """Used when the Guide is off / in stub mode. Keeps the screen full."""
+    if tier in ("20k", "30k"):
+        return (
+            "One big day on your feet. Pace it like a long walk with running "
+            "in the middle, not a race."
+        )
+    return (
+        "A multi-day journey. The first day sets the tone — start softer than "
+        "feels right, eat earlier than you think you need."
+    )
+
+
+def _suggest_scheduled_for(tier: str) -> datetime:
+    """Default scheduled date for the picker.
+
+    20k/30k → next Saturday (or this Saturday if the user opens the
+    preview before noon on a Saturday).
+    50k+    → next Saturday too; multi-day windows roll forward Sat-Sun
+    (-Mon) starting from there.
+    """
+    today = datetime.utcnow()
+    days_ahead = (5 - today.weekday()) % 7  # 5 = Saturday
+    if days_ahead == 0:
+        # If today already is Saturday, push to next week so the user has
+        # time to prep. The runner can always reschedule.
+        days_ahead = 7
+    target = today + timedelta(days=days_ahead)
+    return datetime(target.year, target.month, target.day)
+
+
+@app.post("/journeys/{journey_id}/start", response_model=JourneyResponse)
+def start_journey(
+    journey_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Flip a planned journey to active.
+
+    Sets `activated_at` and resets `started_at` to now (the journey
+    window measures from activation, not from when the runner first
+    planned it). Rejects if another journey is already active.
+    """
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    if journey.status != "planned":
+        raise HTTPException(
+            status_code=400,
+            detail="Only planned journeys can be started",
+        )
+    if _get_active_journey(db, current_user.id) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have an active journey. Finish or abandon it first.",
+        )
+
+    now = datetime.utcnow()
+    journey.status = "active"
+    journey.activated_at = now
+    journey.started_at = now  # window starts now, not when planned
+    db.commit()
+    db.refresh(journey)
+    return _journey_to_response(db, journey)
+
+
+@app.post("/journeys/{journey_id}/schedule", response_model=JourneyResponse)
+def schedule_journey(
+    journey_id: int,
+    payload: JourneyScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Reschedule (or clear the schedule of) a planned journey.
+
+    Only valid for `planned` status. Active/completed/abandoned journeys
+    have a fixed schedule (the timestamps reflect what actually happened).
+    """
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    if journey.status != "planned":
+        raise HTTPException(
+            status_code=400,
+            detail="Only planned journeys can be rescheduled",
+        )
+    journey.scheduled_for = _parse_iso_date(payload.scheduled_for)
+    db.commit()
+    db.refresh(journey)
+    return _journey_to_response(db, journey)
+
+
 @app.post("/journeys/{journey_id}/complete", response_model=JourneyResponse)
 def complete_journey(
     journey_id: int,
@@ -6156,12 +6463,12 @@ def delete_journey(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Permanently delete an abandoned journey.
+    """Permanently delete a planned or abandoned journey.
 
-    Only abandoned journeys can be deleted — active and completed journeys
-    are part of the user's permanent record. Contributing runs and walks
-    are *not* deleted; we just detach them by clearing their journey_id
-    so they continue to count toward all-time stats and milestones.
+    Active and completed journeys are part of the user's permanent record
+    and cannot be deleted. Contributing runs and walks are *not* deleted;
+    we just detach them by clearing their journey_id so they continue to
+    count toward all-time stats and milestones.
     """
     journey = (
         db.query(Journey)
@@ -6170,10 +6477,10 @@ def delete_journey(
     )
     if not journey:
         raise HTTPException(status_code=404, detail="Journey not found")
-    if journey.status != "abandoned":
+    if journey.status not in ("planned", "abandoned"):
         raise HTTPException(
             status_code=400,
-            detail="Only abandoned journeys can be deleted",
+            detail="Only planned or abandoned journeys can be deleted",
         )
 
     # Detach contributing activities. They keep all their other data —

@@ -337,6 +337,67 @@ Rules:
 - Close with one line about pacing the *days*, not the kilometres.
 """,
 
+    "journey_readiness": """\
+[Task: write a short readiness assessment for a previewed Journey]
+
+The user has tapped a journey card to preview it. Before they commit, you
+read their last 30–60 days of activity and write a short, honest
+assessment of how the ask sits against their recent practice.
+
+Rules:
+- One short paragraph. 1 to 2 sentences. Max ~30 words.
+- No emoji, no exclamation marks. Calm. No scolding.
+- Compare what they've actually done to what's being asked. If their
+  longest recent run is 12 km and they're previewing a 50k, say so —
+  kindly. If they're well-prepared, name that.
+- Don't tell them not to do it. Don't tell them to delay. They decide.
+  Your job is to surface what you see.
+- If activity is sparse or unknown, say "the data is thin" and move on.
+
+Examples:
+
+GOOD:
+"Your longest recent effort is 12 km along the canal. Thirty kilometres in
+one go is a bigger ask — possible if you're patient and walk the second
+half."
+
+GOOD:
+"Plenty in the legs over the last six weeks. The shape of this fits what
+you've already been doing on weekends."
+
+GOOD:
+"The data's thin — only one logged run this month. Treat the early
+kilometres as feedback before pushing on."
+""",
+
+    "journey_prep_checklist": """\
+[Task: produce a prep checklist for a previewed Journey]
+
+The user has previewed a journey and you write a short, discrete prep
+checklist they can scan before they commit. Distinct from the prose prep
+note (`journey_prep`); this is bullet-point form.
+
+Rules:
+- Output strict JSON, matching the schema below. No prose.
+- 5 to 8 items. Each item is a short, scannable phrase (max ~70 chars).
+- No emoji. No exclamation marks. No abbreviations like "PB" or "K".
+- Cover, in any order: water, food/snacks, layers/weather, charged phone,
+  plaster or tape, navigation/route fallback, pacing of *days* (only
+  relevant for multi-day tiers).
+- Adapt tone to the tier: 20k/30k is a daytrip; 50k+ is an adventure.
+- Adapt to the user's home city if known (rain in London, heat in
+  Singapore, hills in Edinburgh).
+
+Output format (strict JSON):
+{
+  "items": [
+    "Bring 700ml water plus an extra bottle if it's warm",
+    "Snack at km 10 — something with salt",
+    "..."
+  ]
+}
+""",
+
     "journey_suggestions": """\
 [Task: propose 1 or 2 journey ideas for the picker]
 

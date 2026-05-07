@@ -590,6 +590,8 @@ JOURNEY_NOTE_MAX_TOKENS = 350
 JOURNEY_BRIEF_MAX_TOKENS = 250
 JOURNEY_PREP_MAX_TOKENS = 350
 JOURNEY_SUGGESTIONS_MAX_TOKENS = 600
+JOURNEY_READINESS_MAX_TOKENS = 120
+JOURNEY_PREP_CHECKLIST_MAX_TOKENS = 400
 
 
 def generate_journey_completion_note(db: Session, user: User, journey: Journey) -> str:
@@ -726,6 +728,124 @@ def generate_journey_suggestions(
         temperature=0.7,
     )
     return _parse_journey_suggestions(raw, tier=tier, target_distance_km=target_distance_km)
+
+
+def generate_journey_readiness(
+    db: Session,
+    user: User,
+    *,
+    tier: str,
+    target_distance_km: float,
+    name: str,
+) -> str:
+    """Short readiness sentence for the JourneyPreviewScreen.
+
+    Honest comparison of recent practice vs. the ask. 1–2 sentences. Used
+    as a guidance line, never a gate — the runner still decides.
+    """
+    context_text, signals = build_user_context(db, user)
+    preview_block = (
+        f"Previewed journey: tier={tier}, target={target_distance_km:.0f} km, "
+        f"window={1 if tier in ('20k', '30k') else 3} day(s), name=\"{name}\"."
+    )
+    full_context = context_text + "\n\n" + preview_block
+
+    system = coach_prompts.compose_system_prompt(
+        task="journey_readiness",
+        activity="journey",
+        stage=signals["stage"],
+        user_context=full_context,
+    )
+    user_message = (
+        "Write the short readiness assessment for this previewed journey. "
+        "1 to 2 sentences. Calm. No scolding."
+    )
+    text = llm.complete(
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=JOURNEY_READINESS_MAX_TOKENS,
+        temperature=0.5,
+    )
+    return _clean_text(text)
+
+
+def generate_journey_prep_checklist(
+    db: Session,
+    user: User,
+    *,
+    tier: str,
+    target_distance_km: float,
+    name: str,
+) -> List[str]:
+    """Discrete prep checklist (5–8 short items) for the preview screen.
+
+    On any parse failure falls back to a generic but always-safe checklist
+    — never an empty list, so the UI always has something to render.
+    """
+    context_text, signals = build_user_context(db, user)
+    preview_block = (
+        f"Previewed journey: tier={tier}, target={target_distance_km:.0f} km, "
+        f"window={1 if tier in ('20k', '30k') else 3} day(s), name=\"{name}\"."
+    )
+    full_context = context_text + "\n\n" + preview_block
+
+    system = coach_prompts.compose_system_prompt(
+        task="journey_prep_checklist",
+        activity="journey",
+        stage="journeying",
+        user_context=full_context,
+    )
+    user_message = (
+        f"Produce the prep checklist for this {tier} journey. "
+        "Output JSON only."
+    )
+    raw = llm.complete(
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=JOURNEY_PREP_CHECKLIST_MAX_TOKENS,
+        temperature=0.5,
+    )
+    items = _parse_journey_prep_checklist(raw)
+    return items or _fallback_prep_checklist(tier)
+
+
+def _parse_journey_prep_checklist(raw: str) -> List[str]:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:]
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("journey_prep_checklist JSON parse failed; using fallback")
+        return []
+    items = parsed.get("items") if isinstance(parsed, dict) else None
+    if not isinstance(items, list):
+        return []
+    cleaned: List[str] = []
+    for item in items[:12]:
+        if isinstance(item, str):
+            line = item.strip()
+            if line:
+                cleaned.append(line[:120])
+    return cleaned
+
+
+def _fallback_prep_checklist(tier: str) -> List[str]:
+    """Always-safe checklist when the LLM is in stub mode or parse fails."""
+    base = [
+        "Carry water — refill at any tap or shop along the way",
+        "Snack with salt for the back half (banana, savoury bar)",
+        "Layer for the weather; the wind matters more than the temperature",
+        "Charge the phone overnight and bring a small power bank",
+        "Tape or plaster for hot spots — pack one even if you never use it",
+        "Plan a fallback: a route home if a body part complains",
+    ]
+    if tier in ("50k", "60k", "75k", "100k"):
+        base.append("Pace the days, not the kilometres — early days set the rest")
+        base.append("Eat earlier than you feel like and again at the halfway")
+    return base
 
 
 def _parse_journey_suggestions(

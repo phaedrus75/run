@@ -259,9 +259,42 @@ is the experience we originally promised. Tier C is polish.
 - [x] **B.5** — Guide-suggested journey ideas in `StartJourneyScreen` (`/coach/journey-suggestions?tier=...`)
 - [x] **B.6** — journey-aware in-run voice script (auto-promotes activity layer + injects journey progress into plan)
 - [x] **C.7** — "Check in with your Guide" entry point on active `JourneyDetailScreen` (chat is journey-aware globally)
+- [x] **D.1** — **Plan-then-start lifecycle** — preview → plan → schedule → start, with readiness assessment + discrete prep checklist (`POST /journeys/preview`, `POST /journeys/{id}/start`, `POST /journeys/{id}/schedule`); planned journeys live alongside completed ones, many planned + one active per user
 - [ ] **C.8** — photo-aware completion note (deferred — Claude vision, ~5× cost)
 
-_Last updated: feat(guide) ship. Edit freely._
+_Last updated: plan-then-start flow lands. Edit freely._
+
+### 9.1 Plan-then-start lifecycle (new)
+
+Tapping a Guide suggestion or static template card no longer creates a
+journey. The flow now is:
+
+```
+StartJourney  →  JourneyPreview  →  JourneyDetail (planned)  →  Active
+   pick           readiness +          countdown +
+   tier +         checklist +          start/reschedule/
+   card           date picker          cancel
+                  → "Plan it"
+                  → "Start now"
+```
+
+Backend additions:
+
+- `journeys.status` adds `"planned"` (the new default).
+- `journeys.scheduled_for`, `journeys.activated_at` columns.
+- `journeys.readiness_note`, `journeys.prep_checklist_json` columns.
+- `coach_prompts.journey_readiness` task — 1–2 honest sentences.
+- `coach_prompts.journey_prep_checklist` task — 5–8 discrete items.
+- `POST /journeys/preview` — read-only payload for the preview screen.
+- `POST /journeys/{id}/start` — flips `planned → active`, resets the
+  attribution window so it measures from activation.
+- `POST /journeys/{id}/schedule` — reschedule before activation.
+- `DELETE /journeys/{id}` now allows planned journeys (calling it
+  "cancel" in the UI). Active and completed journeys still cannot be
+  deleted.
+
+Constraint: many planned + one active per user. Auto-attribution still
+only fires for active journeys.
 
 ---
 
@@ -273,8 +306,11 @@ _Last updated: feat(guide) ship. Edit freely._
 | Home — Ask the Guide | Free chat | Whenever | ~600/turn |
 | Run/Walk summary + detail | Guide's note | After save | ~250, cached on activity |
 | In-run voice | TTS at start/km/halfway/finish | When you start a guided run | ~1200 once, cached |
-| Active journey strip | Active journey + today's brief | While a journey is active | brief: 1/day |
+| Activity strip — active | Progress + today's brief | While a journey is active | brief: 1/day |
+| Activity strip — planned | Countdown to nearest planned journey | Whenever no active is running | none (re-uses preview content) |
+| Journey detail (planned) | Readiness + prep checklist + start/reschedule | Planned status only | content cached at preview |
 | Journey detail (active) | "Check in with your Guide" → chat | Active journeys only | shared chat budget |
 | Journey detail (completed) | Guide's debrief note | On completion | 1/journey |
 | Start journey | "From your Guide" suggestions | Tier change | 1/tier change/day (suggested) |
-| 50k+ creation | Prep note auto-stored on `plan_summary` | At creation | 1/journey |
+| Journey preview (NEW) | Readiness, prep checklist, date picker | Card tap | 2 calls/preview (read + checklist) |
+| 50k+ creation | Prep note auto-stored on `plan_summary` | At commit | 1/journey |

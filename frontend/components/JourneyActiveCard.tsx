@@ -25,9 +25,21 @@ interface Props {
   refreshKey?: number;
 }
 
+function parseSchedule(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const parts = s.split('-');
+  if (parts.length !== 3) return null;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return null;
+  return new Date(y, m - 1, d);
+}
+
 export function JourneyActiveCard({ onPress, refreshKey }: Props) {
   const [loading, setLoading] = useState(true);
   const [journey, setJourney] = useState<Journey | null>(null);
+  const [mode, setMode] = useState<'active' | 'planned'>('active');
   const [todayBrief, setTodayBrief] = useState<JourneyDayBrief | null>(null);
 
   useEffect(() => {
@@ -35,25 +47,55 @@ export function JourneyActiveCard({ onPress, refreshKey }: Props) {
     setLoading(true);
     (async () => {
       try {
-        const j = await journeyApi.getActive();
+        // Active journey wins. If there's none, surface the nearest
+        // upcoming planned journey so the runner sees what's on the
+        // to-do list without having to switch tabs.
+        const active = await journeyApi.getActive();
         if (cancelled) return;
-        setJourney(j);
-        if (j && (j.max_days || 1) > 1) {
-          // Multi-day journey: pull today's Guide brief if it exists.
-          try {
-            const briefs = await journeyApi.listDayBriefs(j.id);
-            const day = j.days_active || 1;
-            const todays =
-              briefs.find((b) => b.day_index === day) ?? briefs[briefs.length - 1] ?? null;
-            if (!cancelled) setTodayBrief(todays);
-          } catch {
-            if (!cancelled) setTodayBrief(null);
+        if (active) {
+          setJourney(active);
+          setMode('active');
+          if ((active.max_days || 1) > 1) {
+            try {
+              const briefs = await journeyApi.listDayBriefs(active.id);
+              const day = active.days_active || 1;
+              const todays =
+                briefs.find((b) => b.day_index === day) ??
+                briefs[briefs.length - 1] ??
+                null;
+              if (!cancelled) setTodayBrief(todays);
+            } catch {
+              if (!cancelled) setTodayBrief(null);
+            }
+          } else if (!cancelled) {
+            setTodayBrief(null);
           }
-        } else {
-          if (!cancelled) setTodayBrief(null);
+          return;
         }
-      } catch {
-        if (!cancelled) setJourney(null);
+
+        // No active — fall back to the soonest planned journey.
+        try {
+          const all = await journeyApi.list();
+          if (cancelled) return;
+          const upcoming = all
+            .filter((j) => j.status === 'planned')
+            .sort((x, y) => {
+              const xd = x.scheduled_for || '';
+              const yd = y.scheduled_for || '';
+              if (!xd && !yd) return 0;
+              if (!xd) return 1;
+              if (!yd) return -1;
+              return xd.localeCompare(yd);
+            });
+          setJourney(upcoming[0] || null);
+          setMode('planned');
+          setTodayBrief(null);
+        } catch {
+          if (!cancelled) {
+            setJourney(null);
+            setTodayBrief(null);
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -72,6 +114,51 @@ export function JourneyActiveCard({ onPress, refreshKey }: Props) {
   }
 
   if (!journey) return null;
+
+  if (mode === 'planned') {
+    const date = parseSchedule(journey.scheduled_for);
+    let dayLabel = 'No date set';
+    if (date) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.round((date.getTime() - today.getTime()) / 86400000);
+      dayLabel =
+        days <= 0
+          ? 'Today'
+          : days === 1
+          ? 'Tomorrow'
+          : days < 14
+          ? `In ${days} days`
+          : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+    return (
+      <Pressable
+        onPress={() => onPress(journey)}
+        style={({ pressed }) => [
+          styles.card,
+          styles.cardPlanned,
+          { transform: [{ scale: pressed ? 0.99 : 1 }] },
+        ]}
+      >
+        <View style={styles.headerRow}>
+          <Ionicons name="bookmark-outline" size={14} color={colors.warning} />
+          <Text style={styles.labelPlanned}>Planned journey</Text>
+          <View style={styles.tierBadge}>
+            <Text style={styles.tierBadgeText}>{journey.tier}</Text>
+          </View>
+        </View>
+        <Text style={styles.name}>{journey.name}</Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaText}>
+            {journey.target_distance_km.toFixed(0)} km
+            {' · '}
+            {journey.max_days <= 1 ? '1 day' : `up to ${journey.max_days} days`}
+          </Text>
+          <Text style={styles.metaTextWarning}>{dayLabel}</Text>
+        </View>
+      </Pressable>
+    );
+  }
 
   const pct = Math.max(0, Math.min(100, journey.progress_percent || 0));
   return (
@@ -133,6 +220,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.lg,
   },
+  cardPlanned: {
+    borderLeftColor: colors.warning,
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -142,6 +232,14 @@ const styles = StyleSheet.create({
   label: {
     fontSize: typography.sizes.xs,
     color: colors.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    fontWeight: typography.weights.semibold,
+    flex: 1,
+  },
+  labelPlanned: {
+    fontSize: typography.sizes.xs,
+    color: colors.warning,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     fontWeight: typography.weights.semibold,
@@ -190,6 +288,13 @@ const styles = StyleSheet.create({
   metaTextSecondary: {
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
+  },
+  metaTextWarning: {
+    fontSize: typography.sizes.xs,
+    color: colors.warning,
+    fontWeight: typography.weights.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   briefText: {
     marginTop: spacing.sm,

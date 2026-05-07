@@ -34,6 +34,7 @@ interface Props {
 
 export function JourneysScreen({ navigation, embedded }: Props) {
   const [active, setActive] = useState<Journey | null>(null);
+  const [planned, setPlanned] = useState<Journey[]>([]);
   const [history, setHistory] = useState<Journey[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,8 +46,22 @@ export function JourneysScreen({ navigation, embedded }: Props) {
         journeyApi.list().catch(() => []),
       ]);
       setActive(a);
-      // Filter out the active journey from history; keep completed + abandoned.
-      setHistory(all.filter((j) => j.status !== 'active'));
+      // Planned: soonest scheduled first, undated last.
+      const plannedItems = all
+        .filter((j) => j.status === 'planned')
+        .sort((x, y) => {
+          const xd = x.scheduled_for || '';
+          const yd = y.scheduled_for || '';
+          if (!xd && !yd) return 0;
+          if (!xd) return 1;
+          if (!yd) return -1;
+          return xd.localeCompare(yd);
+        });
+      setPlanned(plannedItems);
+      // History: completed + abandoned.
+      setHistory(
+        all.filter((j) => j.status === 'completed' || j.status === 'abandoned'),
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -106,30 +121,49 @@ export function JourneysScreen({ navigation, embedded }: Props) {
       >
         <Text style={styles.tagline}>The slow ultra.</Text>
         <Text style={styles.intro}>
-          20k and 30k in one go. 50k, 75k and 100k spread across up to three days. Every run
-          and walk you save inside the window counts toward the line.
+          20k and 30k in one go. 50k, 60k, 75k and 100k spread across up to three days.
+          Every run and walk you save inside the window counts toward the line.
         </Text>
 
         {active ? (
           <ActiveBlock journey={active} onPress={() => goToDetail(active)} />
-        ) : (
-          <Pressable
-            onPress={startNew}
-            style={({ pressed }) => [
-              styles.startCard,
-              { transform: [{ scale: pressed ? 0.98 : 1 }] },
-            ]}
-          >
-            <View style={styles.startIcon}>
-              <Ionicons name="play" size={20} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.startTitle}>Start a journey</Text>
-              <Text style={styles.startSub}>20k → 100k. Pick your distance.</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textOnPrimary} />
-          </Pressable>
-        )}
+        ) : null}
+
+        {/* Plan-a-new-journey CTA. Always visible — even with planned journeys
+         * already on the list, the runner can stack adventures. */}
+        <Pressable
+          onPress={startNew}
+          style={({ pressed }) => [
+            active ? styles.plannedNewCard : styles.startCard,
+            { transform: [{ scale: pressed ? 0.98 : 1 }] },
+          ]}
+        >
+          <View style={active ? styles.plannedNewIcon : styles.startIcon}>
+            <Ionicons name="add" size={20} color={active ? colors.primary : '#fff'} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={active ? styles.plannedNewTitle : styles.startTitle}>
+              Plan a new journey
+            </Text>
+            <Text style={active ? styles.plannedNewSub : styles.startSub}>
+              20k → 100k. Pick a date, prep first, start when ready.
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={active ? colors.textLight : colors.textOnPrimary}
+          />
+        </Pressable>
+
+        {planned.length > 0 ? (
+          <>
+            <Text style={styles.section}>Planned</Text>
+            {planned.map((j) => (
+              <PlannedRow key={j.id} journey={j} onPress={() => goToDetail(j)} />
+            ))}
+          </>
+        ) : null}
 
         {history.length > 0 && (
           <>
@@ -170,6 +204,61 @@ export function JourneysScreen({ navigation, embedded }: Props) {
       </ScrollView>
     </Shell>
   );
+}
+
+function PlannedRow({ journey, onPress }: { journey: Journey; onPress: () => void }) {
+  const date = journey.scheduled_for ? parsePlannedDate(journey.scheduled_for) : null;
+  const days = date ? Math.round((date.getTime() - startOfToday().getTime()) / 86400000) : null;
+  const dateLabel = date
+    ? days != null && days <= 0
+      ? 'Today'
+      : days === 1
+      ? 'Tomorrow'
+      : days != null && days < 7
+      ? `${days} days`
+      : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : 'No date';
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.plannedRow,
+        { transform: [{ scale: pressed ? 0.99 : 1 }] },
+      ]}
+    >
+      <View style={styles.plannedTier}>
+        <Text style={styles.plannedTierText}>{journey.tier}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.plannedName} numberOfLines={1}>
+          {journey.name}
+        </Text>
+        <Text style={styles.plannedSub}>
+          {journey.target_distance_km.toFixed(0)} km
+          {' · '}
+          {journey.max_days <= 1 ? '1 day' : `up to ${journey.max_days} days`}
+        </Text>
+      </View>
+      <Text style={styles.plannedDate}>{dateLabel}</Text>
+      <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+    </Pressable>
+  );
+}
+
+function parsePlannedDate(s: string): Date | null {
+  const parts = s.split('-');
+  if (parts.length !== 3) return null;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return null;
+  return new Date(y, m - 1, d);
+}
+
+function startOfToday(): Date {
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return t;
 }
 
 function ActiveBlock({ journey, onPress }: { journey: Journey; onPress: () => void }) {
@@ -274,6 +363,79 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     fontSize: typography.sizes.sm,
     marginTop: 2,
+  },
+  plannedNewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: spacing.md,
+    ...shadows.small,
+  },
+  plannedNewIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plannedNewTitle: {
+    color: colors.text,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+  },
+  plannedNewSub: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
+    marginTop: 2,
+  },
+  plannedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.warning,
+    ...shadows.small,
+  },
+  plannedTier: {
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  plannedTierText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    letterSpacing: 0.5,
+  },
+  plannedName: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+  },
+  plannedSub: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  plannedDate: {
+    fontSize: typography.sizes.xs,
+    color: colors.warning,
+    fontWeight: typography.weights.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginRight: spacing.xs,
   },
   activeCard: {
     backgroundColor: colors.surface,

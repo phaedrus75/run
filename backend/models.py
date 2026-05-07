@@ -677,12 +677,16 @@ class Journey(Base):
     complete or abandoned, but new runs/walks no longer auto-attribute to
     them.
 
-    Status:
-    - active     : within (or just past) the journey window
-    - completed  : the user marked the journey done (auto on hitting target)
-    - abandoned  : the user explicitly bailed out
+    Lifecycle:
+    - planned    : on the to-do list, with an optional scheduled_for date.
+                   Not attributing yet. The user will tap "Start it now"
+                   when they're ready (usually on the scheduled day).
+    - active     : within (or just past) the journey window. Auto-attributing
+                   runs and walks to its accumulated_km.
+    - completed  : the user marked the journey done (auto on hitting target).
+    - abandoned  : the user explicitly bailed out.
 
-    Only one `active` journey per user at a time.
+    A user can hold many `planned` journeys + one `active` at a time.
     """
     __tablename__ = "journeys"
 
@@ -694,13 +698,27 @@ class Journey(Base):
     # Hard time-window for attribution: 1 for one-go journeys (20k/30k),
     # 3 for multi-day journeys (50k/75k/100k).
     max_days = Column(Integer, nullable=False, default=1)
-    status = Column(String, nullable=False, default="active", index=True)
+    status = Column(String, nullable=False, default="planned", index=True)
     plan_summary = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     # 🌅 Guide-written reflection on the completed journey. Generated once on
     # auto-complete (or manual complete) and immutable thereafter. NULL while
     # the journey is active or abandoned.
     completion_note = Column(Text, nullable=True)
+    # 🌅 Guide-written readiness assessment, generated at preview time and
+    # persisted on the journey. 1–2 sentences: what we noticed in the user's
+    # recent activity vs. the ask. Shown on the planned journey detail.
+    readiness_note = Column(Text, nullable=True)
+    # 🌅 Discrete prep checklist (JSON array of short strings). Generated at
+    # preview time. Distinct from `plan_summary`, which is the prose blurb.
+    prep_checklist_json = Column(Text, nullable=True)
+    # 🗓 Optional planned date (calendar date the user means to start). Stored
+    # as a DateTime at midnight UTC of the chosen day; only the date portion
+    # is meaningful. NULL if the user just hit "start now".
+    scheduled_for = Column(DateTime, nullable=True)
+    # 🗓 When the user actually flipped from planned → active. NULL while
+    # planned. For journeys that go straight to active, equals started_at.
+    activated_at = Column(DateTime, nullable=True)
     started_at = Column(DateTime, server_default=func.now(), nullable=False)
     completed_at = Column(DateTime, nullable=True)
 

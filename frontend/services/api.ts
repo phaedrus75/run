@@ -1392,12 +1392,22 @@ export interface Journey {
   target_distance_km: number;
   /** Hard window for attribution: 1 for 20k/30k, 3 for 50k/60k/75k/100k. */
   max_days: number;
-  /** "active" | "completed" | "abandoned" */
+  /** "planned" | "active" | "completed" | "abandoned" */
   status: string;
   plan_summary: string | null;
   notes: string | null;
   /** Guide-written debrief, only set on completed journeys. */
   completion_note: string | null;
+  /** Guide-written readiness assessment, generated at preview/create. */
+  readiness_note: string | null;
+  /** Discrete prep checklist items (5–8 short phrases). Empty for legacy
+   *  journeys created before the plan-then-start flow. */
+  prep_checklist: string[];
+  /** Optional ISO date `YYYY-MM-DD` for the planned start day. Null for
+   *  journeys without a schedule, and irrelevant for active/completed ones. */
+  scheduled_for: string | null;
+  /** When the user actually flipped from planned → active. */
+  activated_at: string | null;
   started_at: string;
   completed_at: string | null;
   accumulated_km: number;
@@ -1410,15 +1420,52 @@ export interface Journey {
   is_expired: boolean;
 }
 
+/** Preview payload returned from `POST /journeys/preview`. The frontend
+ *  renders this on `JourneyPreviewScreen` then sends the same content
+ *  back via `journeyApi.create(...)` if the user commits. */
+export interface JourneyPreview {
+  tier: string;
+  target_distance_km: number;
+  max_days: number;
+  name: string;
+  plan_summary: string;
+  readiness_note: string;
+  prep_checklist: string[];
+  /** ISO date `YYYY-MM-DD`. Default: next Saturday. */
+  suggested_scheduled_for: string;
+  is_stub: boolean;
+}
+
 export const journeyApi = {
   /** Three starter templates the user can pick from when starting a journey. */
   listTemplates: (): Promise<JourneyTemplate[]> => apiFetch('/journeys/templates'),
 
-  /** Start a new active journey. Fails if another journey is already active. */
-  create: (req: { name: string; tier: string; plan_summary?: string }): Promise<Journey> =>
+  /** Generate the JourneyPreviewScreen payload for a candidate journey.
+   *  Read-only — nothing is persisted. Always returns something; falls
+   *  back to a generic readiness + checklist when the Guide is off. */
+  preview: (req: {
+    tier: string;
+    name: string;
+    blurb?: string;
+  }): Promise<JourneyPreview> =>
+    apiFetch('/journeys/preview', { method: 'POST', body: JSON.stringify(req) }),
+
+  /** Plan or start a new journey. Defaults to `as_planned: true` — the
+   *  new flow is preview → plan → start later. Pass `as_planned: false`
+   *  to flip straight to active. Many planned journeys are allowed; only
+   *  one active per user. */
+  create: (req: {
+    name: string;
+    tier: string;
+    plan_summary?: string;
+    as_planned?: boolean;
+    scheduled_for?: string | null;
+    readiness_note?: string;
+    prep_checklist?: string[];
+  }): Promise<Journey> =>
     apiFetch('/journeys', { method: 'POST', body: JSON.stringify(req) }),
 
-  /** All journeys (active, completed, abandoned) for the current user. */
+  /** All journeys (planned, active, completed, abandoned) for the current user. */
   list: (): Promise<Journey[]> => apiFetch('/journeys'),
 
   /** The currently active journey, or null. */
@@ -1431,6 +1478,19 @@ export const journeyApi = {
   update: (id: number, patch: { name?: string; notes?: string }): Promise<Journey> =>
     apiFetch(`/journeys/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 
+  /** Flip a planned journey to active. Sets the activation timestamp and
+   *  resets the window so it measures from now. Fails if another journey
+   *  is already active. */
+  start: (id: number): Promise<Journey> =>
+    apiFetch(`/journeys/${id}/start`, { method: 'POST' }),
+
+  /** Reschedule (or clear the schedule of) a planned journey. */
+  schedule: (id: number, scheduled_for: string | null): Promise<Journey> =>
+    apiFetch(`/journeys/${id}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify({ scheduled_for }),
+    }),
+
   /** Mark a journey complete. */
   complete: (id: number): Promise<Journey> =>
     apiFetch(`/journeys/${id}/complete`, { method: 'POST' }),
@@ -1439,9 +1499,9 @@ export const journeyApi = {
   abandon: (id: number): Promise<Journey> =>
     apiFetch(`/journeys/${id}/abandon`, { method: 'POST' }),
 
-  /** Permanently delete an abandoned journey. Active and completed journeys
-   * cannot be deleted — the server returns 400 for those. Contributing
-   * runs and walks are detached, not removed. */
+  /** Permanently delete a planned or abandoned journey. Active and completed
+   *  journeys cannot be deleted — the server returns 400 for those.
+   *  Contributing runs and walks are detached, not removed. */
   delete: (id: number): Promise<{ ok: boolean; deleted_id: number }> =>
     apiFetch(`/journeys/${id}`, { method: 'DELETE' }),
 

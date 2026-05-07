@@ -2,11 +2,17 @@
  * 🏁 START JOURNEY SCREEN
  * ========================
  *
- * The build flow for a new Journey. The user picks a tier (20/30/50/75/100k)
- * and a starter template (or writes a custom name) and confirms.
+ * The browse-and-pick flow for a new Journey. The user picks a tier
+ * (20/30/50/60/75/100k) and a starter template — either a Guide
+ * suggestion, a static template, or a custom name — and taps "Preview".
  *
- * 20k and 30k are one-go journeys (single calendar day); 50k, 75k, 100k
- * spread across up to three days.
+ * Selecting a card no longer creates a journey: it navigates to
+ * `JourneyPreviewScreen`, where the user reads the readiness assessment,
+ * the prep checklist, and picks a date before deciding to plan it or
+ * start it now.
+ *
+ * 20k and 30k are one-go journeys (single calendar day); 50k, 60k, 75k,
+ * 100k spread across up to three days.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -48,12 +54,8 @@ export function StartJourneyScreen({ navigation }: Props) {
   const [allTemplates, setAllTemplates] = useState<JourneyTemplate[]>([]);
   const [guideSuggestions, setGuideSuggestions] = useState<JourneyTemplate[]>([]);
   const [guideLoading, setGuideLoading] = useState(false);
-  /** -1.. = picked from `guideSuggestions[idx]`; >=0 maps into `templates`. */
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [selectedSource, setSelectedSource] = useState<'guide' | 'template' | null>(null);
   const [customName, setCustomName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,39 +99,24 @@ export function StartJourneyScreen({ navigation }: Props) {
   const tierMeta = TIERS.find((t) => t.id === tier)!;
   const daysCopy = tierMeta.days === 1 ? 'in one go' : `across up to ${tierMeta.days} days`;
 
-  const start = async () => {
-    let tpl: JourneyTemplate | null = null;
-    if (selectedIdx != null) {
-      if (selectedSource === 'guide') tpl = guideSuggestions[selectedIdx] ?? null;
-      else if (selectedSource === 'template') tpl = templates[selectedIdx] ?? null;
-    }
-    const name = customName.trim() || tpl?.name || '';
+  /** Navigate to the preview screen for the selected card / custom name.
+   *  Tapping a card no longer creates a journey — preview is the new gate. */
+  const goToPreview = (tpl: JourneyTemplate | null, customNameOverride?: string) => {
+    const name = (customNameOverride ?? customName).trim() || tpl?.name || '';
     if (!name) {
-      Alert.alert('Pick a name', 'Choose one of the suggestions or write your own.');
+      Alert.alert(
+        'Pick one',
+        'Tap a suggestion or write your own name, then we can preview it.',
+      );
       return;
     }
-    setSubmitting(true);
-    try {
-      const journey = await journeyApi.create({
-        name,
-        tier,
-        plan_summary: tpl?.blurb,
-      });
-      navigation.replace('JourneyDetail', { journeyId: journey.id });
-    } catch (e: any) {
-      const msg = String(e?.message || '');
-      if (/already have an active/i.test(msg)) {
-        Alert.alert(
-          'Already on a journey',
-          'You already have an active journey. Finish or abandon it before starting another.',
-        );
-      } else {
-        Alert.alert('Could not start', msg || 'Try again in a moment.');
-      }
-    } finally {
-      setSubmitting(false);
-    }
+    navigation.navigate('JourneyPreview', {
+      tier,
+      name,
+      blurb: tpl?.blurb,
+    });
   };
+
 
   if (loading) {
     return (
@@ -158,8 +145,9 @@ export function StartJourneyScreen({ navigation }: Props) {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.heading}>The slow ultra.</Text>
           <Text style={styles.sub}>
-            20k and 30k are one big day. 50k, 75k and 100k can spread across up to three days.
-            Every run and walk you save inside the window counts toward the line.
+            20k and 30k are one big day. 50k, 60k, 75k and 100k can spread across up to
+            three days. Tap any card to see the readiness check, prep, and pick a date —
+            nothing starts until you commit.
           </Text>
 
           <Text style={styles.section}>Distance</Text>
@@ -169,11 +157,7 @@ export function StartJourneyScreen({ navigation }: Props) {
               return (
                 <Pressable
                   key={t.id}
-                  onPress={() => {
-                    setTier(t.id);
-                    setSelectedIdx(null);
-                    setSelectedSource(null);
-                  }}
+                  onPress={() => setTier(t.id)}
                   style={({ pressed }) => [
                     styles.tierChip,
                     selected && styles.tierChipSelected,
@@ -209,36 +193,23 @@ export function StartJourneyScreen({ navigation }: Props) {
                 <Text style={styles.guideSection}>From your Guide</Text>
               </View>
               <View style={styles.cardList}>
-                {guideSuggestions.map((tpl, idx) => {
-                  const selected =
-                    selectedSource === 'guide' && selectedIdx === idx;
-                  return (
-                    <Pressable
-                      key={`guide-${tpl.name}`}
-                      onPress={() => {
-                        setSelectedIdx(idx);
-                        setSelectedSource('guide');
-                        if (!customName) setCustomName('');
-                      }}
-                      style={({ pressed }) => [
-                        styles.tplCard,
-                        styles.guideCard,
-                        selected && styles.tplCardSelected,
-                        { transform: [{ scale: pressed ? 0.99 : 1 }] },
-                      ]}
-                    >
-                      <View style={styles.tplHeader}>
-                        <Text style={[styles.tplName, selected && styles.tplNameSelected]}>
-                          {tpl.name}
-                        </Text>
-                        {selected ? (
-                          <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                        ) : null}
-                      </View>
-                      <Text style={styles.tplBlurb}>{tpl.blurb}</Text>
-                    </Pressable>
-                  );
-                })}
+                {guideSuggestions.map((tpl, idx) => (
+                  <Pressable
+                    key={`guide-${tpl.name}`}
+                    onPress={() => goToPreview(tpl)}
+                    style={({ pressed }) => [
+                      styles.tplCard,
+                      styles.guideCard,
+                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                    ]}
+                  >
+                    <View style={styles.tplHeader}>
+                      <Text style={styles.tplName}>{tpl.name}</Text>
+                      <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                    </View>
+                    <Text style={styles.tplBlurb}>{tpl.blurb}</Text>
+                  </Pressable>
+                ))}
               </View>
             </>
           ) : null}
@@ -254,77 +225,55 @@ export function StartJourneyScreen({ navigation }: Props) {
             </View>
           ) : (
             <View style={styles.cardList}>
-              {templates.map((tpl, idx) => {
-                const selected =
-                  selectedSource === 'template' && selectedIdx === idx;
-                return (
-                  <Pressable
-                    key={tpl.name}
-                    onPress={() => {
-                      setSelectedIdx(idx);
-                      setSelectedSource('template');
-                      if (!customName) setCustomName('');
-                    }}
-                    style={({ pressed }) => [
-                      styles.tplCard,
-                      selected && styles.tplCardSelected,
-                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
-                    ]}
-                  >
-                    <View style={styles.tplHeader}>
-                      <Text
-                        style={[styles.tplName, selected && styles.tplNameSelected]}
-                      >
-                        {tpl.name}
-                      </Text>
-                      {selected ? (
-                        <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                      ) : null}
-                    </View>
-                    <Text style={styles.tplBlurb}>{tpl.blurb}</Text>
-                  </Pressable>
-                );
-              })}
+              {templates.map((tpl) => (
+                <Pressable
+                  key={tpl.name}
+                  onPress={() => goToPreview(tpl)}
+                  style={({ pressed }) => [
+                    styles.tplCard,
+                    { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                  ]}
+                >
+                  <View style={styles.tplHeader}>
+                    <Text style={styles.tplName}>{tpl.name}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                  </View>
+                  <Text style={styles.tplBlurb}>{tpl.blurb}</Text>
+                </Pressable>
+              ))}
             </View>
           )}
 
           <Text style={styles.section}>Or name your own</Text>
           <TextInput
             value={customName}
-            onChangeText={(t) => {
-              setCustomName(t);
-              if (t.length > 0) {
-                setSelectedIdx(null);
-                setSelectedSource(null);
-              }
-            }}
+            onChangeText={(t) => setCustomName(t)}
             placeholder="The Friday twenty / Park rounds / etc."
             placeholderTextColor={colors.textLight}
             style={styles.input}
             maxLength={120}
           />
-        </ScrollView>
+          {customName.trim().length > 0 ? (
+            <Pressable
+              onPress={() => goToPreview(null)}
+              style={({ pressed }) => [
+                styles.previewCustomBtn,
+                { transform: [{ scale: pressed ? 0.98 : 1 }] },
+              ]}
+            >
+              <Ionicons name="arrow-forward" size={16} color={colors.primary} />
+              <Text style={styles.previewCustomText}>Preview “{customName.trim()}”</Text>
+            </Pressable>
+          ) : null}
 
-        <View style={styles.footer}>
-          <Pressable
-            onPress={() => void start()}
-            disabled={submitting}
-            style={({ pressed }) => [
-              styles.startBtn,
-              submitting && { opacity: 0.6 },
-              { transform: [{ scale: pressed ? 0.97 : 1 }] },
-            ]}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="play" size={18} color="#fff" />
-                <Text style={styles.startBtnText}>Begin the journey</Text>
-              </>
-            )}
-          </Pressable>
-        </View>
+          <View style={styles.footerNote}>
+            <Ionicons name="information-circle-outline" size={14} color={colors.textLight} />
+            <Text style={styles.footerNoteText}>
+              Tapping a card takes you to the preview — readiness, prep checklist, date.
+              The journey only starts when you say so.
+            </Text>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -494,24 +443,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
-  },
-  startBtn: {
+  previewCustomBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: radius.lg,
-    ...shadows.small,
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
   },
-  startBtnText: {
-    color: '#fff',
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
+  previewCustomText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.primary,
+  },
+  footerNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.xs,
+  },
+  footerNoteText: {
+    flex: 1,
+    fontSize: typography.sizes.xs,
+    color: colors.textLight,
+    lineHeight: 16,
   },
 });
