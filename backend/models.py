@@ -664,29 +664,36 @@ class CoachTodayCard(Base):
 
 
 class Journey(Base):
-    """🌅 Slow ultra — a multi-day walk-and-run adventure with a target distance.
+    """🌅 Slow ultra — a single big day, or a 2–3 day adventure.
 
-    A Journey is the brand's "slow ultra" container: 20k → 30k → 50k → 100k
-    accumulated across runs and walks over many days, weeks if needed. The
-    user starts one, sees a single soft "Today" recommendation while it's
-    active, and individual runs/walks earn progress when they reference the
-    journey id.
+    Two flavours:
+    - 20k / 30k → "one go" journeys (max_days = 1). The runner sets out for
+      one big day. All activities in that calendar day count toward the line.
+    - 50k / 75k / 100k → multi-day journeys (max_days = 3). The runner can
+      split the distance across up to three calendar days.
 
-    Phase 5 ships the 20k tier; later tiers reuse the same model with a
-    different `tier` value.
+    A journey is "expired" (past its window) when now > started_at +
+    max_days. Expired journeys remain `active` until the user marks them
+    complete or abandoned, but new runs/walks no longer auto-attribute to
+    them.
 
     Status:
-    - active     : the user is currently on this journey (only one at a time)
-    - completed  : the cumulative distance reached the target
-    - abandoned  : the user gave up the journey (still readable in history)
+    - active     : within (or just past) the journey window
+    - completed  : the user marked the journey done (auto on hitting target)
+    - abandoned  : the user explicitly bailed out
+
+    Only one `active` journey per user at a time.
     """
     __tablename__ = "journeys"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
     name = Column(String, nullable=False)
-    tier = Column(String, nullable=False, index=True)  # "20k" | "30k" | "50k" | "100k"
+    tier = Column(String, nullable=False, index=True)  # "20k" | "30k" | "50k" | "75k" | "100k"
     target_distance_km = Column(Float, nullable=False)
+    # Hard time-window for attribution: 1 for one-go journeys (20k/30k),
+    # 3 for multi-day journeys (50k/75k/100k).
+    max_days = Column(Integer, nullable=False, default=1)
     status = Column(String, nullable=False, default="active", index=True)
     plan_summary = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)

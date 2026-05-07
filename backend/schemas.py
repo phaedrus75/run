@@ -334,13 +334,23 @@ class CoachRunScriptResponse(BaseModel):
 # ==========================================
 
 
-# Tier → target distance lookup. The 20k tier ships with Phase 5; later
-# tiers reuse the same model.
+# Tier → target distance lookup. 20k/30k are one-go journeys (single
+# calendar day window). 50k/75k/100k can spread across up to 3 days.
 JOURNEY_TIERS = {
     "20k": 20.0,
     "30k": 30.0,
     "50k": 50.0,
+    "75k": 75.0,
     "100k": 100.0,
+}
+
+# Tier → max attribution window in calendar days.
+JOURNEY_TIER_MAX_DAYS = {
+    "20k": 1,
+    "30k": 1,
+    "50k": 3,
+    "75k": 3,
+    "100k": 3,
 }
 
 
@@ -377,6 +387,7 @@ class JourneyResponse(BaseModel):
     name: str
     tier: str
     target_distance_km: float
+    max_days: int = 1
     status: str  # active | completed | abandoned
     plan_summary: Optional[str] = None
     notes: Optional[str] = None
@@ -388,6 +399,8 @@ class JourneyResponse(BaseModel):
     progress_percent: float = 0.0
     activity_count: int = 0
     days_active: int = 0
+    expires_at: Optional[datetime] = None
+    is_expired: bool = False
 
     class Config:
         from_attributes = True

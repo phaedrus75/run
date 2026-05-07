@@ -32,6 +32,17 @@ interface Props {
   route: { params?: { journeyId?: number } };
 }
 
+function formatExpiresAt(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return `tonight at ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === tomorrow.toDateString()) return 'tomorrow night';
+  return d.toLocaleDateString();
+}
+
 export function JourneyDetailScreen({ navigation, route }: Props) {
   const journeyId = route?.params?.journeyId ?? null;
   const [journey, setJourney] = useState<Journey | null>(null);
@@ -204,8 +215,13 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           <View style={styles.hintCard}>
             <Ionicons name="information-circle-outline" size={16} color={colors.primary} />
             <Text style={styles.hintText}>
-              Every run and walk you record while this journey is active counts toward the line.
-              You don't need to mark them as journey runs.
+              {journey.max_days <= 1
+                ? 'Today is the day. Every run and walk you save while this journey is active counts toward the line.'
+                : `You have up to ${journey.max_days} days. Every run and walk you save inside the window counts.`}
+              {journey.expires_at
+                ? ` Window closes ${formatExpiresAt(journey.expires_at)}.`
+                : ''}
+              {journey.is_expired ? ' (window has closed)' : ''}
             </Text>
           </View>
         ) : null}

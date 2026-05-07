@@ -96,8 +96,8 @@ export function JourneysScreen({ navigation }: Props) {
       >
         <Text style={styles.tagline}>The slow ultra.</Text>
         <Text style={styles.intro}>
-          A 20 km adventure stitched together from runs and walks across days or weeks. Every
-          activity counts toward the line.
+          20k and 30k in one go. 50k, 75k and 100k spread across up to three days. Every run
+          and walk you save inside the window counts toward the line.
         </Text>
 
         {active ? (
@@ -115,7 +115,7 @@ export function JourneysScreen({ navigation }: Props) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.startTitle}>Start a journey</Text>
-              <Text style={styles.startSub}>20 km. As slow as you like.</Text>
+              <Text style={styles.startSub}>20k → 100k. Pick your distance.</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textOnPrimary} />
           </Pressable>

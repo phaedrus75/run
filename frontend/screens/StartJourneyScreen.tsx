@@ -2,10 +2,11 @@
  * 🏁 START JOURNEY SCREEN
  * ========================
  *
- * The build flow for a new Journey. The user picks a template (or
- * customises a name) and confirms. Phase 5 only ships the 20 km tier;
- * the screen is wired so higher tiers slot in by adjusting the segmented
- * control.
+ * The build flow for a new Journey. The user picks a tier (20/30/50/75/100k)
+ * and a starter template (or writes a custom name) and confirms.
+ *
+ * 20k and 30k are one-go journeys (single calendar day); 50k, 75k, 100k
+ * spread across up to three days.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -31,9 +32,17 @@ interface Props {
   navigation: any;
 }
 
+const TIERS: { id: '20k' | '30k' | '50k' | '75k' | '100k'; label: string; days: number }[] = [
+  { id: '20k', label: '20k', days: 1 },
+  { id: '30k', label: '30k', days: 1 },
+  { id: '50k', label: '50k', days: 3 },
+  { id: '75k', label: '75k', days: 3 },
+  { id: '100k', label: '100k', days: 3 },
+];
+
 export function StartJourneyScreen({ navigation }: Props) {
-  const [tier] = useState<'20k'>('20k');
-  const [templates, setTemplates] = useState<JourneyTemplate[]>([]);
+  const [tier, setTier] = useState<'20k' | '30k' | '50k' | '75k' | '100k'>('20k');
+  const [allTemplates, setAllTemplates] = useState<JourneyTemplate[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [customName, setCustomName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -44,9 +53,7 @@ export function StartJourneyScreen({ navigation }: Props) {
     (async () => {
       try {
         const list = await journeyApi.listTemplates();
-        if (!cancelled) {
-          setTemplates(list.filter((t) => t.tier === tier));
-        }
+        if (!cancelled) setAllTemplates(list);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -54,7 +61,11 @@ export function StartJourneyScreen({ navigation }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [tier]);
+  }, []);
+
+  const templates = allTemplates.filter((t) => t.tier === tier);
+  const tierMeta = TIERS.find((t) => t.id === tier)!;
+  const daysCopy = tierMeta.days === 1 ? 'in one go' : `across up to ${tierMeta.days} days`;
 
   const start = async () => {
     const tpl = selectedIdx != null ? templates[selectedIdx] : null;
@@ -113,42 +124,81 @@ export function StartJourneyScreen({ navigation }: Props) {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.heading}>The slow ultra.</Text>
           <Text style={styles.sub}>
-            20 km of walks and runs across days or weeks. Every km of every activity counts
-            once you start.
+            20k and 30k are one big day. 50k, 75k and 100k can spread across up to three days.
+            Every run and walk you save inside the window counts toward the line.
           </Text>
 
-          <Text style={styles.section}>Pick a starter</Text>
-          <View style={styles.cardList}>
-            {templates.map((tpl, idx) => {
-              const selected = selectedIdx === idx;
+          <Text style={styles.section}>Distance</Text>
+          <View style={styles.tierRow}>
+            {TIERS.map((t) => {
+              const selected = tier === t.id;
               return (
                 <Pressable
-                  key={tpl.name}
+                  key={t.id}
                   onPress={() => {
-                    setSelectedIdx(idx);
-                    if (!customName) setCustomName('');
+                    setTier(t.id);
+                    setSelectedIdx(null);
                   }}
                   style={({ pressed }) => [
-                    styles.tplCard,
-                    selected && styles.tplCardSelected,
-                    { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                    styles.tierChip,
+                    selected && styles.tierChipSelected,
+                    { transform: [{ scale: pressed ? 0.97 : 1 }] },
                   ]}
                 >
-                  <View style={styles.tplHeader}>
-                    <Text
-                      style={[styles.tplName, selected && styles.tplNameSelected]}
-                    >
-                      {tpl.name}
-                    </Text>
-                    {selected ? (
-                      <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                    ) : null}
-                  </View>
-                  <Text style={styles.tplBlurb}>{tpl.blurb}</Text>
+                  <Text style={[styles.tierChipText, selected && styles.tierChipTextSelected]}>
+                    {t.label}
+                  </Text>
+                  <Text style={[styles.tierChipDays, selected && styles.tierChipDaysSelected]}>
+                    {t.days === 1 ? '1 day' : `${t.days} days`}
+                  </Text>
                 </Pressable>
               );
             })}
           </View>
+          <Text style={styles.windowHint}>
+            {tierMeta.label} {daysCopy}.
+          </Text>
+
+          <Text style={styles.section}>Pick a starter</Text>
+          {templates.length === 0 ? (
+            <View style={styles.noTplCard}>
+              <Text style={styles.noTplText}>
+                No starters for this distance yet. Name your own below.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.cardList}>
+              {templates.map((tpl, idx) => {
+                const selected = selectedIdx === idx;
+                return (
+                  <Pressable
+                    key={tpl.name}
+                    onPress={() => {
+                      setSelectedIdx(idx);
+                      if (!customName) setCustomName('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.tplCard,
+                      selected && styles.tplCardSelected,
+                      { transform: [{ scale: pressed ? 0.99 : 1 }] },
+                    ]}
+                  >
+                    <View style={styles.tplHeader}>
+                      <Text
+                        style={[styles.tplName, selected && styles.tplNameSelected]}
+                      >
+                        {tpl.name}
+                      </Text>
+                      {selected ? (
+                        <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                      ) : null}
+                    </View>
+                    <Text style={styles.tplBlurb}>{tpl.blurb}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
           <Text style={styles.section}>Or name your own</Text>
           <TextInput
@@ -157,7 +207,7 @@ export function StartJourneyScreen({ navigation }: Props) {
               setCustomName(t);
               if (t.length > 0) setSelectedIdx(null);
             }}
-            placeholder="The Friday ten / Park rounds / etc."
+            placeholder="The Friday twenty / Park rounds / etc."
             placeholderTextColor={colors.textLight}
             style={styles.input}
             maxLength={120}
@@ -235,6 +285,54 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  tierChip: {
+    flexBasis: '18%',
+    flexGrow: 1,
+    minWidth: 60,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  tierChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  tierChipText: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  tierChipTextSelected: { color: colors.textOnPrimary },
+  tierChipDays: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 2,
+    letterSpacing: 0.4,
+  },
+  tierChipDaysSelected: { color: colors.textOnPrimary, opacity: 0.85 },
+  windowHint: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  noTplCard: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  noTplText: {
+    fontSize: typography.sizes.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   cardList: { gap: spacing.sm },
   tplCard: {

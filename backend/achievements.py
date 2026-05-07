@@ -1105,25 +1105,31 @@ ACHIEVEMENTS = {
     },
     "journeyer_20k": {
         "id": "journeyer_20k", "name": "Journeyer 20k",
-        "description": "Complete a 20k journey across days or weeks",
+        "description": "Complete a 20k journey in one go",
         "emoji": "🛤️", "category": "journey",
         "check": lambda s: s.get("journeys_completed_20k", 0) >= 1,
     },
     "journeyer_30k": {
         "id": "journeyer_30k", "name": "Journeyer 30k",
-        "description": "Complete a 30k journey",
+        "description": "Complete a 30k journey in one go",
         "emoji": "🌄", "category": "journey",
         "check": lambda s: s.get("journeys_completed_30k", 0) >= 1,
     },
     "journeyer_50k": {
         "id": "journeyer_50k", "name": "Journeyer 50k",
-        "description": "Complete a 50k journey",
+        "description": "Complete a 50k journey across up to three days",
         "emoji": "🏞️", "category": "journey",
         "check": lambda s: s.get("journeys_completed_50k", 0) >= 1,
     },
+    "journeyer_75k": {
+        "id": "journeyer_75k", "name": "Journeyer 75k",
+        "description": "Complete a 75k journey across up to three days",
+        "emoji": "🌋", "category": "journey",
+        "check": lambda s: s.get("journeys_completed_75k", 0) >= 1,
+    },
     "journeyer_100k": {
         "id": "journeyer_100k", "name": "Journeyer 100k",
-        "description": "Complete a 100k journey — the slow ultra",
+        "description": "Complete a 100k journey — the proper slow ultra",
         "emoji": "🏔️", "category": "journey",
         "check": lambda s: s.get("journeys_completed_100k", 0) >= 1,
     },
@@ -1502,6 +1508,7 @@ def get_achievements(
     journeys_completed_20k = 0
     journeys_completed_30k = 0
     journeys_completed_50k = 0
+    journeys_completed_75k = 0
     journeys_completed_100k = 0
     journeys_completed_total = 0
     user_obj = None
@@ -1594,6 +1601,8 @@ def get_achievements(
                 journeys_completed_30k += 1
             elif tier == "50k":
                 journeys_completed_50k += 1
+            elif tier == "75k":
+                journeys_completed_75k += 1
             elif tier == "100k":
                 journeys_completed_100k += 1
 
@@ -1692,6 +1701,7 @@ def get_achievements(
         "journeys_completed_20k": journeys_completed_20k,
         "journeys_completed_30k": journeys_completed_30k,
         "journeys_completed_50k": journeys_completed_50k,
+        "journeys_completed_75k": journeys_completed_75k,
         "journeys_completed_100k": journeys_completed_100k,
     }
     

@@ -19,7 +19,7 @@ You'll see interactive API documentation!
 
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -103,6 +103,7 @@ from schemas import (
     JourneyResponse,
     JourneyTemplate,
     JOURNEY_TIERS,
+    JOURNEY_TIER_MAX_DAYS,
 )
 import crud
 import coach
@@ -513,10 +514,8 @@ def run_migrations():
                     )
                 """))
 
-                # Journeys (Phase 5) — the slow ultra. Per-user multi-day
-                # walk-and-run accumulator. Runs and walks gain a journey_id
-                # column so completed activities can be summed against the
-                # active journey's target.
+                # Journeys (Phase 5) — the slow ultra. 20k/30k are one-go,
+                # 50k/75k/100k spread across up to max_days calendar days.
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS journeys (
                         id SERIAL PRIMARY KEY,
@@ -524,12 +523,26 @@ def run_migrations():
                         name VARCHAR NOT NULL,
                         tier VARCHAR NOT NULL,
                         target_distance_km FLOAT NOT NULL,
+                        max_days INTEGER NOT NULL DEFAULT 1,
                         status VARCHAR NOT NULL DEFAULT 'active',
                         plan_summary TEXT,
                         notes TEXT,
                         started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         completed_at TIMESTAMP
                     )
+                """))
+                # If the journeys table existed before max_days was added,
+                # backfill from the tier name.
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS max_days INTEGER NOT NULL DEFAULT 1"
+                ))
+                conn.execute(text("""
+                    UPDATE journeys
+                       SET max_days = CASE
+                           WHEN tier IN ('50k','75k','100k') THEN 3
+                           ELSE 1
+                       END
+                     WHERE max_days IS NULL OR max_days = 0
                 """))
                 conn.execute(text("""
                     CREATE INDEX IF NOT EXISTS idx_journeys_user_status
@@ -629,6 +642,7 @@ def run_migrations():
                 # Journey attribution columns (Phase 5)
                 _sqlite_col("runs", "journey_id", "journey_id INTEGER")
                 _sqlite_col("walks", "journey_id", "journey_id INTEGER")
+                _sqlite_col("journeys", "max_days", "max_days INTEGER NOT NULL DEFAULT 1")
 
                 # SQLAlchemy create_all() at the end of run_migrations() will
                 # create the coach_messages / coach_run_scripts /
@@ -1354,18 +1368,10 @@ def create_run(
     
     db_run = crud.create_run(db=db, run=run, user_id=current_user.id)
 
-    # 🌅 Journey auto-attribution: if the user has an active Journey, count
-    # this run toward it. The user can abandon the journey to stop this.
-    active_journey = (
-        db.query(Journey)
-        .filter(Journey.user_id == current_user.id, Journey.status == "active")
-        .order_by(Journey.started_at.desc())
-        .first()
-    )
-    if active_journey is not None:
-        db_run.journey_id = active_journey.id
-        db.commit()
-        db.refresh(db_run)
+    # 🌅 Journey auto-attribution: if the user has an active Journey AND
+    # we're still inside its max_days window, count this run toward it.
+    # Auto-completes the journey if the running total crosses the target.
+    _attach_to_active_journey(db, current_user.id, db_run)
 
     # 🎉 Check for all celebrations!
     celebrations = check_all_celebrations(db, db_run, current_user)
@@ -4821,18 +4827,9 @@ def create_walk_endpoint(
         public_walk_id=payload.get("public_walk_id"),
     )
 
-    # 🌅 Journey auto-attribution: if the user has an active Journey, count
-    # this walk toward it.
-    active_journey = (
-        db.query(Journey)
-        .filter(Journey.user_id == current_user.id, Journey.status == "active")
-        .order_by(Journey.started_at.desc())
-        .first()
-    )
-    if active_journey is not None:
-        walk.journey_id = active_journey.id
-        db.commit()
-        db.refresh(walk)
+    # 🌅 Journey auto-attribution (window-aware, with auto-complete on
+    # reaching the target).
+    _attach_to_active_journey(db, current_user.id, walk)
 
     milestones = _milestone_unlocks_after_activity(db, current_user)
     return _walk_to_dict(walk, milestone_unlocks=milestones)
@@ -5662,15 +5659,32 @@ def _journey_progress(db: Session, journey: Journey) -> dict:
     }
 
 
+def _journey_expires_at(journey: Journey) -> Optional[datetime]:
+    """Return the deadline for journey attribution (started_at + max_days).
+
+    Calendar-day style: a 1-day journey started Monday 09:00 expires at
+    Monday 23:59:59. A 3-day journey started Monday expires at Wed 23:59:59.
+    """
+    if not journey.started_at or not journey.max_days:
+        return None
+    start = journey.started_at
+    # End of (started_at + max_days - 1) calendar day.
+    end_day = (start + timedelta(days=int(journey.max_days) - 1)).date()
+    return datetime.combine(end_day, datetime.max.time())
+
+
 def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
     progress = _journey_progress(db, journey)
     target = float(journey.target_distance_km or 0.0)
     pct = (progress["accumulated_km"] / target * 100.0) if target > 0 else 0.0
+    expires_at = _journey_expires_at(journey)
+    is_expired = expires_at is not None and datetime.utcnow() > expires_at
     return JourneyResponse(
         id=journey.id,
         name=journey.name,
         tier=journey.tier,
         target_distance_km=journey.target_distance_km,
+        max_days=int(journey.max_days or 1),
         status=journey.status,
         plan_summary=journey.plan_summary,
         notes=journey.notes,
@@ -5680,6 +5694,8 @@ def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
         progress_percent=round(min(pct, 999.0), 1),
         activity_count=progress["activity_count"],
         days_active=progress["days_active"],
+        expires_at=expires_at,
+        is_expired=is_expired,
     )
 
 
@@ -5692,33 +5708,83 @@ def _get_active_journey(db: Session, user_id: int) -> Optional[Journey]:
     )
 
 
-# Static templates (Phase 5). Phase 5+ swaps these for coach-personalised
-# suggestions; today they're a deterministic, region-agnostic starter set.
+def _attach_to_active_journey(db: Session, user_id: int, activity) -> Optional[Journey]:
+    """Attach a freshly-created run or walk to the user's active journey if
+    it's still within its max_days window. Returns the journey if attached,
+    None otherwise. Auto-completes the journey when the running total
+    reaches the target."""
+    journey = _get_active_journey(db, user_id)
+    if journey is None:
+        return None
+    expires_at = _journey_expires_at(journey)
+    if expires_at is not None and datetime.utcnow() > expires_at:
+        # Window closed — don't attribute. The journey stays "active" so
+        # the user can still mark it complete or abandoned.
+        return None
+    activity.journey_id = journey.id
+    db.commit()
+    db.refresh(activity)
+
+    # Re-sum and auto-complete if we crossed the target.
+    progress = _journey_progress(db, journey)
+    if progress["accumulated_km"] >= float(journey.target_distance_km or 0.0):
+        journey.status = "completed"
+        journey.completed_at = datetime.utcnow()
+        db.commit()
+        db.refresh(journey)
+    return journey
+
+
+# Static templates. Each tier gets a couple of starter framings — the
+# 20k/30k tiers are one-go adventures, 50k/75k/100k are 2–3 day windows.
 _JOURNEY_TEMPLATES: List[JourneyTemplate] = [
+    # ── 20k — one-go ──
+    JourneyTemplate(
+        tier="20k",
+        name="The slow twenty",
+        blurb="20 km in one go. Walk, run, stop for coffee. Photos welcome.",
+        target_distance_km=20.0,
+    ),
     JourneyTemplate(
         tier="20k",
         name="Twenty in your neighbourhood",
-        blurb="20 km of walks and runs strung across a few weeks. Photos welcome.",
+        blurb="A 20 km loop on home turf. Streets you know, seen for a long time.",
         target_distance_km=20.0,
     ),
+    # ── 30k — one-go ──
     JourneyTemplate(
-        tier="20k",
-        name="A weekend slow ultra",
-        blurb="Spread 20 km across Saturday and Sunday. Coffee in the middle.",
-        target_distance_km=20.0,
+        tier="30k",
+        name="The slow thirty",
+        blurb="30 km, one big day. Slower than a marathon, longer than a long run.",
+        target_distance_km=30.0,
     ),
+    # ── 50k — up to 3 days ──
     JourneyTemplate(
-        tier="20k",
-        name="The morning twenty",
-        blurb="One 5–6 km loop most mornings until the line is crossed.",
-        target_distance_km=20.0,
+        tier="50k",
+        name="A weekend fifty",
+        blurb="50 km across the weekend. Two big efforts or three softer ones.",
+        target_distance_km=50.0,
+    ),
+    # ── 75k — up to 3 days ──
+    JourneyTemplate(
+        tier="75k",
+        name="Three-day seventy-five",
+        blurb="75 km across three days. 25 km a day if you spread it evenly.",
+        target_distance_km=75.0,
+    ),
+    # ── 100k — up to 3 days ──
+    JourneyTemplate(
+        tier="100k",
+        name="The slow hundred",
+        blurb="100 km in three days. The proper slow ultra. Sleep matters.",
+        target_distance_km=100.0,
     ),
 ]
 
 
 @app.get("/journeys/templates", response_model=List[JourneyTemplate])
 def list_journey_templates(current_user: User = Depends(require_auth)):
-    """Three starter Journey suggestions for the build flow."""
+    """Starter Journey suggestions, grouped by tier (20k → 100k)."""
     return _JOURNEY_TEMPLATES
 
 
@@ -5747,6 +5813,7 @@ def create_journey(
         name=name,
         tier=payload.tier,
         target_distance_km=JOURNEY_TIERS[payload.tier],
+        max_days=JOURNEY_TIER_MAX_DAYS.get(payload.tier, 1),
         status="active",
         plan_summary=plan,
     )

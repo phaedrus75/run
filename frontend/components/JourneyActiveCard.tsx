@@ -82,9 +82,11 @@ export function JourneyActiveCard({ onPress, refreshKey }: Props) {
           {journey.accumulated_km.toFixed(1)} of {journey.target_distance_km.toFixed(0)} km
         </Text>
         <Text style={styles.metaTextSecondary}>
-          {journey.activity_count} activit{journey.activity_count === 1 ? 'y' : 'ies'}
-          {' · '}
-          {journey.days_active} day{journey.days_active === 1 ? '' : 's'}
+          {journey.max_days <= 1
+            ? journey.is_expired
+              ? 'window closed'
+              : 'today is the day'
+            : `day ${Math.min(journey.days_active || 1, journey.max_days)} of ${journey.max_days}`}
         </Text>
       </View>
     </Pressable>
