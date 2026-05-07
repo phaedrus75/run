@@ -14,9 +14,39 @@ Why separate? Security and flexibility!
 - Request data might have different fields than response data
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime
+from pydantic import BaseModel, Field, PlainSerializer
+from typing import Annotated, Optional, List
+from datetime import datetime, timezone
+
+
+def _utc_iso(value: Optional[datetime]) -> Optional[str]:
+    """Serialise a datetime as a tz-aware ISO 8601 string.
+
+    The DB stores naive datetimes (UTC by convention; SQLAlchemy
+    `func.now()` doesn't attach a tz). Pydantic's default datetime
+    serialiser emits the value with NO timezone marker. JavaScript's
+    `Date.parse` interprets such strings as **local time** per the ECMA
+    spec, which silently shifts every timestamp by the client's UTC
+    offset and breaks any `Date.parse(...)`-based logic on the frontend
+    (the in-app retroactive photo picker is one such victim).
+
+    By stamping `+00:00` here we force the output to look like
+    `2026-05-07T07:35:56.579000+00:00`, which JS parses correctly as
+    UTC regardless of device timezone.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
+
+
+# Drop-in replacement for `datetime` on response fields. Use this whenever
+# the value is consumed by the JS frontend.
+UTCDateTime = Annotated[
+    datetime,
+    PlainSerializer(_utc_iso, when_used='json', return_type=Optional[str]),
+]
 
 
 RUN_DISTANCES = {
@@ -143,7 +173,7 @@ class RunResponse(BaseModel):
     run_type: str
     duration_seconds: int
     distance_km: float
-    completed_at: datetime
+    completed_at: UTCDateTime
     notes: Optional[str]
     mood: Optional[str] = None
     category: Optional[str] = None
@@ -153,7 +183,7 @@ class RunResponse(BaseModel):
     end_lat: Optional[float] = None
     end_lng: Optional[float] = None
     elevation_gain_m: Optional[float] = None
-    started_at: Optional[datetime] = None
+    started_at: Optional[UTCDateTime] = None
     
     # 🎯 Calculated fields for the frontend
     pace_per_km: str = ""  # e.g., "6:30"
@@ -173,7 +203,7 @@ class RunResponse(BaseModel):
     photo_count: int = 0
 
     neighbourhood_visibility: Optional[str] = "off"
-    neighbourhood_published_at: Optional[datetime] = None
+    neighbourhood_published_at: Optional[UTCDateTime] = None
     
     class Config:
         from_attributes = True
@@ -245,7 +275,7 @@ class CoachSettings(BaseModel):
     coach_notes_auto: bool = True
     coach_today_card: bool = True
     coach_voice_during_runs: str = "coach_runs"  # all | coach_runs | journeys_only | off
-    coach_consent_at: Optional[datetime] = None
+    coach_consent_at: Optional[UTCDateTime] = None
 
     class Config:
         from_attributes = True
@@ -263,7 +293,7 @@ class CoachNote(BaseModel):
     activity_type: str  # "run" | "walk"
     activity_id: int
     text: str
-    generated_at: datetime
+    generated_at: UTCDateTime
     is_stub: bool = False  # true if produced by the LLM stub backend
 
 
@@ -271,7 +301,7 @@ class CoachTodayCardResponse(BaseModel):
     """One-line recommendation for the Home card."""
 
     text: str
-    generated_at: datetime
+    generated_at: UTCDateTime
     is_stub: bool = False
 
 
@@ -280,7 +310,7 @@ class CoachChatTurn(BaseModel):
 
     role: str  # "user" | "assistant"
     content: str
-    created_at: Optional[datetime] = None
+    created_at: Optional[UTCDateTime] = None
 
 
 class CoachChatRequest(BaseModel):
@@ -325,7 +355,7 @@ class CoachRunScriptResponse(BaseModel):
     target_distance_km: float
     plan_summary: Optional[str] = None
     lines: List[CoachRunScriptLine]
-    created_at: datetime
+    created_at: UTCDateTime
     is_stub: bool = False
 
 
@@ -390,7 +420,7 @@ class JourneyDayBriefResponse(BaseModel):
     day_index: int
     text: str
     is_stub: bool = False
-    generated_at: datetime
+    generated_at: UTCDateTime
 
 
 class JourneyResponse(BaseModel):
@@ -405,15 +435,15 @@ class JourneyResponse(BaseModel):
     plan_summary: Optional[str] = None
     notes: Optional[str] = None
     completion_note: Optional[str] = None
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: UTCDateTime
+    completed_at: Optional[UTCDateTime] = None
 
     # Derived fields
     accumulated_km: float = 0.0
     progress_percent: float = 0.0
     activity_count: int = 0
     days_active: int = 0
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[UTCDateTime] = None
     is_expired: bool = False
 
     class Config:

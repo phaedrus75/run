@@ -41,6 +41,10 @@ export function MilestoneUnlockSequence({
 
   const current = items[index];
   const w = Dimensions.get('window').width;
+  // `>=` (rather than `===`) so we still close cleanly if `items` shrinks
+  // while the modal is open — defensive against a parent re-render passing
+  // a smaller array than `index` after an unlock has already been shown.
+  const isLast = index >= items.length - 1;
 
   const advance = () => {
     if (isLast) {

@@ -87,6 +87,26 @@ export async function ensurePhotosPermission(): Promise<PermissionState> {
 }
 
 /**
+ * Parse an ISO-8601 datetime string as UTC ms epoch.
+ *
+ * The ECMA spec says ISO strings WITHOUT a timezone marker are parsed as
+ * **local time** by `Date.parse` / `new Date(...)`. The backend stores
+ * naive datetimes (UTC by convention) and historically serialised them
+ * without a `Z` suffix, which silently shifted every timestamp by the
+ * device's UTC offset on the JS side and broke this picker for any user
+ * not in UTC. The backend fix adds `+00:00`, but we keep this coercion
+ * as belt-and-braces for older cached responses and any endpoint that
+ * hasn't been updated yet.
+ */
+function parseAsUtc(iso: string): number {
+  // Already has a timezone marker (Z, +hh:mm, -hh:mm) — trust it.
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(iso)) {
+    return Date.parse(iso);
+  }
+  return Date.parse(iso + 'Z');
+}
+
+/**
  * Find candidate photos for retroactive attach. Returns up to
  * `MAX_CANDIDATES` items sorted by creationTime ascending (earliest first,
  * so the picker reads naturally as a timeline of the workout).
@@ -94,8 +114,8 @@ export async function ensurePhotosPermission(): Promise<PermissionState> {
 export async function findCandidatePhotos(
   activity: RouteForRetroactive,
 ): Promise<CandidatePhoto[]> {
-  const startedAtMs = activity.startedAt ? Date.parse(activity.startedAt) : NaN;
-  const endedAtMs = activity.endedAt ? Date.parse(activity.endedAt) : NaN;
+  const startedAtMs = activity.startedAt ? parseAsUtc(activity.startedAt) : NaN;
+  const endedAtMs = activity.endedAt ? parseAsUtc(activity.endedAt) : NaN;
   if (!Number.isFinite(startedAtMs) || !Number.isFinite(endedAtMs)) {
     return [];
   }
@@ -194,8 +214,8 @@ export async function readForUpload(asset: CandidatePhoto): Promise<{
 
 function computeDistanceMarker(activity: RouteForRetroactive, photoTimeMs: number): number {
   if (activity.totalDistanceKm <= 0) return 0;
-  const startMs = activity.startedAt ? Date.parse(activity.startedAt) : 0;
-  const endMs = activity.endedAt ? Date.parse(activity.endedAt) : startMs + 1;
+  const startMs = activity.startedAt ? parseAsUtc(activity.startedAt) : 0;
+  const endMs = activity.endedAt ? parseAsUtc(activity.endedAt) : startMs + 1;
   const span = Math.max(1, endMs - startMs);
   const t = Math.max(0, Math.min(1, (photoTimeMs - startMs) / span));
   // Match RunSummaryScreen.tsx: clamp into [0.05, totalDistanceKm - 0.01]

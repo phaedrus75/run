@@ -20,6 +20,7 @@ You'll see interactive API documentation!
 import os
 import logging
 from datetime import datetime, timedelta
+from schemas import _utc_iso as _iso_utc  # tz-aware UTC ISO; see schemas.py
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -1714,7 +1715,7 @@ def log_gym_workout(
     workout = crud.create_gym_workout(db, user_id=current_user.id, exercises=exercises, notes=notes, duration_minutes=duration_minutes)
     return {
         "id": workout.id,
-        "completed_at": workout.completed_at.isoformat() if workout.completed_at else None,
+        "completed_at": _iso_utc(workout.completed_at),
         "exercises": json.loads(workout.exercises),
         "notes": workout.notes,
         "duration_minutes": workout.duration_minutes,
@@ -1732,7 +1733,7 @@ def list_gym_workouts(
     return [
         {
             "id": w.id,
-            "completed_at": w.completed_at.isoformat() if w.completed_at else None,
+            "completed_at": _iso_utc(w.completed_at),
             "exercises": json.loads(w.exercises) if w.exercises else [],
             "notes": w.notes,
             "duration_minutes": w.duration_minutes,
@@ -1760,7 +1761,7 @@ def update_gym_workout(
         raise HTTPException(status_code=404, detail="Workout not found")
     return {
         "id": workout.id,
-        "completed_at": workout.completed_at.isoformat() if workout.completed_at else None,
+        "completed_at": _iso_utc(workout.completed_at),
         "exercises": json.loads(workout.exercises),
         "notes": workout.notes,
         "duration_minutes": workout.duration_minutes,
@@ -2891,7 +2892,7 @@ def _neighbourhood_feed_item(
         "city": run.neighbourhood_city,
         "distance_km": run.distance_km,
         "duration_seconds": run.duration_seconds,
-        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "completed_at": _iso_utc(run.completed_at),
         "photo_thumb_data": thumb_b64,
         "saves_count": int(saves),
         # Legacy field name preserved for any older client; new clients
@@ -3166,7 +3167,7 @@ def neighbourhood_run_detail(
         "city": run.neighbourhood_city,
         "distance_km": run.distance_km,
         "duration_seconds": run.duration_seconds,
-        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "completed_at": _iso_utc(run.completed_at),
         "route_polyline": run.route_polyline,
         "notes": run.notes,
         "photos": photo_payload,
@@ -3550,7 +3551,7 @@ def _build_public_profile(handle: str, db: Session, current_user):
                 "run_id": sr.id,
                 "run_type": sr.run_type,
                 "distance_km": sr.distance_km,
-                "completed_at": sr.completed_at.isoformat() if sr.completed_at else None,
+                "completed_at": _iso_utc(sr.completed_at),
                 "photo_count": photo_count_map.get(sr.id, 0),
                 "cover_photo": cover.photo_data if cover else None,
                 "caption": cover.caption if cover else None,
@@ -4082,7 +4083,7 @@ def get_circle_feed(
             },
             "reactions": run_reactions.get(r.id, []),
             "viewer_has_saved": r.id in saved_run_ids,
-            "created_at": r.completed_at.isoformat() if r.completed_at else None,
+            "created_at": _iso_utc(r.completed_at),
         })
 
     if dirty_thumbs:
@@ -4160,7 +4161,7 @@ def get_circle_photos(
             "user_name": u.name if u else "Runner",
             "run_id": r.id if r else None,
             "run_distance": r.run_type.upper() if r else "",
-            "run_date": r.completed_at.isoformat() if r and r.completed_at else None,
+            "run_date": _iso_utc(r.completed_at) if r else None,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         }
         if full:
@@ -4625,8 +4626,8 @@ def list_my_photos(
                 "kind": "run",
                 "distance_km": r.distance_km,
                 "duration_seconds": r.duration_seconds,
-                "started_at": r.started_at.isoformat() if r.started_at else None,
-                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                "started_at": _iso_utc(r.started_at),
+                "completed_at": _iso_utc(r.completed_at),
                 "run_type": r.run_type,
                 "category": getattr(r, "category", None),
             },
@@ -4656,8 +4657,8 @@ def list_my_photos(
                 "kind": "walk",
                 "distance_km": w.distance_km,
                 "duration_seconds": w.duration_seconds,
-                "started_at": w.started_at.isoformat() if w.started_at else None,
-                "completed_at": w.ended_at.isoformat() if w.ended_at else None,
+                "started_at": _iso_utc(w.started_at),
+                "completed_at": _iso_utc(w.ended_at),
                 "run_type": None,
                 "category": getattr(w, "category", None),
             },
@@ -4757,7 +4758,7 @@ def get_scenic_runs(
             "run_type": run.run_type,
             "distance_km": run.distance_km,
             "duration_seconds": run.duration_seconds,
-            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "completed_at": _iso_utc(run.completed_at),
             "pace": pace,
             "mood": getattr(run, 'mood', None),
             "photo_count": run_photo_map.get(run.id, 0),
@@ -4778,8 +4779,8 @@ def _walk_to_dict(walk: Walk, photo_count: int = 0, milestone_unlocks: Optional[
     return {
         "id": walk.id,
         "user_id": walk.user_id,
-        "started_at": walk.started_at.isoformat() if walk.started_at else None,
-        "ended_at": walk.ended_at.isoformat() if walk.ended_at else None,
+        "started_at": _iso_utc(walk.started_at),
+        "ended_at": _iso_utc(walk.ended_at),
         "duration_seconds": walk.duration_seconds,
         "distance_km": walk.distance_km,
         "route_polyline": walk.route_polyline,
@@ -6257,7 +6258,7 @@ def admin_user_runs(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     runs = db.query(Run).filter(Run.user_id == user.id).order_by(Run.completed_at.desc()).limit(20).all()
-    return [{"id": r.id, "run_type": r.run_type, "distance_km": r.distance_km, "duration_seconds": r.duration_seconds, "completed_at": str(r.completed_at), "category": r.category} for r in runs]
+    return [{"id": r.id, "run_type": r.run_type, "distance_km": r.distance_km, "duration_seconds": r.duration_seconds, "completed_at": _iso_utc(r.completed_at), "category": r.category} for r in runs]
 
 
 @app.delete("/admin/user-runs/{run_id}")
@@ -6286,7 +6287,7 @@ def admin_user_walks(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     walks = db.query(Walk).filter(Walk.user_id == user.id).order_by(Walk.completed_at.desc()).limit(20).all()
-    return [{"id": w.id, "distance_km": w.distance_km, "duration_seconds": w.duration_seconds, "completed_at": str(w.completed_at), "notes": w.notes} for w in walks]
+    return [{"id": w.id, "distance_km": w.distance_km, "duration_seconds": w.duration_seconds, "completed_at": _iso_utc(w.completed_at), "notes": w.notes} for w in walks]
 
 
 @app.delete("/admin/user-walks/{walk_id}")
