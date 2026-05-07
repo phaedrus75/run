@@ -31,6 +31,8 @@ import { RunTypeButton } from './RunTypeButton';
 import { WalkMap, type MapMarker } from './WalkMap';
 import { RetroactivePhotoPicker } from './RetroactivePhotoPicker';
 import { PhotoHeroCarousel } from './PhotoHeroCarousel';
+import { CoachNoteCard } from './CoachNoteCard';
+import { navigationRef } from '../navigationRef';
 import {
   photoApi,
   levelApi,
@@ -571,6 +573,20 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
             multiline
             numberOfLines={3}
           />
+
+          {run ? (
+            <CoachNoteCard
+              kind="run"
+              activityId={run.id}
+              onOptInPress={() => {
+                onClose();
+                if (navigationRef.isReady()) {
+                  // CoachOptIn lives inside the Home tab's stack
+                  (navigationRef as any).navigate('Home', { screen: 'CoachOptIn' });
+                }
+              }}
+            />
+          ) : null}
 
           {canNeighbourhoodShare && (
             <View style={styles.nbRow}>
