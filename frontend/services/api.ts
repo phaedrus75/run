@@ -1430,6 +1430,12 @@ export const journeyApi = {
   /** Mark a journey abandoned. */
   abandon: (id: number): Promise<Journey> =>
     apiFetch(`/journeys/${id}/abandon`, { method: 'POST' }),
+
+  /** Permanently delete an abandoned journey. Active and completed journeys
+   * cannot be deleted — the server returns 400 for those. Contributing
+   * runs and walks are detached, not removed. */
+  delete: (id: number): Promise<{ ok: boolean; deleted_id: number }> =>
+    apiFetch(`/journeys/${id}`, { method: 'DELETE' }),
 };
 
 export const publicWalkApi = {

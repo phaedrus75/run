@@ -138,6 +138,29 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
     );
   };
 
+  const onDelete = () => {
+    if (!journey) return;
+    Alert.alert(
+      'Delete journey?',
+      'The journey is removed for good. Your runs and walks stay — they just stop being linked to it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await journeyApi.delete(journey.id);
+              navigation.goBack();
+            } catch (e: any) {
+              Alert.alert('Could not delete', String(e?.message || ''));
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const pct = useMemo(() => {
     if (!journey) return 0;
     return Math.max(0, Math.min(100, journey.progress_percent || 0));
@@ -278,6 +301,23 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
               ]}
             >
               <Text style={styles.abandonBtnText}>Abandon journey</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* 🗑 Abandoned journeys can be removed from the list. Completed
+         * journeys stay forever — they're a record of something you did. */}
+        {journey.status === 'abandoned' ? (
+          <View style={styles.actions}>
+            <Pressable
+              onPress={onDelete}
+              style={({ pressed }) => [
+                styles.deleteBtn,
+                { transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}
+            >
+              <Ionicons name="trash-outline" size={16} color={colors.error} />
+              <Text style={styles.deleteBtnText}>Delete journey</Text>
             </Pressable>
           </View>
         ) : null}
@@ -465,6 +505,22 @@ const styles = StyleSheet.create({
   },
   abandonBtnText: {
     color: colors.textSecondary,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  deleteBtnText: {
+    color: colors.error,
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
   },

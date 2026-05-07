@@ -5950,6 +5950,46 @@ def abandon_journey(
     return _journey_to_response(db, journey)
 
 
+@app.delete("/journeys/{journey_id}")
+def delete_journey(
+    journey_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Permanently delete an abandoned journey.
+
+    Only abandoned journeys can be deleted — active and completed journeys
+    are part of the user's permanent record. Contributing runs and walks
+    are *not* deleted; we just detach them by clearing their journey_id
+    so they continue to count toward all-time stats and milestones.
+    """
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    if journey.status != "abandoned":
+        raise HTTPException(
+            status_code=400,
+            detail="Only abandoned journeys can be deleted",
+        )
+
+    # Detach contributing activities. They keep all their other data —
+    # photos, GPS, mood, achievements — and just lose the journey link.
+    db.query(Run).filter(
+        Run.user_id == current_user.id, Run.journey_id == journey.id
+    ).update({Run.journey_id: None})
+    db.query(Walk).filter(
+        Walk.user_id == current_user.id, Walk.journey_id == journey.id
+    ).update({Walk.journey_id: None})
+
+    db.delete(journey)
+    db.commit()
+    return {"ok": True, "deleted_id": journey_id}
+
+
 # ==========================================
 # 🛡️ ADMIN ENDPOINTS
 # ==========================================
