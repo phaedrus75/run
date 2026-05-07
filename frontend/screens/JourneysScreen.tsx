@@ -27,9 +27,12 @@ import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 
 interface Props {
   navigation: any;
+  /** When true, renders without the SafeAreaView/header — used when embedded
+   * inside the Activity tab's segmented panel. */
+  embedded?: boolean;
 }
 
-export function JourneysScreen({ navigation }: Props) {
+export function JourneysScreen({ navigation, embedded }: Props) {
   const [active, setActive] = useState<Journey | null>(null);
   const [history, setHistory] = useState<Journey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,25 +73,32 @@ export function JourneysScreen({ navigation }: Props) {
     navigation.navigate('JourneyDetail', { journeyId: journey.id });
   };
 
+  const Shell: any = embedded ? View : SafeAreaView;
+  const shellProps: any = embedded
+    ? { style: styles.container }
+    : { style: styles.container, edges: ['top'] };
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <Shell {...shellProps}>
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </Shell>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
-        <Text style={styles.title}>Journeys</Text>
-        <View style={{ width: 32 }} />
-      </View>
+    <Shell {...shellProps}>
+      {!embedded && (
+        <View style={styles.header}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={styles.title}>Journeys</Text>
+          <View style={{ width: 32 }} />
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -158,7 +168,7 @@ export function JourneysScreen({ navigation }: Props) {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Shell>
   );
 }
 

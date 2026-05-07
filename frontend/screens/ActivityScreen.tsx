@@ -1,6 +1,11 @@
 /**
- * Activity tab — Runs and Walks as one pillar, two segments.
- * Drill-downs live on ActivityStack (see App.tsx).
+ * Activity tab — Runs / Walks / Journeys as one pillar, three segments.
+ * Drill-downs (RunSummary, WalkDetail, JourneyDetail, etc.) live on
+ * ActivityStack (see App.tsx).
+ *
+ * The active journey, when present, also sits as a quiet strip above the
+ * Runs and Walks segments so the runner sees it while picking their next
+ * activity.
  */
 
 import React, { useCallback, useState } from 'react';
@@ -10,9 +15,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AppHeader } from '../components/AppHeader';
 import { RunsTabScreen } from './RunsTabScreen';
 import { WalkScreen } from './WalkScreen';
+import { JourneysScreen } from './JourneysScreen';
+import { JourneyActiveCard } from '../components/JourneyActiveCard';
 import { colors, spacing, typography, radius } from '../theme/colors';
 
-type Segment = 'runs' | 'walks';
+type Segment = 'runs' | 'walks' | 'journeys';
 
 export function ActivityScreen({ navigation, route }: { navigation: any; route: any }) {
   const [segment, setSegment] = useState<Segment>('runs');
@@ -20,7 +27,7 @@ export function ActivityScreen({ navigation, route }: { navigation: any; route: 
   useFocusEffect(
     useCallback(() => {
       const s = route?.params?.segment;
-      if (s === 'runs' || s === 'walks') setSegment(s);
+      if (s === 'runs' || s === 'walks' || s === 'journeys') setSegment(s);
     }, [route?.params?.segment]),
   );
 
@@ -29,7 +36,7 @@ export function ActivityScreen({ navigation, route }: { navigation: any; route: 
       <AppHeader />
 
       <View style={styles.segRow}>
-        {(['runs', 'walks'] as const).map((s) => (
+        {(['runs', 'walks', 'journeys'] as const).map((s) => (
           <Pressable
             key={s}
             style={[styles.segBtn, segment === s && styles.segBtnOn]}
@@ -41,17 +48,30 @@ export function ActivityScreen({ navigation, route }: { navigation: any; route: 
             }}
           >
             <Text style={[styles.segTxt, segment === s && styles.segTxtOn]}>
-              {s === 'runs' ? 'Runs' : 'Walks'}
+              {s === 'runs' ? 'Runs' : s === 'walks' ? 'Walks' : 'Journeys'}
             </Text>
           </Pressable>
         ))}
       </View>
 
+      {/* 🌅 Active journey peeks over the Runs/Walks segments so the runner
+       * sees it while choosing their next activity. The Journeys segment
+       * has its own card inside, so we suppress this strip there. */}
+      {segment !== 'journeys' && (
+        <View style={styles.journeyStripWrap}>
+          <JourneyActiveCard
+            onPress={(j) => navigation.navigate('JourneyDetail', { journeyId: j.id })}
+          />
+        </View>
+      )}
+
       <View style={styles.body}>
         {segment === 'runs' ? (
           <RunsTabScreen navigation={navigation} route={route} embedded />
-        ) : (
+        ) : segment === 'walks' ? (
           <WalkScreen navigation={navigation} route={route} embedded />
+        ) : (
+          <JourneysScreen navigation={navigation} embedded />
         )}
       </View>
     </SafeAreaView>
@@ -82,5 +102,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   segTxtOn: { color: '#fff' },
+  journeyStripWrap: {
+    paddingHorizontal: spacing.lg,
+  },
   body: { flex: 1 },
 });

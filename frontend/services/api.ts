@@ -1381,10 +1381,10 @@ export interface JourneyTemplate {
 export interface Journey {
   id: number;
   name: string;
-  /** "20k" | "30k" | "50k" | "75k" | "100k" */
+  /** "20k" | "30k" | "50k" | "60k" | "75k" | "100k" */
   tier: string;
   target_distance_km: number;
-  /** Hard window for attribution: 1 for 20k/30k, 3 for 50k/75k/100k. */
+  /** Hard window for attribution: 1 for 20k/30k, 3 for 50k/60k/75k/100k. */
   max_days: number;
   /** "active" | "completed" | "abandoned" */
   status: string;

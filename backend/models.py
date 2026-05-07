@@ -689,7 +689,7 @@ class Journey(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
     name = Column(String, nullable=False)
-    tier = Column(String, nullable=False, index=True)  # "20k" | "30k" | "50k" | "75k" | "100k"
+    tier = Column(String, nullable=False, index=True)  # "20k" | "30k" | "50k" | "60k" | "75k" | "100k"
     target_distance_km = Column(Float, nullable=False)
     # Hard time-window for attribution: 1 for one-go journeys (20k/30k),
     # 3 for multi-day journeys (50k/75k/100k).

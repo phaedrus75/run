@@ -515,7 +515,7 @@ def run_migrations():
                 """))
 
                 # Journeys (Phase 5) — the slow ultra. 20k/30k are one-go,
-                # 50k/75k/100k spread across up to max_days calendar days.
+                # 50k/60k/75k/100k spread across up to max_days calendar days.
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS journeys (
                         id SERIAL PRIMARY KEY,
@@ -539,7 +539,7 @@ def run_migrations():
                 conn.execute(text("""
                     UPDATE journeys
                        SET max_days = CASE
-                           WHEN tier IN ('50k','75k','100k') THEN 3
+                           WHEN tier IN ('50k','60k','75k','100k') THEN 3
                            ELSE 1
                        END
                      WHERE max_days IS NULL OR max_days = 0
@@ -5736,7 +5736,7 @@ def _attach_to_active_journey(db: Session, user_id: int, activity) -> Optional[J
 
 
 # Static templates. Each tier gets a couple of starter framings — the
-# 20k/30k tiers are one-go adventures, 50k/75k/100k are 2–3 day windows.
+# 20k/30k tiers are one-go adventures, 50k/60k/75k/100k are 2–3 day windows.
 _JOURNEY_TEMPLATES: List[JourneyTemplate] = [
     # ── 20k — one-go ──
     JourneyTemplate(
@@ -5764,6 +5764,13 @@ _JOURNEY_TEMPLATES: List[JourneyTemplate] = [
         name="A weekend fifty",
         blurb="50 km across the weekend. Two big efforts or three softer ones.",
         target_distance_km=50.0,
+    ),
+    # ── 60k — up to 3 days ──
+    JourneyTemplate(
+        tier="60k",
+        name="The unhurried sixty",
+        blurb="60 km across two or three days. A long weekend, a steady pace.",
+        target_distance_km=60.0,
     ),
     # ── 75k — up to 3 days ──
     JourneyTemplate(

@@ -335,11 +335,12 @@ class CoachRunScriptResponse(BaseModel):
 
 
 # Tier → target distance lookup. 20k/30k are one-go journeys (single
-# calendar day window). 50k/75k/100k can spread across up to 3 days.
+# calendar day window). 50k/60k/75k/100k can spread across up to 3 days.
 JOURNEY_TIERS = {
     "20k": 20.0,
     "30k": 30.0,
     "50k": 50.0,
+    "60k": 60.0,
     "75k": 75.0,
     "100k": 100.0,
 }
@@ -349,6 +350,7 @@ JOURNEY_TIER_MAX_DAYS = {
     "20k": 1,
     "30k": 1,
     "50k": 3,
+    "60k": 3,
     "75k": 3,
     "100k": 3,
 }
@@ -369,7 +371,7 @@ class JourneyCreateRequest(BaseModel):
     journey at a time; the API will reject if another is already active."""
 
     name: str = Field(..., min_length=1, max_length=120)
-    tier: str = Field(..., description="One of: 20k, 30k, 50k, 100k")
+    tier: str = Field(..., description="One of: 20k, 30k, 50k, 60k, 75k, 100k")
     plan_summary: Optional[str] = Field(None, max_length=400)
 
 

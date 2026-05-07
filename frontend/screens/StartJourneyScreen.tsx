@@ -32,16 +32,19 @@ interface Props {
   navigation: any;
 }
 
-const TIERS: { id: '20k' | '30k' | '50k' | '75k' | '100k'; label: string; days: number }[] = [
+type Tier = '20k' | '30k' | '50k' | '60k' | '75k' | '100k';
+
+const TIERS: { id: Tier; label: string; days: number }[] = [
   { id: '20k', label: '20k', days: 1 },
   { id: '30k', label: '30k', days: 1 },
   { id: '50k', label: '50k', days: 3 },
+  { id: '60k', label: '60k', days: 3 },
   { id: '75k', label: '75k', days: 3 },
   { id: '100k', label: '100k', days: 3 },
 ];
 
 export function StartJourneyScreen({ navigation }: Props) {
-  const [tier, setTier] = useState<'20k' | '30k' | '50k' | '75k' | '100k'>('20k');
+  const [tier, setTier] = useState<Tier>('20k');
   const [allTemplates, setAllTemplates] = useState<JourneyTemplate[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [customName, setCustomName] = useState('');

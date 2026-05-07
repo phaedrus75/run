@@ -124,6 +124,8 @@ function ActivityStack() {
           headerTintColor: colors.primary,
         }}
       />
+      <Stack.Screen name="JourneyDetail" component={JourneyDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StartJourney" component={StartJourneyScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="AddRun"
         component={AddRunScreen}
