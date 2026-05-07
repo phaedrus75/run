@@ -41,6 +41,7 @@ import { WeeklyReflection } from '../components/WeeklyReflection';
 import { CoachTodayCard } from '../components/CoachTodayCard';
 import { CoachChatSheet } from '../components/CoachChatSheet';
 import { StartCoachRunModal } from '../components/StartCoachRunModal';
+import { JourneyActiveCard } from '../components/JourneyActiveCard';
 import { 
   statsApi,
   levelApi,
@@ -288,6 +289,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.wisdomAuthor}>— {dailyWisdom.author}</Text>
           </View>
         )}
+
+        {/* 🌅 Active Journey — only renders when one is active */}
+        <JourneyActiveCard
+          onPress={(j) => navigation.navigate('JourneyDetail', { journeyId: j.id })}
+        />
 
         {/* 🧠 Coach's note for today — quiet by default, only renders if opted in */}
         <CoachTodayCard

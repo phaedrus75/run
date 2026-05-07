@@ -49,6 +49,9 @@ import { RunStatsScreen } from './screens/RunStatsScreen';
 import { WalkStatsScreen } from './screens/WalkStatsScreen';
 import { ReviewsScreen } from './screens/ReviewsScreen';
 import { CoachOptInScreen } from './screens/CoachOptInScreen';
+import { JourneysScreen } from './screens/JourneysScreen';
+import { JourneyDetailScreen } from './screens/JourneyDetailScreen';
+import { StartJourneyScreen } from './screens/StartJourneyScreen';
 import { GoButton } from './components/GoButton';
 
 import './services/walkBackgroundTask';
@@ -80,6 +83,9 @@ function HomeStack() {
       <Stack.Screen name="WalkStats" component={WalkStatsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Reviews" component={ReviewsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="CoachOptIn" component={CoachOptInScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Journeys" component={JourneysScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="JourneyDetail" component={JourneyDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StartJourney" component={StartJourneyScreen} options={{ headerShown: false }} />
       <Stack.Screen name="GymHistory" component={HistoryScreen} initialParams={{ mode: 'gym' }} options={{ headerShown: false }} />
       <Stack.Screen name="StepsHistory" component={HistoryScreen} initialParams={{ mode: 'steps' }} options={{ headerShown: false }} />
     </Stack.Navigator>

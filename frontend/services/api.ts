@@ -1367,6 +1367,65 @@ export const coachApi = {
     apiFetch(`/coach/run-script/${id}`),
 };
 
+// ==========================================
+// 🌅 JOURNEY API  (the slow ultra)
+// ==========================================
+
+export interface JourneyTemplate {
+  tier: string;
+  name: string;
+  blurb: string;
+  target_distance_km: number;
+}
+
+export interface Journey {
+  id: number;
+  name: string;
+  /** "20k" | "30k" | "50k" | "100k" */
+  tier: string;
+  target_distance_km: number;
+  /** "active" | "completed" | "abandoned" */
+  status: string;
+  plan_summary: string | null;
+  notes: string | null;
+  started_at: string;
+  completed_at: string | null;
+  accumulated_km: number;
+  progress_percent: number;
+  activity_count: number;
+  days_active: number;
+}
+
+export const journeyApi = {
+  /** Three starter templates the user can pick from when starting a journey. */
+  listTemplates: (): Promise<JourneyTemplate[]> => apiFetch('/journeys/templates'),
+
+  /** Start a new active journey. Fails if another journey is already active. */
+  create: (req: { name: string; tier: string; plan_summary?: string }): Promise<Journey> =>
+    apiFetch('/journeys', { method: 'POST', body: JSON.stringify(req) }),
+
+  /** All journeys (active, completed, abandoned) for the current user. */
+  list: (): Promise<Journey[]> => apiFetch('/journeys'),
+
+  /** The currently active journey, or null. */
+  getActive: (): Promise<Journey | null> => apiFetch('/journeys/active'),
+
+  /** Single journey with progress. */
+  get: (id: number): Promise<Journey> => apiFetch(`/journeys/${id}`),
+
+  /** Edit name / notes. */
+  update: (id: number, patch: { name?: string; notes?: string }): Promise<Journey> =>
+    apiFetch(`/journeys/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+
+  /** Mark a journey complete. */
+  complete: (id: number): Promise<Journey> =>
+    apiFetch(`/journeys/${id}/complete`, { method: 'POST' }),
+
+  /** Mark a journey abandoned. */
+  abandon: (id: number): Promise<Journey> =>
+    apiFetch(`/journeys/${id}/abandon`, { method: 'POST' }),
+};
+
 export const publicWalkApi = {
   list: (params?: {
     region?: string;

@@ -23,6 +23,7 @@ export { CoachNoteCard } from './CoachNoteCard';
 export { CoachTodayCard } from './CoachTodayCard';
 export { CoachChatSheet } from './CoachChatSheet';
 export { StartCoachRunModal } from './StartCoachRunModal';
+export { JourneyActiveCard } from './JourneyActiveCard';
 export { WeightTracker } from './WeightTracker';
 export { PaceTrendChart } from './PaceTrendChart';
 export { StreakModal } from './StreakModal';

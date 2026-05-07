@@ -1094,6 +1094,45 @@ ACHIEVEMENTS = {
         "emoji": "📸", "category": "album",
         "check": lambda s: s.get("walks_with_photos", 0) >= 1,
     },
+
+    # ---- JOURNEYER (the slow ultra) ----
+    "journey_first": {
+        "id": "journey_first", "name": "First Journey",
+        "description": "Begin your first journey",
+        "emoji": "🌅", "category": "journey",
+        "check": lambda s: s.get("journeys_completed_total", 0) >= 1
+                            or s.get("journeys_completed_20k", 0) >= 1,
+    },
+    "journeyer_20k": {
+        "id": "journeyer_20k", "name": "Journeyer 20k",
+        "description": "Complete a 20k journey across days or weeks",
+        "emoji": "🛤️", "category": "journey",
+        "check": lambda s: s.get("journeys_completed_20k", 0) >= 1,
+    },
+    "journeyer_30k": {
+        "id": "journeyer_30k", "name": "Journeyer 30k",
+        "description": "Complete a 30k journey",
+        "emoji": "🌄", "category": "journey",
+        "check": lambda s: s.get("journeys_completed_30k", 0) >= 1,
+    },
+    "journeyer_50k": {
+        "id": "journeyer_50k", "name": "Journeyer 50k",
+        "description": "Complete a 50k journey",
+        "emoji": "🏞️", "category": "journey",
+        "check": lambda s: s.get("journeys_completed_50k", 0) >= 1,
+    },
+    "journeyer_100k": {
+        "id": "journeyer_100k", "name": "Journeyer 100k",
+        "description": "Complete a 100k journey — the slow ultra",
+        "emoji": "🏔️", "category": "journey",
+        "check": lambda s: s.get("journeys_completed_100k", 0) >= 1,
+    },
+    "journeyer_three": {
+        "id": "journeyer_three", "name": "Three Journeys",
+        "description": "Complete three journeys",
+        "emoji": "🧭", "category": "journey",
+        "check": lambda s: s.get("journeys_completed_total", 0) >= 3,
+    },
 }
 
 
@@ -1357,6 +1396,7 @@ def get_achievements(
         NeighbourhoodIRanThis,
         CircleMembership,
         CircleCheckin,
+        Journey,
     )
 
     min_date = datetime(2026, 1, 1)
@@ -1459,6 +1499,11 @@ def get_achievements(
     circle_memberships = 0
     runs_circles_shared = 0
     circle_checkins = 0
+    journeys_completed_20k = 0
+    journeys_completed_30k = 0
+    journeys_completed_50k = 0
+    journeys_completed_100k = 0
+    journeys_completed_total = 0
     user_obj = None
     if user_id is not None:
         user_obj = db.query(User).filter(User.id == user_id).first()
@@ -1532,7 +1577,26 @@ def get_achievements(
             .scalar()
             or 0
         )
-    
+
+        # 🌅 Journeyer counts (Phase 5). One row per completed journey at
+        # each tier; the user's "Journeyer 20k" badge unlocks on the first
+        # 20k completion, "Journeyer 30k" on the first 30k, etc.
+        completed_rows = (
+            db.query(Journey.tier)
+            .filter(Journey.user_id == user_id, Journey.status == "completed")
+            .all()
+        )
+        for (tier,) in completed_rows:
+            journeys_completed_total += 1
+            if tier == "20k":
+                journeys_completed_20k += 1
+            elif tier == "30k":
+                journeys_completed_30k += 1
+            elif tier == "50k":
+                journeys_completed_50k += 1
+            elif tier == "100k":
+                journeys_completed_100k += 1
+
     goals = get_goals_progress(db, yearly_goal=yearly_goal, monthly_goal=monthly_goal, user_id=user_id)
 
     # Walk-stats roll-up — kept here (rather than in walk crud) so badge
@@ -1624,6 +1688,11 @@ def get_achievements(
         "circle_memberships": int(circle_memberships),
         "runs_circles_shared": runs_circles_shared,
         "circle_checkins": int(circle_checkins),
+        "journeys_completed_total": journeys_completed_total,
+        "journeys_completed_20k": journeys_completed_20k,
+        "journeys_completed_30k": journeys_completed_30k,
+        "journeys_completed_50k": journeys_completed_50k,
+        "journeys_completed_100k": journeys_completed_100k,
     }
     
     # Pull existing unlock timestamps for this user so we can (a) annotate

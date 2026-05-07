@@ -329,3 +329,67 @@ class CoachRunScriptResponse(BaseModel):
     is_stub: bool = False
 
 
+# ==========================================
+# 🌅 JOURNEY SCHEMAS  (the slow ultra)
+# ==========================================
+
+
+# Tier → target distance lookup. The 20k tier ships with Phase 5; later
+# tiers reuse the same model.
+JOURNEY_TIERS = {
+    "20k": 20.0,
+    "30k": 30.0,
+    "50k": 50.0,
+    "100k": 100.0,
+}
+
+
+class JourneyTemplate(BaseModel):
+    """Suggested starter journey for the picker. The coach generates
+    these on demand for the active user (region + level aware)."""
+
+    tier: str
+    name: str
+    blurb: str
+    target_distance_km: float
+
+
+class JourneyCreateRequest(BaseModel):
+    """Start a new active journey. The user can have at most one active
+    journey at a time; the API will reject if another is already active."""
+
+    name: str = Field(..., min_length=1, max_length=120)
+    tier: str = Field(..., description="One of: 20k, 30k, 50k, 100k")
+    plan_summary: Optional[str] = Field(None, max_length=400)
+
+
+class JourneyUpdateRequest(BaseModel):
+    """Edit notes / name on an existing journey."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
+class JourneyResponse(BaseModel):
+    """Full journey state including derived progress."""
+
+    id: int
+    name: str
+    tier: str
+    target_distance_km: float
+    status: str  # active | completed | abandoned
+    plan_summary: Optional[str] = None
+    notes: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+    # Derived fields
+    accumulated_km: float = 0.0
+    progress_percent: float = 0.0
+    activity_count: int = 0
+    days_active: int = 0
+
+    class Config:
+        from_attributes = True
+
+

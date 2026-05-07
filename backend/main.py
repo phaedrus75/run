@@ -19,6 +19,7 @@ You'll see interactive API documentation!
 
 import os
 import logging
+from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -67,6 +68,7 @@ from models import (
     CoachMessage,
     CoachRunScript,
     CoachTodayCard,
+    Journey,
 )
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
@@ -96,6 +98,11 @@ from schemas import (
     CoachRunScriptLine,
     CoachRunScriptRequest,
     CoachRunScriptResponse,
+    JourneyCreateRequest,
+    JourneyUpdateRequest,
+    JourneyResponse,
+    JourneyTemplate,
+    JOURNEY_TIERS,
 )
 import crud
 import coach
@@ -506,6 +513,43 @@ def run_migrations():
                     )
                 """))
 
+                # Journeys (Phase 5) — the slow ultra. Per-user multi-day
+                # walk-and-run accumulator. Runs and walks gain a journey_id
+                # column so completed activities can be summed against the
+                # active journey's target.
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS journeys (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        name VARCHAR NOT NULL,
+                        tier VARCHAR NOT NULL,
+                        target_distance_km FLOAT NOT NULL,
+                        status VARCHAR NOT NULL DEFAULT 'active',
+                        plan_summary TEXT,
+                        notes TEXT,
+                        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        completed_at TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_journeys_user_status
+                        ON journeys(user_id, status)
+                """))
+                conn.execute(text(
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS journey_id INTEGER"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE walks ADD COLUMN IF NOT EXISTS journey_id INTEGER"
+                ))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_runs_journey
+                        ON runs(journey_id)
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_walks_journey
+                        ON walks(journey_id)
+                """))
+
                 conn.commit()
                 
                 migration_email = os.getenv("MIGRATION_USER_EMAIL")
@@ -581,9 +625,15 @@ def run_migrations():
                 _sqlite_col("runs", "coach_note_generated_at", "coach_note_generated_at TIMESTAMP")
                 _sqlite_col("walks", "coach_note", "coach_note TEXT")
                 _sqlite_col("walks", "coach_note_generated_at", "coach_note_generated_at TIMESTAMP")
+
+                # Journey attribution columns (Phase 5)
+                _sqlite_col("runs", "journey_id", "journey_id INTEGER")
+                _sqlite_col("walks", "journey_id", "journey_id INTEGER")
+
                 # SQLAlchemy create_all() at the end of run_migrations() will
-                # create the coach_messages / coach_run_scripts / coach_today_cards
-                # tables in SQLite via the model definitions.
+                # create the coach_messages / coach_run_scripts /
+                # coach_today_cards / journeys tables in SQLite via the model
+                # definitions.
         except Exception as e:
             print(f"Migration note: {e}")
     
@@ -1303,7 +1353,20 @@ def create_run(
         run.category = _sanitize_text(run.category, max_length=50)
     
     db_run = crud.create_run(db=db, run=run, user_id=current_user.id)
-    
+
+    # 🌅 Journey auto-attribution: if the user has an active Journey, count
+    # this run toward it. The user can abandon the journey to stop this.
+    active_journey = (
+        db.query(Journey)
+        .filter(Journey.user_id == current_user.id, Journey.status == "active")
+        .order_by(Journey.started_at.desc())
+        .first()
+    )
+    if active_journey is not None:
+        db_run.journey_id = active_journey.id
+        db.commit()
+        db.refresh(db_run)
+
     # 🎉 Check for all celebrations!
     celebrations = check_all_celebrations(db, db_run, current_user)
     
@@ -4757,6 +4820,20 @@ def create_walk_endpoint(
         category=payload.get("category"),
         public_walk_id=payload.get("public_walk_id"),
     )
+
+    # 🌅 Journey auto-attribution: if the user has an active Journey, count
+    # this walk toward it.
+    active_journey = (
+        db.query(Journey)
+        .filter(Journey.user_id == current_user.id, Journey.status == "active")
+        .order_by(Journey.started_at.desc())
+        .first()
+    )
+    if active_journey is not None:
+        walk.journey_id = active_journey.id
+        db.commit()
+        db.refresh(walk)
+
     milestones = _milestone_unlocks_after_activity(db, current_user)
     return _walk_to_dict(walk, milestone_unlocks=milestones)
 
@@ -5540,6 +5617,263 @@ def get_run_script(
         created_at=row.created_at,
         is_stub=not llm.is_live(),
     )
+
+
+# ==========================================
+# 🌅 JOURNEY ENDPOINTS  (the slow ultra)
+# ==========================================
+
+
+def _journey_progress(db: Session, journey: Journey) -> dict:
+    """Sum the contributing run+walk distances for a journey.
+
+    Returns the accumulated km, activity count, and number of distinct
+    days the user has worked on the journey. The journey is "completed"
+    when accumulated_km >= target_distance_km, but we leave the status
+    transition to the explicit POST /journeys/{id}/complete endpoint.
+    """
+    run_rows = (
+        db.query(Run.distance_km, Run.completed_at)
+        .filter(Run.journey_id == journey.id, Run.user_id == journey.user_id)
+        .all()
+    )
+    walk_rows = (
+        db.query(Walk.distance_km, Walk.ended_at)
+        .filter(Walk.journey_id == journey.id, Walk.user_id == journey.user_id)
+        .all()
+    )
+    distances = [float(r[0] or 0.0) for r in run_rows] + [float(w[0] or 0.0) for w in walk_rows]
+    accumulated_km = sum(distances)
+    activity_count = len(distances)
+
+    days = set()
+    for _, ts in run_rows:
+        if ts is not None:
+            days.add(ts.date().isoformat())
+    for _, ts in walk_rows:
+        if ts is not None:
+            days.add(ts.date().isoformat())
+    days_active = len(days) or (1 if journey.started_at else 0)
+
+    return {
+        "accumulated_km": round(accumulated_km, 2),
+        "activity_count": activity_count,
+        "days_active": days_active,
+    }
+
+
+def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
+    progress = _journey_progress(db, journey)
+    target = float(journey.target_distance_km or 0.0)
+    pct = (progress["accumulated_km"] / target * 100.0) if target > 0 else 0.0
+    return JourneyResponse(
+        id=journey.id,
+        name=journey.name,
+        tier=journey.tier,
+        target_distance_km=journey.target_distance_km,
+        status=journey.status,
+        plan_summary=journey.plan_summary,
+        notes=journey.notes,
+        started_at=journey.started_at,
+        completed_at=journey.completed_at,
+        accumulated_km=progress["accumulated_km"],
+        progress_percent=round(min(pct, 999.0), 1),
+        activity_count=progress["activity_count"],
+        days_active=progress["days_active"],
+    )
+
+
+def _get_active_journey(db: Session, user_id: int) -> Optional[Journey]:
+    return (
+        db.query(Journey)
+        .filter(Journey.user_id == user_id, Journey.status == "active")
+        .order_by(Journey.started_at.desc())
+        .first()
+    )
+
+
+# Static templates (Phase 5). Phase 5+ swaps these for coach-personalised
+# suggestions; today they're a deterministic, region-agnostic starter set.
+_JOURNEY_TEMPLATES: List[JourneyTemplate] = [
+    JourneyTemplate(
+        tier="20k",
+        name="Twenty in your neighbourhood",
+        blurb="20 km of walks and runs strung across a few weeks. Photos welcome.",
+        target_distance_km=20.0,
+    ),
+    JourneyTemplate(
+        tier="20k",
+        name="A weekend slow ultra",
+        blurb="Spread 20 km across Saturday and Sunday. Coffee in the middle.",
+        target_distance_km=20.0,
+    ),
+    JourneyTemplate(
+        tier="20k",
+        name="The morning twenty",
+        blurb="One 5–6 km loop most mornings until the line is crossed.",
+        target_distance_km=20.0,
+    ),
+]
+
+
+@app.get("/journeys/templates", response_model=List[JourneyTemplate])
+def list_journey_templates(current_user: User = Depends(require_auth)):
+    """Three starter Journey suggestions for the build flow."""
+    return _JOURNEY_TEMPLATES
+
+
+@app.post("/journeys", response_model=JourneyResponse)
+def create_journey(
+    payload: JourneyCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Start a new active journey. Rejects if another journey is already
+    active — the user must complete or abandon it first."""
+    if payload.tier not in JOURNEY_TIERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"tier must be one of: {list(JOURNEY_TIERS.keys())}",
+        )
+    if _get_active_journey(db, current_user.id) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have an active journey. Complete or abandon it first.",
+        )
+    name = _sanitize_text(payload.name, max_length=120)
+    plan = _sanitize_text(payload.plan_summary, max_length=400) if payload.plan_summary else None
+    journey = Journey(
+        user_id=current_user.id,
+        name=name,
+        tier=payload.tier,
+        target_distance_km=JOURNEY_TIERS[payload.tier],
+        status="active",
+        plan_summary=plan,
+    )
+    db.add(journey)
+    db.commit()
+    db.refresh(journey)
+    return _journey_to_response(db, journey)
+
+
+@app.get("/journeys", response_model=List[JourneyResponse])
+def list_journeys(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """All journeys for the current user, newest first."""
+    journeys = (
+        db.query(Journey)
+        .filter(Journey.user_id == current_user.id)
+        .order_by(Journey.started_at.desc())
+        .all()
+    )
+    return [_journey_to_response(db, j) for j in journeys]
+
+
+@app.get("/journeys/active", response_model=Optional[JourneyResponse])
+def get_active_journey(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return the user's currently active journey, or null if none."""
+    j = _get_active_journey(db, current_user.id)
+    if j is None:
+        return None
+    return _journey_to_response(db, j)
+
+
+@app.get("/journeys/{journey_id}", response_model=JourneyResponse)
+def get_journey(
+    journey_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    return _journey_to_response(db, journey)
+
+
+@app.patch("/journeys/{journey_id}", response_model=JourneyResponse)
+def update_journey(
+    journey_id: int,
+    payload: JourneyUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    if payload.name is not None:
+        journey.name = _sanitize_text(payload.name, max_length=120)
+    if payload.notes is not None:
+        journey.notes = _sanitize_text(payload.notes, max_length=2000)
+    db.commit()
+    db.refresh(journey)
+    return _journey_to_response(db, journey)
+
+
+@app.post("/journeys/{journey_id}/complete", response_model=JourneyResponse)
+def complete_journey(
+    journey_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Mark a journey complete. Allowed at any time so the user can declare
+    the journey done early; we don't gate on `accumulated_km >= target`."""
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    if journey.status != "active":
+        raise HTTPException(status_code=400, detail="Journey is not active")
+    journey.status = "completed"
+    journey.completed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(journey)
+
+    # Fire any newly-unlocked milestone badges (e.g. "Journeyer 20k") so
+    # the client can play the unlock sequence right after completion. We
+    # don't return them in the body to keep the response shape stable;
+    # the next call to /achievements will pick them up.
+    _milestone_unlocks_after_activity(db, current_user)
+
+    return _journey_to_response(db, journey)
+
+
+@app.post("/journeys/{journey_id}/abandon", response_model=JourneyResponse)
+def abandon_journey(
+    journey_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Mark a journey abandoned. Past contributing activities keep their
+    journey_id; future ones won't auto-attach."""
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id, Journey.user_id == current_user.id)
+        .first()
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Journey not found")
+    if journey.status != "active":
+        raise HTTPException(status_code=400, detail="Journey is not active")
+    journey.status = "abandoned"
+    db.commit()
+    db.refresh(journey)
+    return _journey_to_response(db, journey)
 
 
 # ==========================================

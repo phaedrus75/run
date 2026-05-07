@@ -88,6 +88,10 @@ class Run(Base):
     coach_note = Column(Text, nullable=True)
     coach_note_generated_at = Column(DateTime, nullable=True)
 
+    # 🌅 Journey attribution — when set, this run counts toward the
+    # accumulated distance of the user's active Journey (Phase 5).
+    journey_id = Column(Integer, nullable=True, index=True)
+
 
 
 
@@ -457,6 +461,10 @@ class Walk(Base):
     coach_note = Column(Text, nullable=True)
     coach_note_generated_at = Column(DateTime, nullable=True)
 
+    # 🌅 Journey attribution — when set, this walk counts toward the
+    # accumulated distance of the user's active Journey (Phase 5).
+    journey_id = Column(Integer, nullable=True, index=True)
+
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -653,3 +661,34 @@ class CoachTodayCard(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "day_iso", name="uq_coach_today_card_user_day"),
     )
+
+
+class Journey(Base):
+    """🌅 Slow ultra — a multi-day walk-and-run adventure with a target distance.
+
+    A Journey is the brand's "slow ultra" container: 20k → 30k → 50k → 100k
+    accumulated across runs and walks over many days, weeks if needed. The
+    user starts one, sees a single soft "Today" recommendation while it's
+    active, and individual runs/walks earn progress when they reference the
+    journey id.
+
+    Phase 5 ships the 20k tier; later tiers reuse the same model with a
+    different `tier` value.
+
+    Status:
+    - active     : the user is currently on this journey (only one at a time)
+    - completed  : the cumulative distance reached the target
+    - abandoned  : the user gave up the journey (still readable in history)
+    """
+    __tablename__ = "journeys"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    tier = Column(String, nullable=False, index=True)  # "20k" | "30k" | "50k" | "100k"
+    target_distance_km = Column(Float, nullable=False)
+    status = Column(String, nullable=False, default="active", index=True)
+    plan_summary = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    started_at = Column(DateTime, server_default=func.now(), nullable=False)
+    completed_at = Column(DateTime, nullable=True)
