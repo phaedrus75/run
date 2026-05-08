@@ -30,8 +30,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { Journey, journeyApi } from '../services/api';
+import { Journey, JourneyMapContext, journeyApi } from '../services/api';
 import { CoachChatSheet } from '../components/CoachChatSheet';
+import { JourneyPreviewMap } from '../components/JourneyPreviewMap';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 
 function parseIsoDate(s: string | null | undefined): Date | null {
@@ -94,6 +95,7 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
   const [chatVisible, setChatVisible] = useState(false);
   const [starting, setStarting] = useState(false);
   const [showRescheduler, setShowRescheduler] = useState(false);
+  const [mapContext, setMapContext] = useState<JourneyMapContext | null>(null);
   const notesDirty = useRef(false);
 
   const fetch = useCallback(async () => {
@@ -116,6 +118,27 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
     const unsub = navigation.addListener('focus', fetch);
     return unsub;
   }, [navigation, fetch]);
+
+  // 🗺 Lazy-load the map context once we know we're rendering a planned
+  // journey. Active/completed/abandoned journeys don't show the preview
+  // map (they have their own attribution UI), so we don't fetch for those.
+  useEffect(() => {
+    if (!journey || journey.status !== 'planned') return;
+    if (mapContext !== null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ctx = await journeyApi.mapContext(journey.tier);
+        if (!cancelled) setMapContext(ctx);
+      } catch {
+        // Non-fatal — the JourneyPreviewMap component renders gracefully
+        // when the context is null/empty.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [journey, mapContext]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -387,6 +410,16 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
               {journey.is_expired ? ' (window has closed)' : ''}
             </Text>
           </View>
+        ) : null}
+
+        {/* ── Planned: map (your usual ground) ──────────────────────── */}
+        {isPlanned ? (
+          <JourneyPreviewMap
+            context={mapContext}
+            metaLabel={`${journey.target_distance_km.toFixed(0)} km · ${
+              journey.max_days <= 1 ? '1 day' : `up to ${journey.max_days} days`
+            }`}
+          />
         ) : null}
 
         {/* ── Planned: readiness note + prep checklist + CTAs ─────────── */}

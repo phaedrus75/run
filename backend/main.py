@@ -105,6 +105,7 @@ from schemas import (
     JourneyResponse,
     JourneyTemplate,
     JourneyDayBriefResponse,
+    JourneyMapContext,
     JourneyPreviewRequest,
     JourneyPreviewResponse,
     JourneyScheduleRequest,
@@ -6264,6 +6265,7 @@ def preview_journey(
         checklist = coach._fallback_prep_checklist(payload.tier)
 
     suggested = _suggest_scheduled_for(payload.tier).date().isoformat()
+    map_context = _build_journey_map_context(db, current_user, tier=payload.tier)
 
     return JourneyPreviewResponse(
         tier=payload.tier,
@@ -6274,6 +6276,7 @@ def preview_journey(
         readiness_note=readiness_note,
         prep_checklist=checklist,
         suggested_scheduled_for=suggested,
+        map_context=map_context,
         is_stub=is_stub,
     )
 
@@ -6329,6 +6332,155 @@ def _suggest_scheduled_for(tier: str) -> datetime:
         days_ahead = 7
     target = today + timedelta(days=days_ahead)
     return datetime(target.year, target.month, target.day)
+
+
+def _downsample_polyline(points: List[tuple], max_points: int = 48) -> List[List[float]]:
+    """Reduce a route polyline to roughly `max_points` lat/lng pairs.
+
+    The preview map renders multiple recent routes; full-resolution
+    polylines (often 1–2k points each) bloat the response and make the
+    map sluggish on lower-end devices. We just stride through the
+    list — fine for a soft hint of "your usual ground", which is the
+    point of the preview map.
+    """
+    if not points:
+        return []
+    if len(points) <= max_points:
+        return [[float(p[0]), float(p[1])] for p in points]
+    stride = max(1, len(points) // max_points)
+    sampled = points[::stride]
+    # Always include the very last point so the line doesn't visually
+    # end mid-segment.
+    if sampled[-1] != points[-1]:
+        sampled.append(points[-1])
+    return [[float(p[0]), float(p[1])] for p in sampled]
+
+
+def _suggested_radius_for_tier(tier: str) -> float:
+    """Soft radius (km) the journey distance loosely covers from home.
+
+    This is a *visual hint* — slow ultras are loops, out-and-backs,
+    multi-day stitches. The number doesn't have to be exact, it just
+    has to give the user a sense of the scale of the adventure they're
+    previewing.
+    """
+    return {
+        "20k": 6.0,
+        "30k": 9.0,
+        "50k": 14.0,
+        "60k": 17.0,
+        "75k": 20.0,
+        "100k": 25.0,
+    }.get(tier, 10.0)
+
+
+def _build_journey_map_context(
+    db: Session,
+    user: User,
+    *,
+    tier: Optional[str] = None,
+    recent_count: int = 4,
+) -> JourneyMapContext:
+    """Build the map context payload for a journey preview / planned detail.
+
+    Returns the user's home location (if known) and up to `recent_count`
+    of their most recent GPS activity polylines, down-sampled. Walks
+    and runs are both eligible — the goal is to anchor the preview in
+    the runner's actual terrain, not to show "where the journey is".
+
+    Falls back gracefully when home is unknown or the user has no GPS
+    history yet — the frontend renders a soft placeholder in that case.
+    """
+    from services.overpass import decode_polyline
+
+    home_lat = getattr(user, "home_lat", None)
+    home_lng = getattr(user, "home_lng", None)
+    home_city = getattr(user, "home_city", None)
+
+    recent_routes: List[List[List[float]]] = []
+
+    # Pull recent GPS runs.
+    recent_runs = (
+        db.query(Run)
+        .filter(
+            Run.user_id == user.id,
+            Run.route_polyline.isnot(None),
+        )
+        .order_by(Run.completed_at.desc().nullslast())
+        .limit(recent_count)
+        .all()
+    )
+    for r in recent_runs:
+        poly = getattr(r, "route_polyline", None)
+        if not poly:
+            continue
+        try:
+            pts = decode_polyline(poly)
+        except Exception:
+            continue
+        sampled = _downsample_polyline(pts)
+        if len(sampled) >= 2:
+            recent_routes.append(sampled)
+
+    # Top up with recent walks if we don't have enough runs.
+    if len(recent_routes) < recent_count:
+        remaining = recent_count - len(recent_routes)
+        recent_walks = (
+            db.query(Walk)
+            .filter(
+                Walk.user_id == user.id,
+                Walk.route_polyline.isnot(None),
+            )
+            .order_by(Walk.completed_at.desc().nullslast())
+            .limit(remaining)
+            .all()
+        )
+        for w in recent_walks:
+            poly = getattr(w, "route_polyline", None)
+            if not poly:
+                continue
+            try:
+                pts = decode_polyline(poly)
+            except Exception:
+                continue
+            sampled = _downsample_polyline(pts)
+            if len(sampled) >= 2:
+                recent_routes.append(sampled)
+
+    # If home is unknown but the user has GPS history, fall back to the
+    # centroid of the most recent route so the map at least centres
+    # somewhere meaningful instead of (0, 0).
+    if home_lat is None or home_lng is None:
+        if recent_routes:
+            first = recent_routes[0]
+            home_lat = sum(p[0] for p in first) / len(first)
+            home_lng = sum(p[1] for p in first) / len(first)
+
+    radius = _suggested_radius_for_tier(tier) if tier else None
+
+    return JourneyMapContext(
+        home_lat=home_lat,
+        home_lng=home_lng,
+        home_city=home_city,
+        recent_routes=recent_routes,
+        suggested_radius_km=radius,
+    )
+
+
+@app.get("/me/journey-map-context", response_model=JourneyMapContext)
+def get_my_journey_map_context(
+    tier: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """🗺 Map context for journey planning.
+
+    Used by `JourneyDetailScreen` (planned status) and any other surface
+    that wants to render the runner's home + recent terrain alongside
+    journey content. The `tier` query param tunes the suggested radius
+    bubble.
+    """
+    return _build_journey_map_context(db, current_user, tier=tier)
 
 
 @app.post("/journeys/{journey_id}/start", response_model=JourneyResponse)

@@ -32,8 +32,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { Journey, JourneyPreview, journeyApi } from '../services/api';
+import { Journey, JourneyMapContext, JourneyPreview, journeyApi } from '../services/api';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
+import { JourneyPreviewMap } from '../components/JourneyPreviewMap';
 
 interface Props {
   navigation: any;
@@ -218,6 +219,12 @@ export function JourneyPreviewScreen({ navigation, route }: Props) {
         </View>
         <Text style={styles.name}>{preview.name}</Text>
         <Text style={styles.blurb}>{preview.plan_summary}</Text>
+
+        {/* ── Map (your usual ground) ───────────────────────────────── */}
+        <JourneyPreviewMap
+          context={preview.map_context}
+          metaLabel={`${preview.target_distance_km.toFixed(0)} km · ${days}`}
+        />
 
         {/* ── Readiness ──────────────────────────────────────────────── */}
         <View style={styles.readinessCard}>

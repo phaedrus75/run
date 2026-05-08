@@ -52,6 +52,15 @@ export interface WalkMapProps {
   /** Fired when the user taps a marker. Receives the marker's `id` so the
    *  caller can look up the underlying entity (e.g. a photo). */
   onMarkerPress?: (markerId: string) => void;
+  /**
+   * Additional polylines drawn underneath the primary `route` — used by
+   * the journey preview map to overlay several recent activity routes
+   * as a faint hint of "your usual ground". Each entry is an array of
+   * `{lat, lng}` points; rendered in `extraRouteColor` / `extraRouteWidth`.
+   */
+  extraRoutes?: MapPoint[][];
+  extraRouteColor?: string;
+  extraRouteWidth?: number;
 }
 
 export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
@@ -66,6 +75,9 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
     routeWidth = 6,
     interactive = false,
     onMarkerPress,
+    extraRoutes,
+    extraRouteColor = colors.primary,
+    extraRouteWidth = 3,
   },
   ref,
 ) {
@@ -107,8 +119,20 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
       ? { coordinates: { latitude: route[0].lat, longitude: route[0].lng }, zoom }
       : undefined;
 
+  // Build the extra (background) polylines once — same shape for both
+  // Apple and Google. These render *below* the primary route so the
+  // current activity/journey line stays visually dominant.
+  const extraPolylinesShared = (extraRoutes || [])
+    .filter((r) => r && r.length > 1)
+    .map((r, idx) => ({
+      id: `walk-extra-route-${idx}`,
+      coordinates: r.map((p) => ({ latitude: p.lat, longitude: p.lng })),
+      color: extraRouteColor,
+      width: extraRouteWidth,
+    }));
+
   if (Platform.OS === 'ios' && AppleMaps) {
-    const polylines =
+    const primary =
       route && route.length > 1
         ? [
             {
@@ -118,7 +142,9 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
               width: routeWidth,
             },
           ]
-        : undefined;
+        : [];
+    const allLines = [...extraPolylinesShared, ...primary];
+    const polylines = allLines.length > 0 ? allLines : undefined;
     const appleMarkers = (markers || []).map((m) => ({
       id: m.id,
       coordinates: { latitude: m.lat, longitude: m.lng },
@@ -151,7 +177,7 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
   }
 
   if (Platform.OS === 'android' && GoogleMaps) {
-    const polylines =
+    const primary =
       route && route.length > 1
         ? [
             {
@@ -161,7 +187,9 @@ export const WalkMap = React.forwardRef<any, WalkMapProps>(function WalkMap(
               width: routeWidth,
             },
           ]
-        : undefined;
+        : [];
+    const allLines = [...extraPolylinesShared, ...primary];
+    const polylines = allLines.length > 0 ? allLines : undefined;
     const googleMarkers = (markers || []).map((m) => ({
       id: m.id,
       coordinates: { latitude: m.lat, longitude: m.lng },

@@ -1420,6 +1420,25 @@ export interface Journey {
   is_expired: boolean;
 }
 
+/** Map context attached to journey previews and exposed standalone via
+ *  `GET /me/journey-map-context`. A journey doesn't have a fixed route,
+ *  so this anchors the preview/planned screens in the runner's home
+ *  location plus a few recent activity polylines as a faint hint of
+ *  "your usual ground". All fields can be null/empty if the runner has
+ *  no home set or no GPS history. */
+export interface JourneyMapContext {
+  home_lat: number | null;
+  home_lng: number | null;
+  home_city: string | null;
+  /** List of recent activity polylines. Each polyline is a list of
+   *  `[lat, lng]` pairs, server-downsampled. */
+  recent_routes: number[][][];
+  /** Soft visual radius (km) the journey distance loosely covers from
+   *  home. Hint only — slow ultras meander, but the bubble gives the
+   *  runner a sense of scale. */
+  suggested_radius_km: number | null;
+}
+
 /** Preview payload returned from `POST /journeys/preview`. The frontend
  *  renders this on `JourneyPreviewScreen` then sends the same content
  *  back via `journeyApi.create(...)` if the user commits. */
@@ -1433,6 +1452,8 @@ export interface JourneyPreview {
   prep_checklist: string[];
   /** ISO date `YYYY-MM-DD`. Default: next Saturday. */
   suggested_scheduled_for: string;
+  /** Map context (home + recent terrain) for the preview map block. */
+  map_context: JourneyMapContext;
   is_stub: boolean;
 }
 
@@ -1508,6 +1529,14 @@ export const journeyApi = {
   /** Guide-written daily briefs for a multi-day journey. Empty for 20k/30k. */
   listDayBriefs: (id: number): Promise<JourneyDayBrief[]> =>
     apiFetch(`/journeys/${id}/briefs`),
+
+  /** Map context for a journey preview / planned detail. Tier tunes the
+   *  suggested-radius bubble. Used standalone from `JourneyDetailScreen`
+   *  for planned journeys (the preview already embeds this payload). */
+  mapContext: (tier?: string): Promise<JourneyMapContext> => {
+    const q = tier ? `?tier=${encodeURIComponent(tier)}` : '';
+    return apiFetch(`/me/journey-map-context${q}`);
+  },
 };
 
 export interface JourneyDayBrief {

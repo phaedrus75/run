@@ -416,6 +416,32 @@ class JourneyPreviewRequest(BaseModel):
     blurb: Optional[str] = Field(None, max_length=400)
 
 
+class JourneyMapContext(BaseModel):
+    """🗺 Map context for a journey preview / planned detail.
+
+    A journey doesn't have a fixed route — the user accumulates distance
+    across whatever runs and walks they do. So the "preview map" is
+    really a map of *the user's usual ground*: their home pin, plus a
+    handful of recently-completed activity polylines as a faint hint of
+    the terrain they tend to cover.
+
+    All fields are optional; the frontend renders gracefully when home
+    is unknown or no recent routes exist.
+    """
+
+    home_lat: Optional[float] = None
+    home_lng: Optional[float] = None
+    home_city: Optional[str] = None
+    # List of recent activity polylines, each polyline is a list of
+    # [lat, lng] pairs. Down-sampled server-side so the payload stays
+    # small (~30-60 points per route).
+    recent_routes: List[List[List[float]]] = []
+    # Approximate radius (km) the journey distance loosely covers from
+    # home. Frontend can render a soft circle to anchor "scale". Optional
+    # — only meaningful when home is known.
+    suggested_radius_km: Optional[float] = None
+
+
 class JourneyPreviewResponse(BaseModel):
     """Read-only preview payload for `JourneyPreviewScreen`."""
 
@@ -429,6 +455,8 @@ class JourneyPreviewResponse(BaseModel):
     # Default scheduled day suggested by the server (next Saturday for 1-day
     # tiers, next weekend for multi-day). ISO date string `YYYY-MM-DD` in UTC.
     suggested_scheduled_for: str
+    # 🗺 Embedded map context — same shape as GET /me/journey-map-context.
+    map_context: JourneyMapContext = Field(default_factory=JourneyMapContext)
     is_stub: bool = False
 
 
