@@ -20,12 +20,57 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { JourneyMapContext } from '../services/api';
+import { JourneyMapContext, JourneyWaypoint } from '../services/api';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
-import { MapPoint, WalkMap } from './WalkMap';
+import { MapMarker, MapPoint, WalkMap } from './WalkMap';
+
+// Decode a Google encoded polyline string into [{lat, lng}] points.
+// Lifted here so the map can render Guide-stitched routes without
+// pulling in a separate dependency. Identical algorithm to the
+// backend `services.overpass.decode_polyline` and to the standard
+// Google polyline format used everywhere in the app.
+function decodePolyline(encoded: string): MapPoint[] {
+  if (!encoded) return [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const points: MapPoint[] = [];
+  const len = encoded.length;
+  while (index < len) {
+    let result = 0;
+    let shift = 0;
+    let b = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20 && index < len);
+    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+    result = 0;
+    shift = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20 && index < len);
+    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
 
 interface Props {
   context: JourneyMapContext | null;
+  /** Guide-recommended route polyline (Google encoded). When present,
+   *  this is the *primary* line drawn on the map (bold, in the primary
+   *  colour). When absent, the map renders the "your usual ground"
+   *  context (home pin + faint recent activity routes). */
+  routePolyline?: string;
+  /** Numbered waypoint pins to drop on top of the recommended route.
+   *  Only entries with valid lat/lng are shown. */
+  waypoints?: JourneyWaypoint[];
   /** Optional override for the caption headline ("Your usual ground"). */
   title?: string;
   /** Optional human-readable distance label, e.g. "20 km · 1 day". */
@@ -46,8 +91,45 @@ function zoomForRadius(radiusKm: number | null | undefined): number {
   return 10;
 }
 
-export function JourneyPreviewMap({ context, title, metaLabel }: Props) {
-  const center: MapPoint | null = useMemo(() => {
+export function JourneyPreviewMap({
+  context,
+  routePolyline,
+  waypoints,
+  title,
+  metaLabel,
+}: Props) {
+  // Decode the recommended path once per render. Empty array if none.
+  const primaryRoute: MapPoint[] = useMemo(() => {
+    if (!routePolyline) return [];
+    try {
+      return decodePolyline(routePolyline);
+    } catch {
+      return [];
+    }
+  }, [routePolyline]);
+
+  const hasRoute = primaryRoute.length >= 2;
+
+  // Numbered waypoint markers (only those with resolved lat/lng).
+  const waypointMarkers: MapMarker[] = useMemo(() => {
+    if (!waypoints?.length) return [];
+    let n = 0;
+    const out: MapMarker[] = [];
+    for (const wp of waypoints) {
+      if (wp.lat == null || wp.lng == null) continue;
+      n += 1;
+      out.push({
+        id: `wp-${n}`,
+        lat: wp.lat,
+        lng: wp.lng,
+        title: `${n}. ${wp.name}`,
+        tintColor: colors.primary,
+      });
+    }
+    return out;
+  }, [waypoints]);
+
+  const homePoint: MapPoint | null = useMemo(() => {
     if (!context) return null;
     if (context.home_lat != null && context.home_lng != null) {
       return { lat: context.home_lat, lng: context.home_lng };
@@ -55,31 +137,52 @@ export function JourneyPreviewMap({ context, title, metaLabel }: Props) {
     return null;
   }, [context]);
 
+  // Map centre: when there's a recommended path we centre on its first
+  // point; otherwise we fall back to home (or the centroid of recent
+  // routes the backend pre-baked into the context).
+  const center: MapPoint | null = useMemo(() => {
+    if (hasRoute) return primaryRoute[0];
+    return homePoint;
+  }, [hasRoute, primaryRoute, homePoint]);
+
+  // Background polylines — recent activity routes from the user's
+  // history. We hide these when a recommended route is present so the
+  // primary line stays visually clean and unambiguous.
   const extraRoutes: MapPoint[][] = useMemo(() => {
+    if (hasRoute) return [];
     if (!context?.recent_routes?.length) return [];
     return context.recent_routes
       .filter((r) => r && r.length >= 2)
       .map((r) => r.map(([lat, lng]) => ({ lat, lng })));
-  }, [context]);
+  }, [hasRoute, context]);
 
-  const markers = useMemo(() => {
-    if (!center) return undefined;
-    return [
-      {
-        id: 'journey-home',
-        lat: center.lat,
-        lng: center.lng,
-        title: context?.home_city || 'Home',
-        tintColor: colors.primary,
-      },
-    ];
-  }, [center, context]);
+  // Markers: numbered waypoints when there's a route, otherwise the
+  // home pin (only if known).
+  const markers: MapMarker[] | undefined = useMemo(() => {
+    if (hasRoute) return waypointMarkers.length ? waypointMarkers : undefined;
+    if (homePoint) {
+      return [
+        {
+          id: 'journey-home',
+          lat: homePoint.lat,
+          lng: homePoint.lng,
+          title: context?.home_city || 'Home',
+          tintColor: colors.primary,
+        },
+      ];
+    }
+    return undefined;
+  }, [hasRoute, waypointMarkers, homePoint, context]);
 
-  const zoom = zoomForRadius(context?.suggested_radius_km ?? null);
+  // Zoom: recommended routes auto-zoom from the polyline (we let
+  // WalkMap centre and the user can pan). For the usual-ground fallback
+  // we use the per-tier soft radius.
+  const zoom = hasRoute
+    ? zoomForRoute(primaryRoute)
+    : zoomForRadius(context?.suggested_radius_km ?? null);
 
-  // Empty state — no home, no recent routes. Keep the screen looking
-  // intentional rather than rendering a blank rectangle.
-  const isEmpty = !center && extraRoutes.length === 0;
+  const isEmpty = !hasRoute && !center && extraRoutes.length === 0;
+  const captionTitle = title || (hasRoute ? 'Recommended path' : 'Your usual ground');
 
   return (
     <View style={styles.wrap}>
@@ -98,6 +201,9 @@ export function JourneyPreviewMap({ context, title, metaLabel }: Props) {
             style={styles.map}
             centerOn={center || undefined}
             zoom={zoom}
+            route={hasRoute ? primaryRoute : undefined}
+            routeColor={colors.primary}
+            routeWidth={5}
             markers={markers}
             extraRoutes={extraRoutes}
             extraRouteColor={colors.primary}
@@ -108,12 +214,21 @@ export function JourneyPreviewMap({ context, title, metaLabel }: Props) {
       </View>
       <View style={styles.captionRow}>
         <View style={styles.captionLeft}>
-          <Ionicons name="compass-outline" size={14} color={colors.textLight} />
-          <Text style={styles.captionTitle}>{title || 'Your usual ground'}</Text>
+          <Ionicons
+            name={hasRoute ? 'navigate-outline' : 'compass-outline'}
+            size={14}
+            color={colors.textLight}
+          />
+          <Text style={styles.captionTitle}>{captionTitle}</Text>
         </View>
         {metaLabel ? <Text style={styles.captionMeta}>{metaLabel}</Text> : null}
       </View>
-      {extraRoutes.length > 0 ? (
+      {hasRoute ? (
+        <Text style={styles.subCaption}>
+          A walkable line stitched through the waypoints below. Treat the
+          directions as the source of truth — the line is a sketch.
+        </Text>
+      ) : extraRoutes.length > 0 ? (
         <Text style={styles.subCaption}>
           The faint lines are your last few runs and walks — the journey
           adds up across whatever you do from here.
@@ -127,6 +242,32 @@ export function JourneyPreviewMap({ context, title, metaLabel }: Props) {
       ) : null}
     </View>
   );
+}
+
+// Pick a zoom level that comfortably frames a polyline of `pts` points.
+// We compute the bounding-box span and bucket it into the same scale
+// `zoomForRadius` uses; this keeps the feel consistent across both
+// fallback and recommended-route renders.
+function zoomForRoute(pts: MapPoint[]): number {
+  if (!pts.length) return 12;
+  let minLat = pts[0].lat;
+  let maxLat = pts[0].lat;
+  let minLng = pts[0].lng;
+  let maxLng = pts[0].lng;
+  for (const p of pts) {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+  }
+  // Approximate km span — 111km per degree of latitude, scaled by
+  // cosine for longitude. We just need a rough number for bucketing.
+  const latKm = (maxLat - minLat) * 111;
+  const midLat = (maxLat + minLat) / 2;
+  const lngKm = (maxLng - minLng) * 111 * Math.cos((midLat * Math.PI) / 180);
+  const span = Math.max(latKm, lngKm);
+  // Half-span is a reasonable proxy for the radius bucket.
+  return zoomForRadius(span / 2);
 }
 
 const styles = StyleSheet.create({

@@ -589,7 +589,7 @@ def _kmword(km: int) -> str:
 JOURNEY_NOTE_MAX_TOKENS = 350
 JOURNEY_BRIEF_MAX_TOKENS = 250
 JOURNEY_PREP_MAX_TOKENS = 350
-JOURNEY_SUGGESTIONS_MAX_TOKENS = 600
+JOURNEY_SUGGESTIONS_MAX_TOKENS = 1500
 JOURNEY_READINESS_MAX_TOKENS = 120
 JOURNEY_PREP_CHECKLIST_MAX_TOKENS = 400
 
@@ -701,14 +701,34 @@ def generate_journey_suggestions(
 ) -> List[Dict[str, Any]]:
     """Generate 1–2 bespoke journey ideas tailored to the user.
 
+    Each suggestion comes back with named waypoints, step-by-step
+    directions, and a stitched walkable polyline through the resolved
+    coordinates — so when the user taps a suggestion they see a real
+    path on the preview map, not just a name.
+
+    The Guide names the waypoints; the route planner (`services.
+    route_planner`) handles geocoding + stitching (OSRM walking-router
+    when reachable, straight-line fallback otherwise). Routing is
+    best-effort: a suggestion that fails to stitch (offline, no home
+    city, invalid waypoints) still gets returned with `waypoints` /
+    `directions` populated and an empty `route_polyline`, so the UI
+    can render the directions as a list and use the "your usual
+    ground" map.
+
     Caller renders these above the static template list in StartJourney.
     On any parse failure, returns []; the UI quietly hides the section.
     """
     context_text, signals = build_user_context(db, user)
+    home_city = (getattr(user, "home_city", None) or "").strip() or None
+    home_country = (getattr(user, "home_country", None) or "").strip() or None
     tier_block = (
         f"Selected tier: {tier} (target {target_distance_km:.0f} km, "
         f"{1 if tier in ('20k', '30k') else 3} day window)."
     )
+    if home_city:
+        tier_block += f"\nhome_city: {home_city}"
+    if home_country:
+        tier_block += f"\nhome_country: {home_country}"
     full_context = context_text + "\n\n" + tier_block
 
     system = coach_prompts.compose_system_prompt(
@@ -719,7 +739,9 @@ def generate_journey_suggestions(
     )
     user_message = (
         f"Suggest one or two journey ideas for the {tier} tier. "
-        "Output JSON only."
+        "Each must include real, geocodable waypoint names anchored "
+        "to the user's home_city, plus 6 to 10 short step-by-step "
+        "directions. Output JSON only."
     )
     raw = llm.complete(
         system=system,
@@ -727,7 +749,42 @@ def generate_journey_suggestions(
         max_tokens=JOURNEY_SUGGESTIONS_MAX_TOKENS,
         temperature=0.7,
     )
-    return _parse_journey_suggestions(raw, tier=tier, target_distance_km=target_distance_km)
+    suggestions = _parse_journey_suggestions(
+        raw, tier=tier, target_distance_km=target_distance_km
+    )
+    if not suggestions:
+        return suggestions
+
+    # Stitch a real route per suggestion. If home_city is unknown the
+    # waypoints are unlikely to resolve cleanly — we still try, but the
+    # frontend treats `route_polyline=""` as "no route, show directions
+    # only and fall back to the usual-ground map".
+    for s in suggestions:
+        try:
+            from services.route_planner import plan_route
+
+            planned = plan_route(
+                s.get("waypoints") or [],
+                home_city_hint=home_city,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.warning(
+                "journey_suggestions: route planner failed for %r: %s",
+                s.get("name"),
+                exc,
+            )
+            planned = {
+                "waypoints": s.get("waypoints") or [],
+                "route_polyline": "",
+                "estimated_distance_km": 0.0,
+                "stitch_method": "none",
+            }
+        s["waypoints"] = planned["waypoints"]
+        s["route_polyline"] = planned["route_polyline"]
+        s["estimated_distance_km"] = planned["estimated_distance_km"]
+        s["stitch_method"] = planned["stitch_method"]
+
+    return suggestions
 
 
 def generate_journey_readiness(
@@ -876,12 +933,42 @@ def _parse_journey_suggestions(
             target = float(item.get("target_distance_km") or target_distance_km)
         except (TypeError, ValueError):
             target = target_distance_km
+        # Waypoints — list of {name, note?}. Drop entries without a
+        # name; cap length so a malformed response can't blow up the
+        # geocoder.
+        wps_raw = item.get("waypoints") if isinstance(item.get("waypoints"), list) else []
+        waypoints: List[Dict[str, Any]] = []
+        for wp in wps_raw[:18]:
+            if not isinstance(wp, dict):
+                continue
+            wp_name = str(wp.get("name", "")).strip()
+            if not wp_name:
+                continue
+            wp_note = str(wp.get("note") or "").strip() or None
+            waypoints.append({"name": wp_name[:160], "note": wp_note[:80] if wp_note else None})
+
+        # Step-by-step directions — list of short strings.
+        dirs_raw = item.get("directions") if isinstance(item.get("directions"), list) else []
+        directions: List[str] = []
+        for d in dirs_raw[:14]:
+            if not isinstance(d, str):
+                continue
+            d_clean = d.strip()
+            if d_clean:
+                directions.append(d_clean[:280])
+
         out.append(
             {
                 "tier": tier,
                 "name": name[:80],
                 "blurb": blurb[:240],
                 "target_distance_km": target,
+                "waypoints": waypoints,
+                "directions": directions,
+                # Filled by `generate_journey_suggestions` after route stitching.
+                "route_polyline": "",
+                "estimated_distance_km": 0.0,
+                "stitch_method": "none",
             }
         )
     return out

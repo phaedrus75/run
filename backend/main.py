@@ -109,6 +109,7 @@ from schemas import (
     JourneyPreviewRequest,
     JourneyPreviewResponse,
     JourneyScheduleRequest,
+    JourneyWaypoint,
     JOURNEY_TIERS,
     JOURNEY_TIER_MAX_DAYS,
     JOURNEY_STATUSES,
@@ -577,6 +578,19 @@ def run_migrations():
                 conn.execute(text(
                     "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP"
                 ))
+                # 🛣 Guide-recommended route (Phase H+): waypoints + step
+                # directions + the stitched walkable polyline. Persisted
+                # so the planned-detail screen can render the same path
+                # the user previewed before committing.
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS waypoints_json TEXT"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS directions_json TEXT"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE journeys ADD COLUMN IF NOT EXISTS route_polyline TEXT"
+                ))
                 conn.execute(text(
                     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS journey_id INTEGER"
                 ))
@@ -695,6 +709,10 @@ def run_migrations():
                 _sqlite_col("journeys", "prep_checklist_json", "prep_checklist_json TEXT")
                 _sqlite_col("journeys", "scheduled_for", "scheduled_for TIMESTAMP")
                 _sqlite_col("journeys", "activated_at", "activated_at TIMESTAMP")
+                # 🛣 Guide-recommended route (Phase H+)
+                _sqlite_col("journeys", "waypoints_json", "waypoints_json TEXT")
+                _sqlite_col("journeys", "directions_json", "directions_json TEXT")
+                _sqlite_col("journeys", "route_polyline", "route_polyline TEXT")
 
                 # SQLAlchemy create_all() at the end of run_migrations() will
                 # create the coach_messages / coach_run_scripts /
@@ -5808,6 +5826,45 @@ def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
     scheduled = getattr(journey, "scheduled_for", None)
     scheduled_iso = scheduled.date().isoformat() if scheduled else None
 
+    # 🛣 Decode the persisted Guide route (waypoints + directions). Empty
+    # arrays for static-template journeys; the planned-detail screen
+    # falls back to the "usual ground" map in that case.
+    waypoints: List[JourneyWaypoint] = []
+    raw_wps = getattr(journey, "waypoints_json", None)
+    if raw_wps:
+        try:
+            decoded = json.loads(raw_wps)
+            if isinstance(decoded, list):
+                for w in decoded[:18]:
+                    if not isinstance(w, dict):
+                        continue
+                    name = str(w.get("name", "")).strip()
+                    if not name:
+                        continue
+                    note = str(w.get("note") or "").strip() or None
+                    lat = w.get("lat")
+                    lng = w.get("lng")
+                    waypoints.append(
+                        JourneyWaypoint(
+                            name=name[:160],
+                            note=note[:80] if note else None,
+                            lat=float(lat) if isinstance(lat, (int, float)) else None,
+                            lng=float(lng) if isinstance(lng, (int, float)) else None,
+                        )
+                    )
+        except (json.JSONDecodeError, ValueError):
+            waypoints = []
+
+    directions: List[str] = []
+    raw_dirs = getattr(journey, "directions_json", None)
+    if raw_dirs:
+        try:
+            decoded = json.loads(raw_dirs)
+            if isinstance(decoded, list):
+                directions = [str(x).strip()[:280] for x in decoded if isinstance(x, str)][:14]
+        except (json.JSONDecodeError, ValueError):
+            directions = []
+
     return JourneyResponse(
         id=journey.id,
         name=journey.name,
@@ -5824,6 +5881,9 @@ def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
         activated_at=getattr(journey, "activated_at", None),
         started_at=journey.started_at,
         completed_at=journey.completed_at,
+        waypoints=waypoints,
+        directions=directions,
+        route_polyline=getattr(journey, "route_polyline", None) or "",
         accumulated_km=progress["accumulated_km"],
         progress_percent=round(min(pct, 999.0), 1),
         activity_count=progress["activity_count"],
@@ -6070,6 +6130,41 @@ def create_journey(
     status = "planned" if payload.as_planned else "active"
     activated_at = None if payload.as_planned else datetime.utcnow()
 
+    # 🛣 Guide-recommended route — forwarded from the preview screen
+    # when the user tapped a Guide suggestion. We persist verbatim; no
+    # re-stitching, no re-geocoding. Empty for static-template journeys.
+    waypoints_json: Optional[str] = None
+    if payload.waypoints:
+        wp_list: List[dict] = []
+        for wp in payload.waypoints[:18]:
+            wp_name = _sanitize_text(wp.name, max_length=160) if wp.name else None
+            if not wp_name:
+                continue
+            wp_list.append(
+                {
+                    "name": wp_name,
+                    "note": _sanitize_text(wp.note, max_length=80) if wp.note else None,
+                    "lat": float(wp.lat) if isinstance(wp.lat, (int, float)) else None,
+                    "lng": float(wp.lng) if isinstance(wp.lng, (int, float)) else None,
+                }
+            )
+        if wp_list:
+            waypoints_json = json.dumps(wp_list)
+
+    directions_json: Optional[str] = None
+    if payload.directions:
+        clean_dirs: List[str] = []
+        for d in payload.directions[:14]:
+            if not isinstance(d, str):
+                continue
+            cleaned = _sanitize_text(d, max_length=280)
+            if cleaned:
+                clean_dirs.append(cleaned)
+        if clean_dirs:
+            directions_json = json.dumps(clean_dirs)
+
+    route_polyline = (payload.route_polyline or "").strip()[:20000] or None
+
     journey = Journey(
         user_id=current_user.id,
         name=name,
@@ -6082,6 +6177,9 @@ def create_journey(
         prep_checklist_json=json.dumps(checklist_items) if checklist_items else None,
         scheduled_for=scheduled_dt,
         activated_at=activated_at,
+        waypoints_json=waypoints_json,
+        directions_json=directions_json,
+        route_polyline=route_polyline,
     )
     db.add(journey)
     db.commit()
@@ -6267,6 +6365,27 @@ def preview_journey(
     suggested = _suggest_scheduled_for(payload.tier).date().isoformat()
     map_context = _build_journey_map_context(db, current_user, tier=payload.tier)
 
+    # 🛣 Route — forwarded from the suggestion card the user tapped. We
+    # never re-stitch in the preview endpoint (the suggestion endpoint
+    # already paid the geocode + OSRM cost). Static templates leave
+    # these fields empty and the frontend falls back to the usual-ground
+    # map.
+    waypoints_in: List[JourneyWaypoint] = list(payload.waypoints or [])
+    directions_in: List[str] = [
+        d.strip()[:280] for d in (payload.directions or []) if isinstance(d, str) and d.strip()
+    ][:14]
+    polyline_in: str = (payload.route_polyline or "").strip()[:20000]
+    estimated = None
+    if polyline_in:
+        try:
+            from services.overpass import decode_polyline as _decode, polyline_distance_km as _polylen
+
+            _pts = _decode(polyline_in)
+            if _pts:
+                estimated = round(_polylen(_pts), 1)
+        except Exception:
+            estimated = None
+
     return JourneyPreviewResponse(
         tier=payload.tier,
         target_distance_km=target,
@@ -6277,6 +6396,10 @@ def preview_journey(
         prep_checklist=checklist,
         suggested_scheduled_for=suggested,
         map_context=map_context,
+        waypoints=waypoints_in,
+        directions=directions_in,
+        route_polyline=polyline_in,
+        estimated_distance_km=estimated,
         is_stub=is_stub,
     )
 

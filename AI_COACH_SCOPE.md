@@ -313,4 +313,5 @@ only fires for active journeys.
 | Journey detail (completed) | Guide's debrief note | On completion | 1/journey |
 | Start journey | "From your Guide" suggestions | Tier change | 1/tier change/day (suggested) |
 | Journey preview (NEW) | Readiness, prep checklist, date picker | Card tap | 2 calls/preview (read + checklist) |
+| Guide-suggested route (NEW) | Waypoints + walkable polyline + step-by-step directions | Suggestion generation | 1 LLM + N geocodes + N OSRM calls per suggestion (cached on suggestion) |
 | 50k+ creation | Prep note auto-stored on `plan_summary` | At commit | 1/journey |

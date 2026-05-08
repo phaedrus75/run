@@ -722,6 +722,14 @@ class Journey(Base):
     started_at = Column(DateTime, server_default=func.now(), nullable=False)
     completed_at = Column(DateTime, nullable=True)
 
+    # 🛣 Recommended route — Guide suggestions only. NULL for static-template
+    # journeys; the planned-detail screen falls back to the "usual ground"
+    # map context in that case. Polyline is Google encoded format
+    # (precision 5), waypoints/directions are JSON arrays.
+    waypoints_json = Column(Text, nullable=True)
+    directions_json = Column(Text, nullable=True)
+    route_polyline = Column(Text, nullable=True)
+
 
 class JourneyDayBrief(Base):
     """🌅 Per-day Guide brief for multi-day journeys (50k/60k/75k/100k).

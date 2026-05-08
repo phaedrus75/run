@@ -100,7 +100,13 @@ export function StartJourneyScreen({ navigation }: Props) {
   const daysCopy = tierMeta.days === 1 ? 'in one go' : `across up to ${tierMeta.days} days`;
 
   /** Navigate to the preview screen for the selected card / custom name.
-   *  Tapping a card no longer creates a journey — preview is the new gate. */
+   *  Tapping a card no longer creates a journey — preview is the new gate.
+   *
+   *  Guide suggestions ship with a real recommended path (waypoints +
+   *  directions + stitched polyline). We pass those through so the
+   *  preview can render the route immediately without re-stitching.
+   *  Static templates have no route — the preview falls back to the
+   *  "your usual ground" map for those. */
   const goToPreview = (tpl: JourneyTemplate | null, customNameOverride?: string) => {
     const name = (customNameOverride ?? customName).trim() || tpl?.name || '';
     if (!name) {
@@ -114,6 +120,9 @@ export function StartJourneyScreen({ navigation }: Props) {
       tier,
       name,
       blurb: tpl?.blurb,
+      waypoints: tpl?.waypoints,
+      directions: tpl?.directions,
+      route_polyline: tpl?.route_polyline,
     });
   };
 

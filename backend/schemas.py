@@ -391,14 +391,47 @@ JOURNEY_TIER_MAX_DAYS = {
 JOURNEY_STATUSES = {"planned", "active", "completed", "abandoned"}
 
 
+class JourneyWaypoint(BaseModel):
+    """A single resolved waypoint on a Guide-suggested route.
+
+    The Guide names places (e.g. "Westminster Bridge, London, UK"); the
+    backend route planner geocodes them to lat/lng via Nominatim and
+    persists both the name and the resolved coordinates. The frontend
+    renders these as numbered pins on the preview map.
+    """
+
+    name: str
+    note: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
 class JourneyTemplate(BaseModel):
     """Suggested starter journey for the picker. The coach generates
-    these on demand for the active user (region + level aware)."""
+    these on demand for the active user (region + level aware).
+
+    For Guide-generated suggestions the route fields below are populated:
+    a real walkable polyline stitched through resolved waypoints, plus
+    short step-by-step directions. Static templates (the rotating fallback
+    list) leave these empty — the preview screen falls back to the
+    "your usual ground" map for those.
+    """
 
     tier: str
     name: str
     blurb: str
     target_distance_km: float
+    waypoints: List[JourneyWaypoint] = []
+    directions: List[str] = []
+    # Google encoded polyline (precision 5) of the stitched route. Empty
+    # when the journey has no specific path (static templates) or when
+    # geocoding/stitching all failed (no home_city, transient outage).
+    route_polyline: str = ""
+    estimated_distance_km: Optional[float] = None
+    # "osrm" | "straight_line" | "mixed" | "none" — telemetry hint;
+    # frontend can use this to label rough sketches differently if it
+    # wants to be transparent about the routing source.
+    stitch_method: Optional[str] = None
 
 
 class JourneyPreviewRequest(BaseModel):
@@ -409,11 +442,19 @@ class JourneyPreviewRequest(BaseModel):
     The frontend holds the result in memory and posts the same data back
     on commit — saves a duplicate LLM call and keeps the preview
     deterministic from the user's perspective.
+
+    For Guide suggestions the frontend also forwards the waypoints,
+    directions, and stitched polyline so the preview screen can render
+    the recommended path immediately (no second LLM round-trip and no
+    repeat geocoding).
     """
 
     tier: str = Field(..., description="One of: 20k, 30k, 50k, 60k, 75k, 100k")
     name: str = Field(..., min_length=1, max_length=120)
     blurb: Optional[str] = Field(None, max_length=400)
+    waypoints: Optional[List[JourneyWaypoint]] = None
+    directions: Optional[List[str]] = None
+    route_polyline: Optional[str] = Field(None, max_length=20000)
 
 
 class JourneyMapContext(BaseModel):
@@ -457,6 +498,13 @@ class JourneyPreviewResponse(BaseModel):
     suggested_scheduled_for: str
     # 🗺 Embedded map context — same shape as GET /me/journey-map-context.
     map_context: JourneyMapContext = Field(default_factory=JourneyMapContext)
+    # 🛣 Recommended route — Guide suggestions only. Static templates
+    # leave these empty and the preview falls back to the "usual ground"
+    # map context above.
+    waypoints: List[JourneyWaypoint] = []
+    directions: List[str] = []
+    route_polyline: str = ""
+    estimated_distance_km: Optional[float] = None
     is_stub: bool = False
 
 
@@ -494,6 +542,12 @@ class JourneyCreateRequest(BaseModel):
         description="Discrete prep checklist items. Each item is a short "
         "phrase; max 12 items, max 120 chars each.",
     )
+    # 🛣 Recommended route — forwarded from the preview when the user
+    # tapped a Guide suggestion. Persisted on the journey so the planned
+    # detail can render the same path later. No re-stitching server-side.
+    waypoints: Optional[List[JourneyWaypoint]] = None
+    directions: Optional[List[str]] = None
+    route_polyline: Optional[str] = Field(None, max_length=20000)
 
 
 class JourneyUpdateRequest(BaseModel):
@@ -542,6 +596,14 @@ class JourneyResponse(BaseModel):
     activated_at: Optional[UTCDateTime] = None
     started_at: UTCDateTime
     completed_at: Optional[UTCDateTime] = None
+
+    # 🛣 Recommended route, persisted from the preview if the user
+    # tapped a Guide suggestion. Empty list/string for static-template
+    # journeys; the planned-detail screen falls back to the usual-ground
+    # map in that case.
+    waypoints: List[JourneyWaypoint] = []
+    directions: List[str] = []
+    route_polyline: str = ""
 
     # Derived fields
     accumulated_km: float = 0.0

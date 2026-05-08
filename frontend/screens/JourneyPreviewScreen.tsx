@@ -32,7 +32,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { Journey, JourneyMapContext, JourneyPreview, journeyApi } from '../services/api';
+import {
+  Journey,
+  JourneyMapContext,
+  JourneyPreview,
+  JourneyWaypoint,
+  journeyApi,
+} from '../services/api';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 import { JourneyPreviewMap } from '../components/JourneyPreviewMap';
 
@@ -43,6 +49,11 @@ interface Props {
       tier?: string;
       name?: string;
       blurb?: string;
+      // 🛣 Forwarded from a Guide suggestion card. Static templates
+      // omit these and the preview falls back to the usual-ground map.
+      waypoints?: JourneyWaypoint[];
+      directions?: string[];
+      route_polyline?: string;
     };
   };
 }
@@ -75,7 +86,14 @@ function parseIsoDate(s: string | null | undefined): Date | null {
 }
 
 export function JourneyPreviewScreen({ navigation, route }: Props) {
-  const { tier, name, blurb } = route?.params || {};
+  const {
+    tier,
+    name,
+    blurb,
+    waypoints: suggestionWaypoints,
+    directions: suggestionDirections,
+    route_polyline: suggestionPolyline,
+  } = route?.params || {};
 
   const [preview, setPreview] = useState<JourneyPreview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,7 +113,14 @@ export function JourneyPreviewScreen({ navigation, route }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const p = await journeyApi.preview({ tier, name, blurb });
+        const p = await journeyApi.preview({
+          tier,
+          name,
+          blurb,
+          waypoints: suggestionWaypoints,
+          directions: suggestionDirections,
+          route_polyline: suggestionPolyline,
+        });
         if (cancelled) return;
         setPreview(p);
         setScheduledDate(parseIsoDate(p.suggested_scheduled_for));
@@ -108,7 +133,7 @@ export function JourneyPreviewScreen({ navigation, route }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [tier, name, blurb]);
+    }, [tier, name, blurb, suggestionPolyline, suggestionWaypoints, suggestionDirections]);
 
   const minDate = useMemo(() => {
     const d = new Date();
@@ -137,6 +162,12 @@ export function JourneyPreviewScreen({ navigation, route }: Props) {
         prep_checklist: preview.prep_checklist,
         as_planned: mode === 'plan',
         scheduled_for: mode === 'plan' && scheduledDate ? isoDateString(scheduledDate) : null,
+        // 🛣 Persist the recommended path so the journey detail can
+        // re-render the same line and directions later. Empty for
+        // static-template journeys; backend tolerates that.
+        waypoints: preview.waypoints?.length ? preview.waypoints : undefined,
+        directions: preview.directions?.length ? preview.directions : undefined,
+        route_polyline: preview.route_polyline || undefined,
       });
       // Pop both StartJourney and JourneyPreview off the stack — the
       // user lands on JourneyDetail and can come back via the tab.
@@ -220,11 +251,32 @@ export function JourneyPreviewScreen({ navigation, route }: Props) {
         <Text style={styles.name}>{preview.name}</Text>
         <Text style={styles.blurb}>{preview.plan_summary}</Text>
 
-        {/* ── Map (your usual ground) ───────────────────────────────── */}
+        {/* ── Map ──────────────────────────────────────────────────── */}
         <JourneyPreviewMap
           context={preview.map_context}
-          metaLabel={`${preview.target_distance_km.toFixed(0)} km · ${days}`}
+          routePolyline={preview.route_polyline}
+          waypoints={preview.waypoints}
+          metaLabel={`${(preview.estimated_distance_km || preview.target_distance_km).toFixed(
+            0,
+          )} km · ${days}`}
         />
+
+        {/* ── Directions ─────────────────────────────────────────────── */}
+        {preview.directions && preview.directions.length > 0 ? (
+          <>
+            <Text style={styles.section}>Step by step</Text>
+            <View style={styles.directions}>
+              {preview.directions.map((step, idx) => (
+                <View key={`step-${idx}`} style={styles.directionRow}>
+                  <View style={styles.directionNum}>
+                    <Text style={styles.directionNumText}>{idx + 1}</Text>
+                  </View>
+                  <Text style={styles.directionText}>{step}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         {/* ── Readiness ──────────────────────────────────────────────── */}
         <View style={styles.readinessCard}>
@@ -452,6 +504,39 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     ...shadows.small,
+  },
+  directions: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    ...shadows.small,
+  },
+  directionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: spacing.sm,
+  },
+  directionNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  directionNumText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: typography.weights.bold,
+  },
+  directionText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    lineHeight: 20,
   },
   checklistRow: {
     flexDirection: 'row',

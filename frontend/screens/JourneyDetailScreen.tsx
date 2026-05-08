@@ -412,14 +412,33 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
-        {/* ── Planned: map (your usual ground) ──────────────────────── */}
+        {/* ── Planned: map (recommended path or your usual ground) ──── */}
         {isPlanned ? (
           <JourneyPreviewMap
             context={mapContext}
+            routePolyline={journey.route_polyline || undefined}
+            waypoints={journey.waypoints?.length ? journey.waypoints : undefined}
             metaLabel={`${journey.target_distance_km.toFixed(0)} km · ${
               journey.max_days <= 1 ? '1 day' : `up to ${journey.max_days} days`
             }`}
           />
+        ) : null}
+
+        {/* ── Planned: step-by-step directions ─────────────────────── */}
+        {isPlanned && journey.directions && journey.directions.length > 0 ? (
+          <>
+            <Text style={styles.section}>Step by step</Text>
+            <View style={styles.directions}>
+              {journey.directions.map((step, idx) => (
+                <View key={`step-${idx}`} style={styles.directionRow}>
+                  <View style={styles.directionNum}>
+                    <Text style={styles.directionNumText}>{idx + 1}</Text>
+                  </View>
+                  <Text style={styles.directionText}>{step}</Text>
+                </View>
+              ))}
+            </View>
+          </>
         ) : null}
 
         {/* ── Planned: readiness note + prep checklist + CTAs ─────────── */}
@@ -758,6 +777,39 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   checklistText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  directions: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    ...shadows.small,
+  },
+  directionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: spacing.sm,
+  },
+  directionNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  directionNumText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: typography.weights.bold,
+  },
+  directionText: {
     flex: 1,
     fontSize: typography.sizes.sm,
     color: colors.text,

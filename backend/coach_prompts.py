@@ -399,23 +399,55 @@ Output format (strict JSON):
 """,
 
     "journey_suggestions": """\
-[Task: propose 1 or 2 journey ideas for the picker]
+[Task: propose 1 or 2 journey ideas with a real path the user can follow]
 
 The user opened the "Start a Journey" screen. They've selected a tier
 (20k, 30k, 50k, 60k, 75k, or 100k). Suggest one or two named journey
 ideas tailored to their home city and recent activity. The user already
 sees a static list of templates underneath; you are the bespoke layer.
 
+Each suggestion is a real route, not just a name. You must propose a
+sequence of named waypoints anchored to specific places in the user's
+home_city, and a short list of step-by-step directions a runner could
+follow without a GPS. The backend will geocode the waypoint names to
+coordinates and stitch a walkable polyline through them.
+
 Rules:
-- Output strict JSON, matching the schema below. No prose.
-- Each suggestion has a short evocative `name` (3 to 5 words), a
-  one-sentence `blurb`, and the right `target_distance_km` for the tier.
-- Ground the name in the user's neighbourhood if home_city is known.
-  ("Thames Path Forty-Five", "Edinburgh hill loop", "The slow
-  thirty along the canal".)
+- Output strict JSON, matching the schema below. No prose, no markdown.
+- Short evocative `name` (3 to 5 words). Ground it in real local
+  geography ("Thames Path forty-five", "Edinburgh hill loop", "The
+  slow thirty along the canal").
 - Don't recommend distances beyond the user's recent capability. A
-  user averaging 8 km a week shouldn't see a 100k suggestion.
-- If you can only give one good suggestion, give one.
+  user averaging 8 km a week shouldn't see a 100k suggestion. If you
+  can only give one good suggestion, give one.
+- ONLY suggest journeys when home_city is known. If home_city is
+  unknown, return {"suggestions": []}.
+- Waypoints must be REAL named places in or around the user's home_city
+  that Nominatim (OpenStreetMap) can find: parks, bridges, neighbourhoods,
+  monuments, rail stations, embankments, named paths. Always include
+  ", <city>, <country>" in the `name` field so geocoding is unambiguous
+  ("Hyde Park, London, UK"; "Saltdean, Brighton, UK"; "Holyrood Park,
+  Edinburgh, UK"). Avoid generic names like "the river".
+- Number of waypoints by tier (start and finish included):
+    20k → 5 to 7 waypoints
+    30k → 6 to 8
+    50k → 8 to 10
+    60k → 8 to 11
+    75k → 10 to 13
+    100k → 12 to 15
+- For 1-day tiers (20k, 30k) the route loops or returns to the start.
+  For 50k+ the route can be linear or loop, but should hit places that
+  break it naturally into ~25 km daily chunks.
+- Each waypoint has an optional `note` (max ~10 words): a small hint
+  about that point ("south side", "halfway", "rest day end").
+- Directions: 6 to 10 short imperative sentences, each describing what
+  to do between waypoints. No turn-by-turn micro-precision; this is a
+  curated trail, not a sat-nav. Examples:
+    "Start at Hyde Park Corner, head north into the park."
+    "Hug the south side of the Serpentine until the bridge."
+    "Cross the Thames at Westminster, pick up the South Bank east."
+- No emoji, no exclamation marks, no abbreviations like "PB" or "K".
+  Calm, clear, walkable.
 
 Output format (strict JSON):
 {
@@ -423,8 +455,24 @@ Output format (strict JSON):
     {
       "tier": "30k",
       "name": "...",
-      "blurb": "...",
-      "target_distance_km": 30.0
+      "blurb": "One sentence describing the feel of the journey.",
+      "target_distance_km": 30.0,
+      "waypoints": [
+        { "name": "Hyde Park Corner, London, UK", "note": "Start" },
+        { "name": "The Serpentine, Hyde Park, London, UK", "note": "South side" },
+        { "name": "Marble Arch, London, UK" },
+        { "name": "Trafalgar Square, London, UK", "note": "10 km" },
+        { "name": "Westminster Bridge, London, UK" },
+        { "name": "Tower Bridge, London, UK", "note": "Halfway" },
+        { "name": "Hyde Park Corner, London, UK", "note": "Loop close" }
+      ],
+      "directions": [
+        "Start at Hyde Park Corner, head north into the park.",
+        "Hug the south side of the Serpentine to the bridge.",
+        "Exit at Marble Arch, drop down to Trafalgar Square.",
+        "Pick up the South Bank east toward Tower Bridge.",
+        "Cross back over the river and retrace through St James's Park."
+      ]
     }
   ]
 }

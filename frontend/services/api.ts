@@ -1377,11 +1377,29 @@ export const coachApi = {
 // 🌅 JOURNEY API  (the slow ultra)
 // ==========================================
 
+/** A single resolved waypoint on a Guide-recommended route. */
+export interface JourneyWaypoint {
+  name: string;
+  note: string | null;
+  /** Resolved coordinates from Nominatim. Null when geocoding failed and
+   *  the waypoint was kept as a directions-only hint. */
+  lat: number | null;
+  lng: number | null;
+}
+
 export interface JourneyTemplate {
   tier: string;
   name: string;
   blurb: string;
   target_distance_km: number;
+  /** 🛣 Recommended path — Guide suggestions only. Static templates leave
+   *  these empty and the preview screen falls back to the "your usual
+   *  ground" map. Polyline is Google encoded format (precision 5). */
+  waypoints?: JourneyWaypoint[];
+  directions?: string[];
+  route_polyline?: string;
+  estimated_distance_km?: number | null;
+  stitch_method?: string | null;
 }
 
 export interface Journey {
@@ -1410,6 +1428,11 @@ export interface Journey {
   activated_at: string | null;
   started_at: string;
   completed_at: string | null;
+  /** 🛣 Persisted Guide route (planned/active/completed/abandoned). Empty
+   *  arrays + empty polyline for static-template journeys. */
+  waypoints: JourneyWaypoint[];
+  directions: string[];
+  route_polyline: string;
   accumulated_km: number;
   progress_percent: number;
   activity_count: number;
@@ -1454,6 +1477,12 @@ export interface JourneyPreview {
   suggested_scheduled_for: string;
   /** Map context (home + recent terrain) for the preview map block. */
   map_context: JourneyMapContext;
+  /** 🛣 Recommended path — populated when the user tapped a Guide
+   *  suggestion. Empty for static-template previews. */
+  waypoints: JourneyWaypoint[];
+  directions: string[];
+  route_polyline: string;
+  estimated_distance_km: number | null;
   is_stub: boolean;
 }
 
@@ -1463,18 +1492,30 @@ export const journeyApi = {
 
   /** Generate the JourneyPreviewScreen payload for a candidate journey.
    *  Read-only — nothing is persisted. Always returns something; falls
-   *  back to a generic readiness + checklist when the Guide is off. */
+   *  back to a generic readiness + checklist when the Guide is off.
+   *
+   *  When the user tapped a Guide suggestion, forward the `waypoints` /
+   *  `directions` / `route_polyline` so the preview screen can render
+   *  the recommended path immediately (no extra LLM round-trip and no
+   *  repeat geocoding). For static templates omit these. */
   preview: (req: {
     tier: string;
     name: string;
     blurb?: string;
+    waypoints?: JourneyWaypoint[];
+    directions?: string[];
+    route_polyline?: string;
   }): Promise<JourneyPreview> =>
     apiFetch('/journeys/preview', { method: 'POST', body: JSON.stringify(req) }),
 
   /** Plan or start a new journey. Defaults to `as_planned: true` — the
    *  new flow is preview → plan → start later. Pass `as_planned: false`
    *  to flip straight to active. Many planned journeys are allowed; only
-   *  one active per user. */
+   *  one active per user.
+   *
+   *  When the user committed a Guide-suggested path, pass the same
+   *  `waypoints` / `directions` / `route_polyline` from the preview so
+   *  the journey detail screen can render the path again later. */
   create: (req: {
     name: string;
     tier: string;
@@ -1483,6 +1524,9 @@ export const journeyApi = {
     scheduled_for?: string | null;
     readiness_note?: string;
     prep_checklist?: string[];
+    waypoints?: JourneyWaypoint[];
+    directions?: string[];
+    route_polyline?: string;
   }): Promise<Journey> =>
     apiFetch('/journeys', { method: 'POST', body: JSON.stringify(req) }),
 
