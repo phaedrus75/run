@@ -5800,6 +5800,123 @@ def _journey_expires_at(journey: Journey) -> Optional[datetime]:
     return datetime.combine(end_day, datetime.max.time())
 
 
+def _maybe_heal_journey_route(
+    db: Session, journey: Journey, user: User
+) -> None:
+    """Self-heal a stale planned-journey route on first fetch.
+
+    Older `planned` journeys were persisted before LocationIQ landed,
+    while public Nominatim was rate-limiting bursts. Their
+    `waypoints_json` carries names but most lat/lng are null, and the
+    polyline degenerates to a straight line between the 1–2 waypoints
+    we did manage to geocode. The directions text is still fine — only
+    the coords were lost.
+
+    On any subsequent fetch we re-resolve the original waypoint names
+    via the configured geocoder (LocationIQ when keyed, Nominatim
+    otherwise) and re-stitch the polyline. If we improve on what's
+    already persisted, we save the fresh data so future fetches no-op.
+
+    Best-effort: any failure (no waypoints, network blip, commit lock)
+    leaves the journey untouched and the response unchanged.
+    """
+    if journey.status != "planned":
+        return
+    raw = getattr(journey, "waypoints_json", None)
+    if not raw:
+        return
+    try:
+        decoded = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return
+    if not isinstance(decoded, list) or len(decoded) < 2:
+        return
+
+    # Health check: a journey with ≥2 valid lat/lng *and* a non-trivial
+    # encoded polyline (anything realistically routed encodes longer
+    # than ~80 chars per leg) is considered fine. Skip the work.
+    resolved_count = sum(
+        1
+        for w in decoded
+        if isinstance(w, dict)
+        and isinstance(w.get("lat"), (int, float))
+        and isinstance(w.get("lng"), (int, float))
+    )
+    poly = (getattr(journey, "route_polyline", None) or "").strip()
+    if resolved_count >= 2 and len(poly) > 80:
+        return
+
+    seed: List[Dict[str, Any]] = []
+    for w in decoded:
+        if not isinstance(w, dict):
+            continue
+        name = str(w.get("name") or "").strip()
+        if not name:
+            continue
+        seed.append(
+            {"name": name[:160], "note": str(w.get("note") or "").strip() or None}
+        )
+    if len(seed) < 2:
+        return
+
+    try:
+        from services.route_planner import plan_route
+
+        planned = plan_route(
+            seed,
+            home_city_hint=(getattr(user, "home_city", None) or None),
+            db=db,
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.info(
+            "journey-route heal failed for journey %s: %s", journey.id, exc
+        )
+        return
+
+    new_poly = planned.get("route_polyline") or ""
+    new_waypoints = planned.get("waypoints") or []
+    if not new_poly or len(new_waypoints) < 2:
+        return
+    new_resolved = int(planned.get("resolved_count") or 0)
+    # Only persist if we made things measurably better.
+    if new_resolved <= resolved_count and len(new_poly) <= len(poly):
+        return
+
+    try:
+        journey.waypoints_json = json.dumps(
+            [
+                {
+                    "name": w.get("name"),
+                    "note": w.get("note"),
+                    "lat": w.get("lat"),
+                    "lng": w.get("lng"),
+                }
+                for w in new_waypoints
+            ]
+        )
+        journey.route_polyline = new_poly
+        db.commit()
+        db.refresh(journey)
+        logger.info(
+            "journey-route heal: journey %s resolved %d→%d, polyline %d→%d chars",
+            journey.id,
+            resolved_count,
+            new_resolved,
+            len(poly),
+            len(new_poly),
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.info(
+            "journey-route heal commit failed for journey %s: %s",
+            journey.id,
+            exc,
+        )
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
     # Planned journeys haven't started attributing yet — skip the progress
     # query (and keep accumulated_km at 0) so we don't waste DB roundtrips.
@@ -6270,6 +6387,9 @@ def get_journey(
     )
     if not journey:
         raise HTTPException(status_code=404, detail="Journey not found")
+    # Lazy self-heal: if this is a stale planned journey persisted before
+    # LocationIQ, re-resolve its waypoints + polyline on first fetch.
+    _maybe_heal_journey_route(db, journey, current_user)
     return _journey_to_response(db, journey)
 
 
