@@ -766,6 +766,7 @@ def generate_journey_suggestions(
             planned = plan_route(
                 s.get("waypoints") or [],
                 home_city_hint=home_city,
+                db=db,
             )
         except Exception as exc:  # pragma: no cover
             logger.warning(
@@ -778,11 +779,39 @@ def generate_journey_suggestions(
                 "route_polyline": "",
                 "estimated_distance_km": 0.0,
                 "stitch_method": "none",
+                "proposed_count": 0,
+                "resolved_count": 0,
             }
         s["waypoints"] = planned["waypoints"]
         s["route_polyline"] = planned["route_polyline"]
         s["estimated_distance_km"] = planned["estimated_distance_km"]
         s["stitch_method"] = planned["stitch_method"]
+
+        # 🔍 Telemetry — log when a Guide suggestion ships with a degraded
+        # route so we can spot pattern failures in the wild. A 30k tier
+        # losing 5/8 waypoints to bad geocoding is an exotic edge but a
+        # silent one in production; the log is the only signal.
+        proposed = int(planned.get("proposed_count") or 0)
+        resolved = int(planned.get("resolved_count") or 0)
+        if proposed and resolved < max(2, int(proposed * 0.6)):
+            logger.warning(
+                "journey_suggestions[%s]: degraded route — resolved %d/%d "
+                "waypoints (stitch=%s, name=%r)",
+                tier,
+                resolved,
+                proposed,
+                planned.get("stitch_method"),
+                s.get("name"),
+            )
+        else:
+            logger.info(
+                "journey_suggestions[%s]: route OK — resolved %d/%d "
+                "waypoints (stitch=%s)",
+                tier,
+                resolved,
+                proposed,
+                planned.get("stitch_method"),
+            )
 
     return suggestions
 

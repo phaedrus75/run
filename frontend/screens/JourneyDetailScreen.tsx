@@ -421,6 +421,20 @@ export function JourneyDetailScreen({ navigation, route }: Props) {
             metaLabel={`${journey.target_distance_km.toFixed(0)} km · ${
               journey.max_days <= 1 ? '1 day' : `up to ${journey.max_days} days`
             }`}
+            onPressExpand={
+              journey.route_polyline
+                ? () =>
+                    navigation.navigate('JourneyRoute', {
+                      title: journey.name,
+                      tier: journey.tier,
+                      target_distance_km: journey.target_distance_km,
+                      max_days: journey.max_days,
+                      route_polyline: journey.route_polyline,
+                      waypoints: journey.waypoints,
+                      directions: journey.directions,
+                    })
+                : undefined
+            }
           />
         ) : null}
 

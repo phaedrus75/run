@@ -53,6 +53,7 @@ import { JourneysScreen } from './screens/JourneysScreen';
 import { JourneyDetailScreen } from './screens/JourneyDetailScreen';
 import { StartJourneyScreen } from './screens/StartJourneyScreen';
 import { JourneyPreviewScreen } from './screens/JourneyPreviewScreen';
+import { JourneyRouteScreen } from './screens/JourneyRouteScreen';
 import { GoButton } from './components/GoButton';
 
 import './services/walkBackgroundTask';
@@ -88,6 +89,7 @@ function HomeStack() {
       <Stack.Screen name="JourneyDetail" component={JourneyDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen name="StartJourney" component={StartJourneyScreen} options={{ headerShown: false }} />
       <Stack.Screen name="JourneyPreview" component={JourneyPreviewScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="JourneyRoute" component={JourneyRouteScreen} options={{ headerShown: false }} />
       <Stack.Screen name="GymHistory" component={HistoryScreen} initialParams={{ mode: 'gym' }} options={{ headerShown: false }} />
       <Stack.Screen name="StepsHistory" component={HistoryScreen} initialParams={{ mode: 'steps' }} options={{ headerShown: false }} />
     </Stack.Navigator>
@@ -129,6 +131,7 @@ function ActivityStack() {
       <Stack.Screen name="JourneyDetail" component={JourneyDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen name="StartJourney" component={StartJourneyScreen} options={{ headerShown: false }} />
       <Stack.Screen name="JourneyPreview" component={JourneyPreviewScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="JourneyRoute" component={JourneyRouteScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="AddRun"
         component={AddRunScreen}

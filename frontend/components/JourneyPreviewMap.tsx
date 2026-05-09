@@ -17,7 +17,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { JourneyMapContext, JourneyWaypoint } from '../services/api';
@@ -75,6 +75,13 @@ interface Props {
   title?: string;
   /** Optional human-readable distance label, e.g. "20 km · 1 day". */
   metaLabel?: string;
+  /**
+   * Tapped → opens the full-screen route view. Only meaningful when a
+   * recommended route is present; if omitted, the map block is non-
+   * interactive (the original preview behaviour). The caller is
+   * responsible for the navigation; we just call the callback.
+   */
+  onPressExpand?: () => void;
 }
 
 // Convert a soft km radius into a roughly equivalent expo-maps zoom level.
@@ -97,6 +104,7 @@ export function JourneyPreviewMap({
   waypoints,
   title,
   metaLabel,
+  onPressExpand,
 }: Props) {
   // Decode the recommended path once per render. Empty array if none.
   const primaryRoute: MapPoint[] = useMemo(() => {
@@ -184,34 +192,61 @@ export function JourneyPreviewMap({
   const isEmpty = !hasRoute && !center && extraRoutes.length === 0;
   const captionTitle = title || (hasRoute ? 'Recommended path' : 'Your usual ground');
 
+  // The map is tappable when (a) there's a route to expand and (b) the
+  // caller wired a navigation handler. We deliberately don't make the
+  // "usual ground" fallback tappable — there's nothing extra to show
+  // full-screen and a no-op tap is worse than no tap.
+  const expandable = hasRoute && !!onPressExpand;
+  const mapContent = isEmpty ? (
+    <View style={styles.empty}>
+      <Ionicons name="map-outline" size={28} color={colors.textLight} />
+      <Text style={styles.emptyTitle}>Your map will fill in</Text>
+      <Text style={styles.emptyHint}>
+        Once you've saved a couple of GPS runs or walks, the journey
+        preview will show where you usually move.
+      </Text>
+    </View>
+  ) : (
+    <>
+      <WalkMap
+        style={styles.map}
+        centerOn={center || undefined}
+        zoom={zoom}
+        route={hasRoute ? primaryRoute : undefined}
+        routeColor={colors.primary}
+        routeWidth={5}
+        markers={markers}
+        extraRoutes={extraRoutes}
+        extraRouteColor={colors.primary}
+        extraRouteWidth={3}
+        showUserLocation={false}
+      />
+      {expandable ? (
+        <View pointerEvents="none" style={styles.expandBadge}>
+          <Ionicons name="expand-outline" size={14} color={colors.text} />
+          <Text style={styles.expandText}>Tap to expand</Text>
+        </View>
+      ) : null}
+    </>
+  );
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.mapBox}>
-        {isEmpty ? (
-          <View style={styles.empty}>
-            <Ionicons name="map-outline" size={28} color={colors.textLight} />
-            <Text style={styles.emptyTitle}>Your map will fill in</Text>
-            <Text style={styles.emptyHint}>
-              Once you've saved a couple of GPS runs or walks, the journey
-              preview will show where you usually move.
-            </Text>
-          </View>
-        ) : (
-          <WalkMap
-            style={styles.map}
-            centerOn={center || undefined}
-            zoom={zoom}
-            route={hasRoute ? primaryRoute : undefined}
-            routeColor={colors.primary}
-            routeWidth={5}
-            markers={markers}
-            extraRoutes={extraRoutes}
-            extraRouteColor={colors.primary}
-            extraRouteWidth={3}
-            showUserLocation={false}
-          />
-        )}
-      </View>
+      {expandable ? (
+        <Pressable
+          onPress={onPressExpand}
+          accessibilityRole="button"
+          accessibilityLabel="Open full-screen route"
+          style={({ pressed }) => [
+            styles.mapBox,
+            pressed && { opacity: 0.92 },
+          ]}
+        >
+          {mapContent}
+        </Pressable>
+      ) : (
+        <View style={styles.mapBox}>{mapContent}</View>
+      )}
       <View style={styles.captionRow}>
         <View style={styles.captionLeft}>
           <Ionicons
@@ -284,6 +319,24 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
     borderRadius: 0,
+  },
+  expandBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  expandText: {
+    fontSize: 11,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    letterSpacing: 0.4,
   },
   empty: {
     flex: 1,

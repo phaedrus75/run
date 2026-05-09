@@ -259,6 +259,20 @@ export function JourneyPreviewScreen({ navigation, route }: Props) {
           metaLabel={`${(preview.estimated_distance_km || preview.target_distance_km).toFixed(
             0,
           )} km · ${days}`}
+          onPressExpand={
+            preview.route_polyline
+              ? () =>
+                  navigation.navigate('JourneyRoute', {
+                    title: preview.name,
+                    tier: preview.tier,
+                    target_distance_km: preview.target_distance_km,
+                    max_days: preview.max_days,
+                    route_polyline: preview.route_polyline,
+                    waypoints: preview.waypoints,
+                    directions: preview.directions,
+                  })
+              : undefined
+          }
         />
 
         {/* ── Directions ─────────────────────────────────────────────── */}

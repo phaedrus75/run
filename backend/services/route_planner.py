@@ -6,16 +6,21 @@ places in the user's home city) and short step-by-step directions. This
 module:
 
 1.  Geocodes any waypoint that doesn't already carry a (lat, lng), via
-    Nominatim. We piggy-back on the existing Geocode cache shape used
-    by the neighbourhood feature so repeat lookups are free.
+    Nominatim. We persist hits and misses in a dedicated DB cache
+    (`waypoint_geocode_cache`) so repeat lookups are free, and we
+    throttle live calls to ≥1.1s apart per Nominatim's usage policy.
+    Without that throttle, generating a single 8-waypoint suggestion
+    fires 8 sub-100ms requests, gets rate-limited by Nominatim, and
+    most waypoints fail silently — leaving a stub map with two pins.
 2.  Stitches a walkable polyline through the resolved waypoints. We try
     OSRM's public foot-routing demo server first (real walking paths,
     no API key required); on failure or timeout we fall back to a
     straight-line polyline densified to ~30 points per leg so the map
     still renders something cohesive.
 3.  Returns the stitched polyline (encoded), the resolved waypoint
-    coordinates, and a rough distance estimate so the caller can
-    sanity-check against the requested tier.
+    coordinates, a rough distance estimate, and telemetry on how many
+    waypoints we proposed vs. how many resolved — so the caller can
+    decide whether to drop a particularly broken suggestion entirely.
 
 The polyline + steps are persisted on the Journey row (`route_polyline`,
 `waypoints_json`, `directions_json`) when the user commits the journey,
@@ -35,9 +40,14 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
+import threading
+import time
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
+
+from sqlalchemy.orm import Session
 
 from .geocode import search_places
 from .overpass import decode_polyline, encode_polyline, haversine_km, polyline_distance_km
@@ -53,6 +63,42 @@ USER_AGENT = "ZenRun/1.0 (+https://zenrun.co)"
 # the rendered map line looks smooth instead of zig-zaggy.
 FALLBACK_POINTS_PER_LEG = 30
 
+# 🌐 Nominatim usage policy: ≤1 request per second per IP. We sleep up
+# to this many seconds before each live HTTP call to stay polite. The
+# DB cache short-circuits most calls in steady state, so the throttle
+# only really bites during the first generation of a new tier+city.
+NOMINATIM_MIN_INTERVAL_S = 1.1
+
+# Process-global lock for the throttle. Uvicorn workers each hold their
+# own copy, but per-worker is fine — the goal is to spread bursts, not
+# to globally rate-limit across multiple machines.
+_nominatim_lock = threading.Lock()
+_nominatim_last_call = 0.0  # monotonic seconds
+
+
+def _throttle_nominatim() -> None:
+    """Sleep until at least `NOMINATIM_MIN_INTERVAL_S` has passed since
+    the previous Nominatim call from this process. Re-entrant safe."""
+    global _nominatim_last_call
+    with _nominatim_lock:
+        now = time.monotonic()
+        elapsed = now - _nominatim_last_call
+        if elapsed < NOMINATIM_MIN_INTERVAL_S:
+            time.sleep(NOMINATIM_MIN_INTERVAL_S - elapsed)
+        _nominatim_last_call = time.monotonic()
+
+
+def _normalise_query(s: str) -> str:
+    """Lower-case + whitespace-collapsed form for cache keys."""
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def _cache_key(query: str, hint: Optional[str]) -> str:
+    base = _normalise_query(query)
+    if hint:
+        base += "||" + _normalise_query(hint)
+    return base[:300]
+
 
 # ----------------------------------------------------------------------
 #  Public API
@@ -63,6 +109,7 @@ def plan_route(
     waypoints: List[Dict[str, Any]],
     *,
     home_city_hint: Optional[str] = None,
+    db: Optional[Session] = None,
 ) -> Dict[str, Any]:
     """Resolve named waypoints into coordinates and stitch a route.
 
@@ -71,9 +118,15 @@ def plan_route(
             dicts. `lat`/`lng` are optional — when missing we forward-
             geocode the name via Nominatim, biasing the search by the
             user's home city when known.
-        home_city_hint: e.g. "London". Appended to the search query when
-            the waypoint name is short or ambiguous, to prevent
-            "Wimbledon" from resolving to a town in North Dakota.
+        home_city_hint: e.g. "London". Folded into the search query so
+            short / ambiguous names ("Wimbledon") resolve to the
+            user's actual neighbourhood rather than the first global
+            match.
+        db: optional SQLAlchemy session. When provided, geocoded
+            waypoint names are read from / written to the
+            `waypoint_geocode_cache` table; this is the recommended
+            path. When absent, every miss hits Nominatim live which
+            saturates the rate limit on routes with many waypoints.
 
     Returns:
         {
@@ -84,14 +137,21 @@ def plan_route(
             "route_polyline": "<google encoded>",
             "estimated_distance_km": float,
             "stitch_method": "osrm" | "straight_line" | "mixed",
+            "proposed_count": int,    # how many waypoints the LLM gave us
+            "resolved_count": int,    # how many we got coordinates for
         }
 
     Returns an empty polyline when fewer than 2 waypoints could be
     resolved — the caller should treat that as "no route, fall back to
     plain blurb".
     """
+    proposed_count = sum(
+        1
+        for wp in (waypoints or [])
+        if isinstance(wp, dict) and (wp.get("name") or "").strip()
+    )
     if not waypoints:
-        return _empty_result()
+        return _empty_result(proposed_count=proposed_count)
 
     resolved: List[Dict[str, Any]] = []
     for wp in waypoints:
@@ -111,7 +171,9 @@ def plan_route(
                 }
             )
             continue
-        coords = _geocode_waypoint(name, home_city_hint=home_city_hint)
+        coords = _geocode_waypoint_with_cache(
+            name, home_city_hint=home_city_hint, db=db
+        )
         if coords is None:
             # Skip un-geocodable waypoints rather than erroring out — a
             # 7-waypoint route survives losing one.
@@ -127,8 +189,13 @@ def plan_route(
             }
         )
 
-    if len(resolved) < 2:
-        return _empty_result(waypoints_resolved=resolved)
+    resolved_count = len(resolved)
+    if resolved_count < 2:
+        return _empty_result(
+            waypoints_resolved=resolved,
+            proposed_count=proposed_count,
+            resolved_count=resolved_count,
+        )
 
     # Stitch.
     legs_points: List[List[Tuple[float, float]]] = []
@@ -171,6 +238,8 @@ def plan_route(
         "route_polyline": poly,
         "estimated_distance_km": round(distance_km, 1),
         "stitch_method": stitch_method,
+        "proposed_count": proposed_count,
+        "resolved_count": resolved_count,
     }
 
 
@@ -179,33 +248,92 @@ def plan_route(
 # ----------------------------------------------------------------------
 
 
-def _empty_result(waypoints_resolved: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _empty_result(
+    waypoints_resolved: Optional[List[Dict[str, Any]]] = None,
+    *,
+    proposed_count: int = 0,
+    resolved_count: int = 0,
+) -> Dict[str, Any]:
     return {
         "waypoints": waypoints_resolved or [],
         "route_polyline": "",
         "estimated_distance_km": 0.0,
         "stitch_method": "none",
+        "proposed_count": proposed_count,
+        "resolved_count": resolved_count,
     }
 
 
-def _geocode_waypoint(
+def _geocode_waypoint_with_cache(
+    name: str,
+    *,
+    home_city_hint: Optional[str],
+    db: Optional[Session],
+) -> Optional[Tuple[float, float]]:
+    """Forward-geocode a waypoint name with DB cache + Nominatim throttle.
+
+    Order of operations:
+      1. DB cache lookup keyed on (normalised query, normalised hint).
+         Hits short-circuit; remembered misses also short-circuit so a
+         genuinely unknown name never hits Nominatim more than once.
+      2. Live Nominatim call, throttled to ≤1 req/s globally per worker.
+         We try up to three query variants — full "name, city", bare
+         name, and a softened name with punctuation stripped — to give
+         landmark-style names a fighting chance.
+      3. Persist the result (success or miss) back to the cache.
+
+    Returns the resolved (lat, lng) or None.
+    """
+    # 1. Cache lookup.
+    cached = _cache_lookup(db, name, home_city_hint)
+    if cached is not None:
+        if cached.resolved and cached.lat is not None and cached.lng is not None:
+            return float(cached.lat), float(cached.lng)
+        # Remembered miss — don't bother Nominatim again.
+        return None
+
+    # 2. Live Nominatim — try a few query forms before giving up.
+    coords = _geocode_live_with_retries(name, home_city_hint=home_city_hint)
+
+    # 3. Persist hit or miss for next time.
+    _cache_persist(db, name, home_city_hint, coords)
+    return coords
+
+
+def _geocode_live_with_retries(
     name: str, *, home_city_hint: Optional[str]
 ) -> Optional[Tuple[float, float]]:
-    """Forward-geocode a waypoint name → (lat, lng).
+    """Hit Nominatim with up to three query variants, throttled."""
+    seen: set = set()
+    queries: List[str] = []
 
-    We use the existing Nominatim wrapper (`services.geocode.search_places`)
-    which currently filters out hits without a `city` address component.
-    For our purpose we want the *coordinates* even when the name is a
-    landmark inside a city — so we duplicate the bare HTTP call here
-    with looser filtering and the city hint folded into the query.
-    """
-    query = name
+    # Variant 1: name + city hint (when the name doesn't already contain it).
     if home_city_hint and home_city_hint.lower() not in name.lower():
-        # Append city as a soft bias. Nominatim respects free-text hints
-        # in the query string better than its `viewbox` parameter for
-        # one-shot lookups.
-        query = f"{name}, {home_city_hint}"
+        queries.append(f"{name}, {home_city_hint}")
+    # Variant 2: name as the LLM gave it.
+    queries.append(name)
+    # Variant 3: name with sloppy punctuation softened — drop apostrophes
+    # and double spaces; sometimes Nominatim chokes on the LLM's exact
+    # punctuation but accepts the bare phrase.
+    softened = re.sub(r"[’'`]", "", name)
+    softened = re.sub(r"\s+", " ", softened).strip()
+    if softened and softened != name:
+        queries.append(softened)
 
+    for q in queries:
+        norm = _normalise_query(q)
+        if norm in seen or not norm:
+            continue
+        seen.add(norm)
+        coords = _nominatim_search_one(q)
+        if coords is not None:
+            return coords
+    return None
+
+
+def _nominatim_search_one(query: str) -> Optional[Tuple[float, float]]:
+    """Single throttled Nominatim search → (lat, lng) or None."""
+    _throttle_nominatim()
     params = urllib.parse.urlencode(
         {
             "q": query[:200],
@@ -222,17 +350,10 @@ def _geocode_waypoint(
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:  # pragma: no cover
-        logger.info("route_planner: nominatim lookup failed for %r: %s", name, exc)
+        logger.info("route_planner: nominatim lookup failed for %r: %s", query, exc)
         return None
-
     if not data:
-        # Try one more time without the city hint — sometimes the LLM
-        # already includes the country and the appended hint duplicates
-        # it (causes Nominatim to miss).
-        if home_city_hint and home_city_hint.lower() in query.lower():
-            return _geocode_waypoint_no_hint(name)
         return None
-
     item = data[0]
     try:
         return float(item["lat"]), float(item["lon"])
@@ -240,12 +361,69 @@ def _geocode_waypoint(
         return None
 
 
-def _geocode_waypoint_no_hint(name: str) -> Optional[Tuple[float, float]]:
-    items = search_places(name, limit=1)
-    if not items:
+# ---- Cache helpers ----------------------------------------------------
+#
+# We import `WaypointGeocodeCache` lazily so the planner module can be
+# loaded in tooling that doesn't have the full SQLAlchemy stack
+# initialised (e.g. ad-hoc scripts).
+
+
+def _cache_lookup(
+    db: Optional[Session], query: str, hint: Optional[str]
+):
+    if db is None:
         return None
-    item = items[0]
-    return float(item["lat"]), float(item["lng"])
+    try:
+        from models import WaypointGeocodeCache  # type: ignore
+
+        key = _cache_key(query, hint)
+        return (
+            db.query(WaypointGeocodeCache)
+            .filter(WaypointGeocodeCache.cache_key == key)
+            .first()
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.info("route_planner: cache lookup failed: %s", exc)
+        return None
+
+
+def _cache_persist(
+    db: Optional[Session],
+    query: str,
+    hint: Optional[str],
+    coords: Optional[Tuple[float, float]],
+) -> None:
+    if db is None:
+        return
+    try:
+        from models import WaypointGeocodeCache  # type: ignore
+
+        key = _cache_key(query, hint)
+        # Defensive: avoid races / unique-violation on parallel suggestion
+        # generation by checking for an existing row first.
+        existing = (
+            db.query(WaypointGeocodeCache)
+            .filter(WaypointGeocodeCache.cache_key == key)
+            .first()
+        )
+        if existing is not None:
+            return
+        row = WaypointGeocodeCache(
+            cache_key=key,
+            query=query[:300],
+            city_hint=(hint or None),
+            lat=coords[0] if coords else None,
+            lng=coords[1] if coords else None,
+            resolved=coords is not None,
+        )
+        db.add(row)
+        db.commit()
+    except Exception as exc:  # pragma: no cover
+        logger.info("route_planner: cache persist failed: %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def _route_one_leg(

@@ -528,6 +528,33 @@ class GeocodeCache(Base):
     __table_args__ = (UniqueConstraint("lat_key", "lng_key", name="uq_geocode_lat_lng"),)
 
 
+class WaypointGeocodeCache(Base):
+    """🗺 Forward-geocode cache for journey waypoints.
+
+    The Guide names places like "Westminster Bridge, London, UK"; the
+    route planner forward-geocodes them via Nominatim to draw the path
+    on the map. Nominatim's free tier caps at 1 req/s, so without a
+    cache, generating a single 30k journey suggestion (8 waypoints) is
+    a guaranteed rate-limit storm — most names fail silently and the
+    map shows a stub line between the survivors.
+
+    We hash the normalised (lower-cased, whitespace-collapsed) query
+    string + the optional city hint to a single cache key. On a hit we
+    skip Nominatim entirely. Misses are also persisted so we don't
+    repeat lookups that we know don't resolve.
+    """
+    __tablename__ = "waypoint_geocode_cache"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    cache_key = Column(String, nullable=False, unique=True, index=True)
+    query = Column(String, nullable=False)  # original waypoint name
+    city_hint = Column(String, nullable=True)  # home_city forwarded at lookup time
+    lat = Column(Float, nullable=True)  # NULL = remembered miss
+    lng = Column(Float, nullable=True)
+    resolved = Column(Boolean, default=False, server_default="false", nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class NeighbourhoodSave(Base):
     __tablename__ = "neighbourhood_saves"
 
