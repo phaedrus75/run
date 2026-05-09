@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 import threading
 import time
@@ -54,8 +55,34 @@ from .overpass import decode_polyline, encode_polyline, haversine_km, polyline_d
 
 logger = logging.getLogger(__name__)
 
-OSRM_FOOT_URL = "https://router.project-osrm.org/route/v1/foot"
-OSRM_TIMEOUT_S = 8
+# 🗺 Provider selection
+# ─────────────────────
+# Two layers of providers with the same response shape (LocationIQ is a
+# hosted Nominatim/OSRM service):
+#
+#   - LocationIQ — paid, OSM-backed, 5k req/day on the free tier at
+#     2 req/s. Used when LOCATIONIQ_API_KEY is set.
+#   - Public OSM (Nominatim + OSRM demo) — free, 1 req/s, fragile under
+#     burst load. Fallback when no LocationIQ key is set.
+#
+# Both responses are interchangeable, so the rest of the planner doesn't
+# care which one served the request.
+
+OSRM_PUBLIC_URL = "https://router.project-osrm.org/route/v1/foot"
+NOMINATIM_PUBLIC_URL = "https://nominatim.openstreetmap.org/search"
+
+LOCATIONIQ_API_KEY = os.environ.get("LOCATIONIQ_API_KEY", "").strip() or None
+LOCATIONIQ_HOST = os.environ.get("LOCATIONIQ_HOST", "us1").strip().lower() or "us1"
+LOCATIONIQ_GEOCODE_URL = f"https://{LOCATIONIQ_HOST}.locationiq.com/v1/search"
+# LocationIQ Directions API speaks OSRM's response shape; the path
+# segment after `/v1/directions/` selects the profile (driving | foot |
+# bike). We always want walking paths.
+LOCATIONIQ_FOOT_URL = f"https://{LOCATIONIQ_HOST}.locationiq.com/v1/directions/foot"
+
+USING_LOCATIONIQ = bool(LOCATIONIQ_API_KEY)
+
+GEOCODE_TIMEOUT_S = 8
+ROUTE_TIMEOUT_S = 8
 USER_AGENT = "ZenRun/1.0 (+https://zenrun.co)"
 
 # Per-leg fallback densification — the straight line between two
@@ -63,29 +90,50 @@ USER_AGENT = "ZenRun/1.0 (+https://zenrun.co)"
 # the rendered map line looks smooth instead of zig-zaggy.
 FALLBACK_POINTS_PER_LEG = 30
 
-# 🌐 Nominatim usage policy: ≤1 request per second per IP. We sleep up
-# to this many seconds before each live HTTP call to stay polite. The
-# DB cache short-circuits most calls in steady state, so the throttle
-# only really bites during the first generation of a new tier+city.
-NOMINATIM_MIN_INTERVAL_S = 1.1
+# 🌐 Throttle interval per provider.
+# Nominatim public: hard cap 1 req/s by usage policy. We pad to 1.1s.
+# LocationIQ free:  2 req/s — we pad to 0.55s so a burst doesn't trip
+#                   their rate limiter. Paid plans are higher; if you
+#                   upgrade, override via LOCATIONIQ_MIN_INTERVAL_S.
+_NOMINATIM_MIN_INTERVAL_S = 1.1
+_LOCATIONIQ_MIN_INTERVAL_S = float(
+    os.environ.get("LOCATIONIQ_MIN_INTERVAL_S", "0.55")
+)
+_GEOCODE_MIN_INTERVAL_S = (
+    _LOCATIONIQ_MIN_INTERVAL_S if USING_LOCATIONIQ else _NOMINATIM_MIN_INTERVAL_S
+)
 
 # Process-global lock for the throttle. Uvicorn workers each hold their
 # own copy, but per-worker is fine — the goal is to spread bursts, not
 # to globally rate-limit across multiple machines.
-_nominatim_lock = threading.Lock()
-_nominatim_last_call = 0.0  # monotonic seconds
+_geocode_lock = threading.Lock()
+_geocode_last_call = 0.0  # monotonic seconds
+
+if USING_LOCATIONIQ:
+    logger.info(
+        "route_planner: using LocationIQ (host=%s, throttle=%.2fs)",
+        LOCATIONIQ_HOST,
+        _GEOCODE_MIN_INTERVAL_S,
+    )
+else:
+    logger.info(
+        "route_planner: using public Nominatim/OSRM (throttle=%.2fs). "
+        "Set LOCATIONIQ_API_KEY for production traffic.",
+        _GEOCODE_MIN_INTERVAL_S,
+    )
 
 
-def _throttle_nominatim() -> None:
-    """Sleep until at least `NOMINATIM_MIN_INTERVAL_S` has passed since
-    the previous Nominatim call from this process. Re-entrant safe."""
-    global _nominatim_last_call
-    with _nominatim_lock:
+def _throttle_geocode() -> None:
+    """Sleep until at least the configured interval has passed since the
+    previous live geocode/routing call from this process. Re-entrant
+    safe; per-worker scope (good enough for spreading bursts)."""
+    global _geocode_last_call
+    with _geocode_lock:
         now = time.monotonic()
-        elapsed = now - _nominatim_last_call
-        if elapsed < NOMINATIM_MIN_INTERVAL_S:
-            time.sleep(NOMINATIM_MIN_INTERVAL_S - elapsed)
-        _nominatim_last_call = time.monotonic()
+        elapsed = now - _geocode_last_call
+        if elapsed < _GEOCODE_MIN_INTERVAL_S:
+            time.sleep(_GEOCODE_MIN_INTERVAL_S - elapsed)
+        _geocode_last_call = time.monotonic()
 
 
 def _normalise_query(s: str) -> str:
@@ -94,7 +142,12 @@ def _normalise_query(s: str) -> str:
 
 
 def _cache_key(query: str, hint: Optional[str]) -> str:
-    base = _normalise_query(query)
+    # Cache keys are provider-prefixed so a switch from Nominatim to
+    # LocationIQ doesn't return stale lat/lng (LocationIQ uses the same
+    # OSM data so collisions would be harmless, but we still want
+    # provider-level observability and clean rollback).
+    provider = "locationiq" if USING_LOCATIONIQ else "nominatim"
+    base = f"{provider}|{_normalise_query(query)}"
     if hint:
         base += "||" + _normalise_query(hint)
     return base[:300]
@@ -224,14 +277,15 @@ def plan_route(
     poly = encode_polyline(full_points)
     distance_km = polyline_distance_km(full_points)
 
+    # Summarise the leg-by-leg routing source. If every leg used the
+    # same routing provider (osrm or locationiq), report that. If every
+    # leg fell back to the straight-line stitcher, report that. Any
+    # mix lands on "mixed" — useful telemetry for spotting flaky legs.
     methods = set(method_per_leg)
-    stitch_method = (
-        "osrm"
-        if methods == {"osrm"}
-        else "straight_line"
-        if methods == {"straight_line"}
-        else "mixed"
-    )
+    if len(methods) == 1:
+        stitch_method = next(iter(methods))
+    else:
+        stitch_method = "mixed"
 
     return {
         "waypoints": resolved,
@@ -332,29 +386,61 @@ def _geocode_live_with_retries(
 
 
 def _nominatim_search_one(query: str) -> Optional[Tuple[float, float]]:
-    """Single throttled Nominatim search → (lat, lng) or None."""
-    _throttle_nominatim()
-    params = urllib.parse.urlencode(
-        {
-            "q": query[:200],
-            "format": "jsonv2",
-            "limit": 1,
-        }
-    )
-    url = f"https://nominatim.openstreetmap.org/search?{params}"
+    """Single throttled forward-geocode → (lat, lng) or None.
+
+    Routes to LocationIQ when LOCATIONIQ_API_KEY is set, falling back to
+    the public Nominatim instance otherwise. Both speak the same
+    response shape, so the rest of the planner is provider-agnostic.
+
+    The function name is kept for historical reasons and to avoid
+    churning callers — "Nominatim" here really means "Nominatim or its
+    drop-in compatible service".
+    """
+    _throttle_geocode()
+    if USING_LOCATIONIQ:
+        params = urllib.parse.urlencode(
+            {
+                "key": LOCATIONIQ_API_KEY,
+                "q": query[:200],
+                "format": "json",
+                "limit": 1,
+                # `normalizecity=1` keeps responses compact + drops the
+                # huge `display_name` we don't need.
+                "normalizecity": 1,
+            }
+        )
+        url = f"{LOCATIONIQ_GEOCODE_URL}?{params}"
+        provider_label = "locationiq"
+    else:
+        params = urllib.parse.urlencode(
+            {
+                "q": query[:200],
+                "format": "jsonv2",
+                "limit": 1,
+            }
+        )
+        url = f"{NOMINATIM_PUBLIC_URL}?{params}"
+        provider_label = "nominatim"
+
     req = urllib.request.Request(
         url,
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=GEOCODE_TIMEOUT_S) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:  # pragma: no cover
-        logger.info("route_planner: nominatim lookup failed for %r: %s", query, exc)
+        logger.info(
+            "route_planner: %s lookup failed for %r: %s",
+            provider_label,
+            query,
+            exc,
+        )
         return None
     if not data:
         return None
-    item = data[0]
+    # LocationIQ returns the same flat list-of-dicts as Nominatim.
+    item = data[0] if isinstance(data, list) else data
     try:
         return float(item["lat"]), float(item["lon"])
     except (KeyError, TypeError, ValueError):
@@ -429,36 +515,63 @@ def _cache_persist(
 def _route_one_leg(
     start: Tuple[float, float], end: Tuple[float, float]
 ) -> Dict[str, Any]:
-    """Try OSRM walking routing between two waypoints.
+    """Try walking routing between two waypoints.
 
-    On success returns the decoded polyline points + "osrm".
-    On any failure (timeout, parse error, OSRM 5xx) returns the
-    straight-line densified fallback + "straight_line".
+    On success returns the decoded polyline points + the provider label
+    ("osrm" or "locationiq"). On any failure (timeout, parse error,
+    upstream 5xx) returns the straight-line densified fallback +
+    "straight_line".
     """
-    osrm = _osrm_foot_polyline(start, end)
-    if osrm is not None and len(osrm) >= 2:
-        return {"points": osrm, "method": "osrm"}
+    routed = _osrm_foot_polyline(start, end)
+    if routed is not None and len(routed) >= 2:
+        method = "locationiq" if USING_LOCATIONIQ else "osrm"
+        return {"points": routed, "method": method}
     return {"points": _densify_straight_line(start, end), "method": "straight_line"}
 
 
 def _osrm_foot_polyline(
     start: Tuple[float, float], end: Tuple[float, float]
 ) -> Optional[List[Tuple[float, float]]]:
-    """Hit OSRM's public foot router. Returns decoded polyline or None.
+    """Hit a foot-routing service. Returns decoded polyline or None.
 
-    OSRM expects `lng,lat` — note the order vs. our internal `lat,lng`.
+    Routes to LocationIQ Directions when LOCATIONIQ_API_KEY is set,
+    falling back to OSRM's public demo otherwise. Both speak OSRM's
+    response shape so we parse the same way for either.
+
+    Coordinate order: the URL takes `lng,lat;lng,lat` (note the swap
+    vs. our internal `lat,lng`).
     """
+    _throttle_geocode()  # share the same throttle as geocoding
     coord_str = f"{start[1]},{start[0]};{end[1]},{end[0]}"
-    url = f"{OSRM_FOOT_URL}/{coord_str}?overview=full&geometries=polyline"
+
+    if USING_LOCATIONIQ:
+        params = urllib.parse.urlencode(
+            {
+                "key": LOCATIONIQ_API_KEY,
+                "overview": "full",
+                "geometries": "polyline",
+            }
+        )
+        url = f"{LOCATIONIQ_FOOT_URL}/{coord_str}?{params}"
+        provider_label = "locationiq"
+    else:
+        url = (
+            f"{OSRM_PUBLIC_URL}/{coord_str}"
+            f"?overview=full&geometries=polyline"
+        )
+        provider_label = "osrm-public"
+
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=OSRM_TIMEOUT_S) as resp:
+        with urllib.request.urlopen(req, timeout=ROUTE_TIMEOUT_S) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:  # pragma: no cover
-        logger.info("route_planner: OSRM call failed: %s", exc)
+        logger.info("route_planner: %s call failed: %s", provider_label, exc)
         return None
 
-    if data.get("code") != "Ok":
+    if data.get("code") not in (None, "Ok"):
+        # OSRM/LocationIQ both use code="Ok" on success. Any other
+        # truthy code is an error condition.
         return None
     routes = data.get("routes") or []
     if not routes:
