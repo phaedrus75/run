@@ -66,6 +66,11 @@ export function AppleHealthImportScreen({ navigation }: Props) {
   const [workouts, setWorkouts] = useState<ImportableWorkout[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
+  // 🔍 Per-row failure reason. Surfaced under each row so the user
+  // (and we) can see exactly *why* an import failed instead of the
+  // old generic "Couldn't import — tap to retry" line. Cleared when
+  // the row transitions back to importing/imported.
+  const [rowReasons, setRowReasons] = useState<Record<string, string>>({});
   const [importingAll, setImportingAll] = useState(false);
   const [bulkResult, setBulkResult] = useState<string | null>(null);
 
@@ -115,10 +120,31 @@ export function AppleHealthImportScreen({ navigation }: Props) {
     async (w: ImportableWorkout) => {
       if (rowStates[w.uuid] === 'importing') return;
       setRowStates((s) => ({ ...s, [w.uuid]: 'importing' }));
+      // Clear any previous failure reason while we retry.
+      setRowReasons((r) => {
+        if (!r[w.uuid]) return r;
+        const next = { ...r };
+        delete next[w.uuid];
+        return next;
+      });
       try {
         Haptics.selectionAsync();
       } catch {}
-      const res = await importWorkout(w);
+      // Belt + braces: even though importWorkout traps and converts
+      // most failures into ok:false results, an unexpected throw
+      // (e.g. encodePolyline blowing up) would leave the row stuck
+      // in "importing". Wrap so we always land in either 'imported'
+      // or 'error', and capture the reason for the UI either way.
+      let res: Awaited<ReturnType<typeof importWorkout>>;
+      try {
+        res = await importWorkout(w);
+      } catch (err: any) {
+        console.warn('[AppleHealthImport] importWorkout threw', err);
+        res = {
+          ok: false,
+          reason: err?.message || 'Unexpected error during import',
+        };
+      }
       if (res.ok) {
         setRowStates((s) => ({ ...s, [w.uuid]: 'imported' }));
         try {
@@ -136,7 +162,19 @@ export function AppleHealthImportScreen({ navigation }: Props) {
           });
         }, 800);
       } else {
+        // Persist the actual reason so the row can show it inline,
+        // and log it so we can grab it from Mac Console.app if the
+        // user is debugging with a tethered device.
+        const reason = res.reason || 'Failed to import';
+        console.warn('[AppleHealthImport] import failed', {
+          uuid: w.uuid,
+          kind: w.kind,
+          distanceKm: w.distanceKm,
+          hasRoute: w.hasRoute,
+          reason,
+        });
         setRowStates((s) => ({ ...s, [w.uuid]: 'error' }));
+        setRowReasons((r) => ({ ...r, [w.uuid]: reason }));
         try {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } catch {}
@@ -315,6 +353,7 @@ export function AppleHealthImportScreen({ navigation }: Props) {
             workout={item}
             selected={selected.has(item.uuid)}
             state={rowStates[item.uuid] ?? 'idle'}
+            reason={rowReasons[item.uuid]}
             onToggleSelect={() => toggleSelect(item.uuid)}
             onImport={() => handleImportOne(item)}
           />
@@ -413,6 +452,7 @@ interface RowProps {
   workout: ImportableWorkout;
   selected: boolean;
   state: RowState;
+  reason?: string;
   onToggleSelect: () => void;
   onImport: () => void;
 }
@@ -421,6 +461,7 @@ function WorkoutRow({
   workout,
   selected,
   state,
+  reason,
   onToggleSelect,
   onImport,
 }: RowProps) {
@@ -470,7 +511,9 @@ function WorkoutRow({
           {!workout.hasRoute ? ' · indoor' : ''}
         </Text>
         {isError && (
-          <Text style={styles.rowError}>Couldn't import — tap to retry</Text>
+          <Text style={styles.rowError}>
+            {reason ? `Couldn't import: ${reason}` : "Couldn't import — tap to retry"}
+          </Text>
         )}
       </View>
 
