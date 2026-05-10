@@ -92,6 +92,8 @@ export function RetroactivePhotoPicker({
 }: RetroactivePhotoPickerProps) {
   const [permissionState, setPermissionState] = useState<'granted' | 'denied' | 'undetermined' | 'unknown'>('unknown');
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<BucketedCandidate[]>([]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
@@ -103,22 +105,30 @@ export function RetroactivePhotoPicker({
     if (!visible) return;
     setCandidates([]);
     setPicked(new Set());
+    setProgress(null);
+    setLoadError(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const perm = await ensurePhotosPermission();
       setPermissionState(perm);
       if (perm !== 'granted') {
         return;
       }
-      const found = await findCandidatePhotos(activity);
+      const found = await findCandidatePhotos(activity, {
+        onProgress: (done, total) => setProgress({ done, total }),
+      });
       setCandidates(found.map(bucketize));
-    } catch (e) {
+    } catch (e: any) {
+      // Real failure (PhotoKit blew up, memory pressure, ...) — show it
+      // instead of a silent spinner so the user knows to retry.
       console.warn('retroactive photos: load failed', e);
+      setLoadError(e?.message || 'Could not read your photo library');
     } finally {
       setLoading(false);
     }
@@ -202,7 +212,20 @@ export function RetroactivePhotoPicker({
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.centerText}>Looking for photos…</Text>
+            <Text style={styles.centerText}>
+              {progress && progress.total > 0
+                ? `Reading ${progress.done} of ${progress.total} photos…`
+                : 'Looking for photos…'}
+            </Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.center}>
+            <Ionicons name="alert-circle-outline" size={48} color={colors.textLight} />
+            <Text style={styles.centerTitle}>Couldn't read your library</Text>
+            <Text style={styles.centerText}>{loadError}</Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={() => load()}>
+              <Text style={styles.primaryButtonText}>Try again</Text>
+            </TouchableOpacity>
           </View>
         ) : permissionState === 'denied' ? (
           <View style={styles.center}>

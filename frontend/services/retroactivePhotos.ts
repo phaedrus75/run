@@ -34,8 +34,14 @@ const TIME_WINDOW_MS = 15 * 60 * 1000;
 /** Photos within this many metres of the route polyline are "near". */
 const NEAR_ROUTE_M = 150;
 /** Don't fetch more than this many candidates — keeps the picker snappy
- *  even if the library is huge. Most workouts will have far fewer. */
-const MAX_CANDIDATES = 200;
+ *  even if the library is huge. Most workouts have <20 photos in their
+ *  ±15min window; long activities (half marathons, journey days) might
+ *  brush 40-50. We cap well above realistic to give us headroom. */
+const MAX_CANDIDATES = 80;
+/** How many `getAssetInfoAsync` calls to keep in flight at once. PhotoKit
+ *  is happy with this; serial was the original implementation and it
+ *  made the picker feel hung on 100+ candidate days. */
+const EXIF_CONCURRENCY = 8;
 
 export interface RouteForRetroactive {
   /** ISO string. */
@@ -106,13 +112,25 @@ function parseAsUtc(iso: string): number {
   return Date.parse(iso + 'Z');
 }
 
+export interface FindCandidatesOptions {
+  /** Called with `(done, total)` as EXIF lookups complete. The picker
+   *  uses this to render a "Reading 12 of 30…" progress line so a long
+   *  workout window doesn't feel like a hang. */
+  onProgress?: (done: number, total: number) => void;
+}
+
 /**
- * Find candidate photos for retroactive attach. Returns up to
- * `MAX_CANDIDATES` items sorted by creationTime ascending (earliest first,
- * so the picker reads naturally as a timeline of the workout).
+ * Find candidate photos for retroactive attach. Returns items sorted by
+ * creationTime ascending (earliest first, so the picker reads as a
+ * left-to-right timeline of the workout).
+ *
+ * EXIF GPS lookups run in parallel with `EXIF_CONCURRENCY` workers —
+ * PhotoKit handles this happily and it turns a 30s "is this hung?"
+ * load into a sub-3s one for typical libraries.
  */
 export async function findCandidatePhotos(
   activity: RouteForRetroactive,
+  options: FindCandidatesOptions = {},
 ): Promise<CandidatePhoto[]> {
   const startedAtMs = activity.startedAt ? parseAsUtc(activity.startedAt) : NaN;
   const endedAtMs = activity.endedAt ? parseAsUtc(activity.endedAt) : NaN;
@@ -128,11 +146,15 @@ export async function findCandidatePhotos(
     createdBefore: endedAtMs + TIME_WINDOW_MS,
   });
 
-  const candidates: CandidatePhoto[] = [];
-  for (const asset of result.assets) {
-    // EXIF GPS is on the asset's *info*, not the asset itself, so we have
-    // to round-trip per asset. Fail open: if this throws (no permission /
-    // network drive), we keep the candidate but flag nearRoute=false.
+  const total = result.assets.length;
+  options.onProgress?.(0, total);
+
+  // Resolve one asset → CandidatePhoto, doing EXIF GPS round-trip with
+  // a per-asset try/catch so a single failure (e.g. iCloud asset that
+  // hasn't downloaded) doesn't take the whole batch down.
+  const resolveOne = async (
+    asset: MediaLibrary.Asset,
+  ): Promise<CandidatePhoto> => {
     let lat: number | null = null;
     let lng: number | null = null;
     try {
@@ -143,20 +165,18 @@ export async function findCandidatePhotos(
         lng = loc.longitude;
       }
     } catch {
-      // ignore
+      // ignore — keep the candidate, just without GPS-near-route boost
     }
 
     const nearRoute = lat != null && lng != null
       ? isNearRoute({ lat, lng }, activity.routePoints)
       : false;
 
-    const distanceKm = computeDistanceMarker(activity, asset.creationTime);
-
-    candidates.push({
+    return {
       id: asset.id,
       uri: asset.uri,
       creationTime: asset.creationTime,
-      distanceKm,
+      distanceKm: computeDistanceMarker(activity, asset.creationTime),
       withinWorkoutWindow:
         asset.creationTime >= startedAtMs && asset.creationTime <= endedAtMs,
       nearRoute,
@@ -164,20 +184,48 @@ export async function findCandidatePhotos(
       height: asset.height,
       lat,
       lng,
-    });
-  }
+    };
+  };
 
-  // Earliest first so the picker reads as a left-to-right timeline of the
-  // workout; this also tends to put the most-likely "real" photos first
-  // since they're shot during the workout window.
-  candidates.sort((a, b) => a.creationTime - b.creationTime);
-  return candidates;
+  // Bounded-concurrency pool over result.assets. Index-based queue so we
+  // don't allocate a worker array up front; each "worker" pulls the
+  // next index off until we run out.
+  const candidates: CandidatePhoto[] = new Array(total);
+  let nextIndex = 0;
+  let done = 0;
+  const worker = async () => {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= total) return;
+      try {
+        candidates[i] = await resolveOne(result.assets[i]);
+      } catch {
+        // Already swallowed inside resolveOne; this is a belt-and-braces
+        // for any unexpected throw outside the EXIF try/catch.
+      }
+      done += 1;
+      options.onProgress?.(done, total);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(EXIF_CONCURRENCY, total) }, worker),
+  );
+
+  return candidates.filter(Boolean).sort((a, b) => a.creationTime - b.creationTime);
 }
+
+/** Output spec for retroactive uploads. Matches what `EditRunModal`,
+ *  `EditWalkModal`, and the live `RunScreen` capture paths use, so a
+ *  photo attached retroactively looks identical in detail to one
+ *  captured in-flight. The library originals are typically 4032×3024
+ *  HEIC, so 1600px JPEG is a meaningful downsize but still sharp. */
+const UPLOAD_WIDTH_PX = 1600;
+const UPLOAD_QUALITY = 0.85;
 
 /**
  * Read the picked asset's full image, downsize + compress to keep the
- * upload payload small (matches `useActivityPhotoCapture`'s 1200px / 0.8 JPEG),
- * and return the base64 + final MIME-friendly URI.
+ * upload payload manageable, and return the base64 + final URI.
  *
  * Throws on read failure so the caller can re-queue / surface to the user.
  */
@@ -200,8 +248,12 @@ export async function readForUpload(asset: CandidatePhoto): Promise<{
 
   const manipulated = await ImageManipulator.manipulateAsync(
     workingUri,
-    [{ resize: { width: 1200 } }],
-    { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    [{ resize: { width: UPLOAD_WIDTH_PX } }],
+    {
+      compress: UPLOAD_QUALITY,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    },
   );
 
   if (!manipulated.base64) {
