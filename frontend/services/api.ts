@@ -330,6 +330,11 @@ export interface WeightEntry {
   weight_lbs: number;
   recorded_at: string;
   notes: string | null;
+  // 🍎 "manual" for user-typed entries (default), "apple_health" for
+  // HealthKit auto-sync. `external_id` carries the HKQuantitySample
+  // uuid so re-syncs collapse onto the same row.
+  source?: string;
+  external_id?: string | null;
 }
 
 export interface WeightProgress {
@@ -522,8 +527,19 @@ export const weightApi = {
 
   /**
    * ⚖️ Create a new weight entry
+   *
+   * Pass `source = "apple_health"` and `external_id = <HKQuantitySample.uuid>`
+   * for HealthKit auto-sync — the backend dedupes on
+   * (user_id, source, external_id) so calling this repeatedly with the
+   * same uuid is idempotent.
    */
-  create: (data: { weight_lbs: number; recorded_at?: string; notes?: string }): Promise<WeightEntry> => {
+  create: (data: {
+    weight_lbs: number;
+    recorded_at?: string;
+    notes?: string;
+    source?: string;
+    external_id?: string;
+  }): Promise<WeightEntry> => {
     return apiFetch('/weights', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -1648,24 +1664,38 @@ export const publicWalkApi = {
 };
 
 // 🍎 Apple Health import — small helper module for talking to the
-// backend about externally-sourced runs/walks. The HealthKit JS calls
-// happen client-side in `services/appleHealth.ts`; this just exposes
-// the dedupe lookup so the import picker can grey out workouts we've
-// already pulled in.
+// backend about externally-sourced data. The HealthKit JS calls happen
+// client-side in `services/appleHealth.ts`; this just exposes the
+// dedupe lookups so the import flows can skip records we've already
+// pulled in.
 export interface ImportedWorkoutIds {
   source: string;
+  /** "workout" (runs+walks) or "weight" — echoed back from the
+   *  backend so callers can sanity-check the shape they got. */
+  kind?: string;
   external_ids: string[];
   count: number;
 }
 
+/** What slice of imported records to look up. */
+export type ImportedKind = 'workout' | 'weight';
+
 export const healthImportApi = {
   /**
-   * Returns the set of upstream workout IDs already imported into ZenRun
-   * for the given source (default: `apple_health`). Used to filter the
-   * HealthKit import picker so we don't re-show workouts that are
-   * already in the user's runs/walks lists.
+   * Returns the set of upstream IDs already imported into ZenRun for
+   * the given source + kind. Used to filter HealthKit auto-sync so we
+   * don't re-post records we've already stored.
+   *
+   * - kind = "workout" (default) — runs + walks, used by the workout
+   *   import picker.
+   * - kind = "weight" — body-mass entries, used by the WeightTab
+   *   auto-sync.
    */
-  listImportedIds: (source: string = 'apple_health'): Promise<ImportedWorkoutIds> => {
-    return apiFetch(`/me/imported-workout-ids?source=${encodeURIComponent(source)}`);
+  listImportedIds: (
+    source: string = 'apple_health',
+    kind: ImportedKind = 'workout',
+  ): Promise<ImportedWorkoutIds> => {
+    const qs = `source=${encodeURIComponent(source)}&kind=${encodeURIComponent(kind)}`;
+    return apiFetch(`/me/imported-workout-ids?${qs}`);
   },
 };

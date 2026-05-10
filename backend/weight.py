@@ -22,15 +22,29 @@ START_DATE = datetime(2026, 1, 7)
 END_DATE = datetime(2026, 12, 31)
 
 
-def create_weight_entry(db: Session, weight_lbs: float, recorded_at: Optional[datetime] = None, notes: Optional[str] = None, user_id: Optional[int] = None) -> Weight:
+def create_weight_entry(
+    db: Session,
+    weight_lbs: float,
+    recorded_at: Optional[datetime] = None,
+    notes: Optional[str] = None,
+    user_id: Optional[int] = None,
+    source: Optional[str] = None,
+    external_id: Optional[str] = None,
+) -> Weight:
     """
     ⚖️ Create a new weight entry
+
+    `source` defaults to "manual" for hand-typed entries. Apple Health
+    auto-sync passes "apple_health" + the HKQuantitySample uuid so the
+    backend can dedupe re-syncs of the same scale reading.
     """
     entry = Weight(
         weight_lbs=weight_lbs,
         recorded_at=recorded_at or datetime.now(),
         notes=notes,
-        user_id=user_id
+        user_id=user_id,
+        source=source or "manual",
+        external_id=external_id,
     )
     db.add(entry)
     db.commit()

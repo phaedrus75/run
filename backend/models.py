@@ -127,6 +127,15 @@ class Weight(Base):
     # 📝 Optional notes (e.g., "morning weight", "after workout")
     notes = Column(String, nullable=True)
 
+    # 🍎 Origin of the row.
+    #   "manual"        — user typed it in via the Log Weight modal (default)
+    #   "apple_health"  — pulled from HealthKit (smart scale → Health → here)
+    # Existing rows are backfilled to "manual" since they predate auto-sync.
+    # `external_id` carries the HKQuantitySample uuid so re-syncs collapse
+    # onto the same row instead of duplicating the chart.
+    source = Column(String, nullable=True, default="manual")
+    external_id = Column(String, nullable=True, index=True)
+
 
 class User(Base):
     """

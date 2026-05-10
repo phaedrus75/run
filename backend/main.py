@@ -638,6 +638,26 @@ def run_migrations():
                         ON walks(user_id, source, external_id)
                 """))
 
+                # ⚖️🍎 Apple Health weight auto-sync (Phase: HK weight import).
+                # `source` defaults to "manual" because every pre-existing
+                # weight row was hand-typed via the Log Weight modal. New
+                # rows from the WeightTab auto-sync arrive with
+                # source="apple_health" + external_id=<HKQuantitySample.uuid>
+                # so re-syncs are idempotent.
+                conn.execute(text(
+                    "ALTER TABLE weights ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'manual'"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE weights ADD COLUMN IF NOT EXISTS external_id VARCHAR"
+                ))
+                conn.execute(text(
+                    "UPDATE weights SET source = 'manual' WHERE source IS NULL"
+                ))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_weights_external
+                        ON weights(user_id, source, external_id)
+                """))
+
                 # Per-day Guide briefs (Phase G).
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS journey_day_briefs (
@@ -740,6 +760,9 @@ def run_migrations():
                 _sqlite_col("runs", "external_id", "external_id VARCHAR")
                 _sqlite_col("walks", "source", "source VARCHAR DEFAULT 'live'")
                 _sqlite_col("walks", "external_id", "external_id VARCHAR")
+                # ⚖️🍎 Weight auto-sync from HealthKit
+                _sqlite_col("weights", "source", "source VARCHAR DEFAULT 'manual'")
+                _sqlite_col("weights", "external_id", "external_id VARCHAR")
                 _sqlite_col("journeys", "max_days", "max_days INTEGER NOT NULL DEFAULT 1")
                 _sqlite_col("journeys", "completion_note", "completion_note TEXT")
                 # Plan-then-start lifecycle (Phase H)
@@ -1714,7 +1737,15 @@ def create_weight(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth)
 ):
-    """⚖️ Log a new weight entry (requires auth)."""
+    """⚖️ Log a new weight entry (requires auth).
+
+    Accepts `source` ("manual" | "apple_health") and `external_id` for
+    HealthKit auto-sync. When both are present and source != "manual",
+    we dedupe against any existing row with the same
+    (user_id, source, external_id) tuple — this makes the WeightTab
+    auto-sync idempotent across crashes / network failures / repeated
+    foregrounds.
+    """
     from weight import create_weight_entry
     from datetime import datetime
     
@@ -1732,13 +1763,46 @@ def create_weight(
     notes = weight_data.get("notes")
     if notes:
         notes = _sanitize_text(notes, max_length=200)
-    
+
+    source = weight_data.get("source")
+    if source:
+        source = _sanitize_text(str(source), max_length=20)
+    external_id = weight_data.get("external_id")
+    if external_id:
+        external_id = _sanitize_text(str(external_id), max_length=120)
+
+    # 🍎 Idempotent re-imports — same contract as runs/walks. Power
+    # users may sync hundreds of historical weight samples on first
+    # launch and we don't want a flaky network turning that into 2x
+    # rows the second time round.
+    if external_id and (source or "manual") != "manual":
+        existing = (
+            db.query(Weight)
+            .filter(
+                Weight.user_id == current_user.id,
+                Weight.source == source,
+                Weight.external_id == external_id,
+            )
+            .first()
+        )
+        if existing is not None:
+            return {
+                "id": existing.id,
+                "weight_lbs": existing.weight_lbs,
+                "recorded_at": existing.recorded_at,
+                "notes": existing.notes,
+                "source": existing.source or "manual",
+                "external_id": existing.external_id,
+            }
+
     entry = create_weight_entry(
         db,
         weight_lbs=weight_lbs,
         recorded_at=recorded_at,
         notes=notes,
-        user_id=current_user.id
+        user_id=current_user.id,
+        source=source,
+        external_id=external_id,
     )
     
     return {
@@ -1746,6 +1810,8 @@ def create_weight(
         "weight_lbs": entry.weight_lbs,
         "recorded_at": entry.recorded_at,
         "notes": entry.notes,
+        "source": entry.source or "manual",
+        "external_id": entry.external_id,
     }
 
 
@@ -1764,6 +1830,11 @@ def get_weights(
             "weight_lbs": w.weight_lbs,
             "recorded_at": w.recorded_at,
             "notes": w.notes,
+            # 🍎 Source attribution — frontend can render an Apple Health
+            # pill on imported entries, distinguishing them from manual
+            # log-it-yourself entries.
+            "source": getattr(w, "source", None) or "manual",
+            "external_id": getattr(w, "external_id", None),
         }
         for w in weights
     ]
@@ -6823,19 +6894,43 @@ def get_my_journey_map_context(
 @app.get("/me/imported-workout-ids")
 def get_imported_workout_ids(
     source: str = "apple_health",
+    kind: str = "workout",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """🍎 List external IDs of workouts already imported from a given source.
+    """🍎 List external IDs of records already imported from a given source.
 
-    The HealthKit import flow uses this to filter "Already in ZenRun"
-    rows out of the picker before showing the user. Cheap, indexed-only
-    query — returns just the IDs, no payload.
+    The HealthKit auto-sync uses this to filter "Already in ZenRun"
+    rows out before posting them. Cheap, indexed-only query — returns
+    just the IDs, no payload.
 
-    Returns: { "source": "apple_health", "external_ids": [...] }
+    `kind` controls which tables we look in:
+      - "workout" (default) — runs + walks (the original use case)
+      - "weight" — body-mass entries (Weight tab auto-sync)
+
+    Keeping this in one endpoint with a kind switch — rather than
+    spawning `/me/imported-weight-ids` etc. — keeps the surface area
+    tight as we add more HK data types.
+
+    Returns: { "source": "apple_health", "kind": "weight", "external_ids": [...] }
     """
     src = (source or "apple_health").strip().lower()[:20] or "apple_health"
+    knd = (kind or "workout").strip().lower()[:20] or "workout"
 
+    if knd == "weight":
+        weight_ids = (
+            db.query(Weight.external_id)
+            .filter(
+                Weight.user_id == current_user.id,
+                Weight.source == src,
+                Weight.external_id.isnot(None),
+            )
+            .all()
+        )
+        ids = sorted({row[0] for row in weight_ids if row[0]})
+        return {"source": src, "kind": knd, "external_ids": ids, "count": len(ids)}
+
+    # Default: workout (runs + walks)
     run_ids = (
         db.query(Run.external_id)
         .filter(
@@ -6857,7 +6952,7 @@ def get_imported_workout_ids(
     ids = sorted(
         {row[0] for row in run_ids if row[0]} | {row[0] for row in walk_ids if row[0]}
     )
-    return {"source": src, "external_ids": ids, "count": len(ids)}
+    return {"source": src, "kind": knd, "external_ids": ids, "count": len(ids)}
 
 
 @app.post("/journeys/{journey_id}/start", response_model=JourneyResponse)

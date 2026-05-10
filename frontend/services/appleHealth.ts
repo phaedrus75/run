@@ -29,6 +29,7 @@ import {
   isHealthDataAvailable,
   requestAuthorization,
   queryWorkoutSamples,
+  queryQuantitySamples,
   WorkoutActivityType,
   WorkoutTypeIdentifier,
   WorkoutRouteTypeIdentifier,
@@ -36,9 +37,24 @@ import {
   type WorkoutRouteLocation,
 } from '@kingstinct/react-native-healthkit';
 
-import { runApi, walkApi, healthImportApi, type Run, type Walk } from './api';
+import {
+  runApi,
+  walkApi,
+  weightApi,
+  healthImportApi,
+  type Run,
+  type Walk,
+  type WeightEntry,
+} from './api';
 import type { TrackedPoint } from './walkLocationTracker';
 import { encodePolyline } from './walkLocationTracker';
+
+// HK identifier for body weight. Imported as a string literal because
+// the package exposes BodyMass through the generic `queryQuantitySamples`
+// API rather than a dedicated constant. Default unit on Apple Watch /
+// iPhone is kg; we explicitly request 'lb' to match the backend's
+// `weight_lbs` column without rounding errors.
+const BODY_MASS_IDENTIFIER = 'HKQuantityTypeIdentifierBodyMass' as const;
 
 const SOURCE = 'apple_health';
 
@@ -448,6 +464,217 @@ export async function importMany(
 // ---------------------------------------------------------------------
 //  UI helpers
 // ---------------------------------------------------------------------
+
+// ─────────────────────────────────────────────────────────────────────
+//  ⚖️ Weight auto-sync (HKQuantityTypeIdentifierBodyMass)
+// ─────────────────────────────────────────────────────────────────────
+//
+//  The Weight tab uses Apple Health as its source of truth for users
+//  with a smart scale. Every focus of the tab triggers a silent pull
+//  that:
+//    1. queries body-mass samples in the date window
+//    2. asks the backend which uuids it already has
+//    3. POSTs only the new ones to /weights with source=apple_health
+//
+//  Auth is requested separately from the workout flow so we don't
+//  prompt for body-mass access on users who never visit the Weight
+//  tab.
+
+const WEIGHT_SOURCE = 'apple_health';
+
+/** Stable shape the WeightTab consumes. Keeps HKQuantitySample's
+ *  `quantity` / `unit` plumbing out of the UI. */
+export interface ImportableWeight {
+  /** HKQuantitySample uuid — sent to the backend as `external_id`. */
+  uuid: string;
+  /** Pounds — already converted by HK because we requested unit='lb'. */
+  weightLbs: number;
+  /** Sample timestamp. HK uses startDate==endDate for instantaneous
+   *  measurements like body mass, so either is fine. */
+  recordedAt: Date;
+  /** "Apple Watch", "Withings", "iPhone Health app", etc. */
+  sourceLabel: string;
+}
+
+/** Show the iOS HealthKit auth sheet for body-mass reads. Scoped
+ *  narrowly so we only nudge users who actually open the Weight tab.
+ *  Returns `true` when the request didn't throw — note iOS hides the
+ *  user's actual choice (privacy by design); the proof is whether the
+ *  subsequent query returns rows. */
+export async function requestWeightAuth(): Promise<boolean> {
+  if (!getAvailability()) return false;
+  try {
+    await requestAuthorization({
+      toRead: [BODY_MASS_IDENTIFIER],
+      toShare: [],
+    });
+    return true;
+  } catch (err) {
+    console.warn('[appleHealth] requestWeightAuth failed:', err);
+    return false;
+  }
+}
+
+interface ListWeightOptions {
+  /** Hard date floor. Defaults to Jan 1 of the current calendar year
+   *  to align with ZenRun's annual goal window. Pass an explicit Date
+   *  to widen / narrow. */
+  since?: Date;
+  /** Cap on rows returned. HK quantity queries are quick but a daily
+   *  weigher with 20 years of history could push thousands of rows
+   *  through the bridge. 365 is plenty for a year-aligned UI. */
+  limit?: number;
+  /** When true, skip the backend dedupe lookup and return every HK
+   *  sample in range — useful for diagnostics / "show me all". */
+  includeImported?: boolean;
+}
+
+/** Fetches body-mass samples since `options.since` (default: Jan 1 of
+ *  the current year), minus any uuids the backend already has. Empty
+ *  array on non-iOS, when HK is unreachable, or when the user denied
+ *  the auth sheet (HK returns 0 rows in that case — same surface as
+ *  "no data"). */
+export async function listImportableWeights(
+  options: ListWeightOptions = {},
+): Promise<ImportableWeight[]> {
+  if (!getAvailability()) return [];
+
+  const since =
+    options.since ?? new Date(new Date().getFullYear(), 0, 1);
+  const limit = options.limit ?? 365;
+
+  let raw: readonly any[] = [];
+  try {
+    raw = await queryQuantitySamples(BODY_MASS_IDENTIFIER, {
+      // Pounds match our backend column directly. The package converts
+      // server-side; we get back numbers, no unit math required.
+      unit: 'lb',
+      limit,
+      ascending: false,
+      filter: {
+        date: {
+          startDate: since,
+          // No endDate → unbounded forward, picks up future samples
+          // taken between syncs.
+        },
+      },
+    });
+  } catch (err) {
+    console.warn('[appleHealth] queryQuantitySamples(BodyMass) failed:', err);
+    return [];
+  }
+
+  const projected: ImportableWeight[] = [];
+  for (const s of raw) {
+    const uuid: string | undefined = (s as any).uuid;
+    const lbs = Number(s?.quantity ?? 0);
+    const recordedAt: Date | undefined = s?.startDate ?? s?.endDate;
+    if (!uuid || !recordedAt || !Number.isFinite(lbs)) continue;
+    // Drop obviously-bad samples — humans don't weigh 5 lb or 750 lb,
+    // and HK occasionally surfaces test/garbage rows on dev devices.
+    if (lbs < 30 || lbs > 700) continue;
+    projected.push({
+      uuid,
+      weightLbs: Number(lbs.toFixed(2)),
+      recordedAt,
+      sourceLabel: readSampleSourceLabel(s),
+    });
+  }
+
+  if (options.includeImported) return projected;
+
+  try {
+    const existing = await healthImportApi.listImportedIds(
+      WEIGHT_SOURCE,
+      'weight',
+    );
+    const taken = new Set(existing.external_ids);
+    return projected.filter((w) => !taken.has(w.uuid));
+  } catch (err) {
+    console.warn('[appleHealth] weight dedupe lookup failed:', err);
+    return projected;
+  }
+}
+
+function readSampleSourceLabel(sample: any): string {
+  // Mirrors `readSourceLabel` for workouts. HK's quantity sample shape
+  // exposes the originating app/device through `sourceRevision`,
+  // sometimes `device`. We probe several keys defensively because
+  // different HK clients (Apple Watch, Withings, MyFitnessPal, the
+  // user's finger in the Health app) populate slightly different
+  // fields.
+  const candidate =
+    sample?.device?.name ||
+    sample?.sourceRevision?.source?.name ||
+    sample?.sourceRevision?.productType ||
+    sample?.metadata?.HKMetadataKeyDeviceName ||
+    null;
+  if (typeof candidate === 'string' && candidate.trim()) return candidate;
+  return 'Apple Health';
+}
+
+/** Push a single body-mass sample to the backend. Idempotent thanks
+ *  to the server-side (user_id, source, external_id) dedupe. */
+export async function importWeight(
+  w: ImportableWeight,
+): Promise<{ ok: boolean; entry?: WeightEntry; reason?: string }> {
+  if (!getAvailability()) {
+    return { ok: false, reason: 'HealthKit unavailable on this device' };
+  }
+  try {
+    const entry = await weightApi.create({
+      weight_lbs: w.weightLbs,
+      recorded_at: w.recordedAt.toISOString(),
+      source: WEIGHT_SOURCE,
+      external_id: w.uuid,
+    });
+    return { ok: true, entry };
+  } catch (err: any) {
+    return {
+      ok: false,
+      reason: err?.message || 'Failed to import weight',
+    };
+  }
+}
+
+/** Sequentially imports a batch of weight samples. Sequential rather
+ *  than parallel for the same backend-friendliness reason as
+ *  `importMany` — a daily weigher syncing for the first time can
+ *  push 100+ rows. */
+export async function importManyWeights(
+  weights: ImportableWeight[],
+): Promise<{ imported: number; failed: number }> {
+  let imported = 0;
+  let failed = 0;
+  for (const w of weights) {
+    const res = await importWeight(w);
+    if (res.ok) imported += 1;
+    else failed += 1;
+  }
+  return { imported, failed };
+}
+
+/** Convenience: do the whole "auto-sync since Jan 1" dance in one
+ *  call. Returns counts so the caller can show a discreet "Synced N"
+ *  status line. Safe to invoke on every WeightTab focus — the dedupe
+ *  lookup means we only POST genuinely new samples. */
+export async function autoSyncWeightsFromHealth(
+  options: ListWeightOptions = {},
+): Promise<{ imported: number; failed: number; available: boolean }> {
+  if (!getAvailability()) {
+    return { imported: 0, failed: 0, available: false };
+  }
+  const fresh = await listImportableWeights(options);
+  if (fresh.length === 0) {
+    return { imported: 0, failed: 0, available: true };
+  }
+  const res = await importManyWeights(fresh);
+  return { ...res, available: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  UI helpers
+// ─────────────────────────────────────────────────────────────────────
 
 /** Human label for the activity type, e.g. "Outdoor Run", "Hike". */
 export function activityLabel(t: WorkoutActivityType): string {
