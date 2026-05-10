@@ -253,6 +253,74 @@ export async function listImportableWorkouts(
   }
 }
 
+/**
+ * Convert an HK `Quantity` (number + unit string) into kilometres.
+ *
+ * Why this exists:
+ *   `HKWorkout.totalDistance` is an `HKQuantity` whose value is in
+ *   whatever unit HealthKit chose at write time. The kingstinct nitro
+ *   bridge passes that through verbatim — for `HKWorkoutTypeIdentifier`
+ *   that's almost always **metres** (Apple Watch's internal SI default),
+ *   but third-party watch faces and Strava-on-HealthKit can write in
+ *   miles or even feet.
+ *
+ *   We were previously reading `quantity` directly and treating it as
+ *   km, so a 5 km run came through as 5000 and tripped our `> 200`
+ *   sanity guard with the (very misleading) "Distance looks invalid"
+ *   error. This converter is the fix.
+ *
+ * Strategy:
+ *   - Map the well-known HK unit strings ('m', 'km', 'mi', 'ft', 'yd',
+ *     'cm') explicitly.
+ *   - Treat unknown / empty units as metres, because that's HK's
+ *     documented default for workout totalDistance, and getting an
+ *     import through with a slightly-wrong distance is far better than
+ *     dropping it on the floor.
+ */
+function quantityToKm(
+  q?: { unit?: string | null; quantity?: number | null } | null,
+): number {
+  if (!q) return 0;
+  const value = Number(q.quantity);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  const unit = String(q.unit ?? '').trim().toLowerCase();
+  switch (unit) {
+    case 'km':
+    case 'kilometer':
+    case 'kilometers':
+      return value;
+    case 'mi':
+    case 'mile':
+    case 'miles':
+      return value * 1.609344;
+    case 'ft':
+    case 'foot':
+    case 'feet':
+      return value * 0.0003048;
+    case 'yd':
+    case 'yard':
+    case 'yards':
+      return value * 0.0009144;
+    case 'cm':
+    case 'centimeter':
+    case 'centimeters':
+      return value / 100_000;
+    case 'm':
+    case 'meter':
+    case 'meters':
+    case '':
+      return value / 1000;
+    default:
+      // Unknown unit — log so we can spot new HK exports in the wild,
+      // but assume metres (HK default) rather than dropping the import.
+      console.warn(
+        '[appleHealth] unknown distance unit, assuming meters:',
+        q.unit,
+      );
+      return value / 1000;
+  }
+}
+
 function projectWorkout(w: WorkoutProxyTyped): ImportableWorkout {
   const startedAt = w.startDate;
   const endedAt = w.endDate;
@@ -260,7 +328,7 @@ function projectWorkout(w: WorkoutProxyTyped): ImportableWorkout {
     1,
     Math.round((endedAt.getTime() - startedAt.getTime()) / 1000),
   );
-  const distanceKm = Number(w.totalDistance?.quantity ?? 0);
+  const distanceKm = quantityToKm(w.totalDistance);
   const kind: 'run' | 'walk' = RUN_TYPES.includes(w.workoutActivityType)
     ? 'run'
     : 'walk';
@@ -372,8 +440,17 @@ export async function importWorkout(
   if (!getAvailability()) {
     return { ok: false, reason: 'HealthKit unavailable on this device' };
   }
-  if (w.distanceKm < 0 || w.distanceKm > 200) {
-    return { ok: false, reason: 'Distance looks invalid' };
+  if (!Number.isFinite(w.distanceKm) || w.distanceKm < 0) {
+    return { ok: false, reason: 'Distance missing from HealthKit' };
+  }
+  if (w.distanceKm > 300) {
+    // 300 km is a generous cap — the longest ultras top out around
+    // 250 km. Anything above this is almost certainly a unit mix-up
+    // we haven't accounted for.
+    return {
+      ok: false,
+      reason: `Distance looks invalid (${w.distanceKm.toFixed(0)} km)`,
+    };
   }
 
   // Pull the route. Failure here is non-fatal — we still create the
