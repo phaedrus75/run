@@ -6214,7 +6214,95 @@ def _maybe_heal_journey_route(
             pass
 
 
+def _reconcile_journey_attributions(db: Session, journey: Journey) -> int:
+    """Scan untagged runs/walks within the journey's window and attach
+    them to this journey. Idempotent: rows that already carry a
+    journey_id are left alone (could legitimately belong to a
+    different journey, or have been intentionally detached).
+
+    Recovers two cases the create-time attach can't catch alone:
+      1. Apple Health workouts imported *after* the journey window
+         expired in wall-clock time — even though the activity itself
+         happened inside the window.
+      2. Activities created before the journey was started, then later
+         looked at — these stay outside the window and are skipped.
+
+    Cheap (two indexed range queries) and runs only when we open an
+    active journey. Walks/runs updated here trigger an auto-complete
+    check below. Returns the count of newly-attached activities.
+    """
+    if journey.status != "active":
+        return 0
+    if not journey.started_at:
+        return 0
+
+    expires_at = _journey_expires_at(journey)
+    # If we have no expires_at (single-day with no max_days?), use end
+    # of today as a safe upper bound so we don't run away forever.
+    window_end = expires_at or datetime.utcnow()
+    window_start = journey.started_at
+
+    attached = 0
+
+    runs = (
+        db.query(Run)
+        .filter(
+            Run.user_id == journey.user_id,
+            Run.journey_id.is_(None),
+            Run.started_at.isnot(None),
+            Run.started_at >= window_start,
+            Run.started_at <= window_end,
+        )
+        .all()
+    )
+    for r in runs:
+        r.journey_id = journey.id
+        attached += 1
+
+    walks = (
+        db.query(Walk)
+        .filter(
+            Walk.user_id == journey.user_id,
+            Walk.journey_id.is_(None),
+            Walk.started_at.isnot(None),
+            Walk.started_at >= window_start,
+            Walk.started_at <= window_end,
+        )
+        .all()
+    )
+    for w in walks:
+        w.journey_id = journey.id
+        attached += 1
+
+    if attached > 0:
+        db.commit()
+        # If the freshly-attached distance crosses the target, mark
+        # complete so the JourneyDetail screen reflects reality on the
+        # next render. Mirrors the auto-complete in
+        # _attach_to_active_journey.
+        progress = _journey_progress(db, journey)
+        if progress["accumulated_km"] >= float(journey.target_distance_km or 0.0):
+            journey.status = "completed"
+            journey.completed_at = datetime.utcnow()
+            db.commit()
+            db.refresh(journey)
+            _try_generate_journey_completion_note(db, journey)
+
+    return attached
+
+
 def _journey_to_response(db: Session, journey: Journey) -> JourneyResponse:
+    # 🪡 Self-heal: catch any runs/walks whose import landed after the
+    # journey-window check fired (e.g. Apple Health backfilled the
+    # next day). Only runs for active journeys; idempotent.
+    if journey.status == "active":
+        try:
+            _reconcile_journey_attributions(db, journey)
+        except Exception:
+            # Best-effort — never break the journey fetch over reconcile
+            # bookkeeping.
+            pass
+
     # Planned journeys haven't started attributing yet — skip the progress
     # query (and keep accumulated_km at 0) so we don't waste DB roundtrips.
     if journey.status == "planned":
@@ -6316,18 +6404,45 @@ def _get_active_journey(db: Session, user_id: int) -> Optional[Journey]:
     )
 
 
+def _activity_anchor_time(activity) -> Optional[datetime]:
+    """Best timestamp for journey-window attribution.
+
+    Prefers when the activity *actually happened* (started_at) so that
+    backfilled imports (e.g. an Apple Watch run synced + imported the
+    next day) still attribute correctly. Falls back to ended/completed,
+    then created_at if those are missing.
+    """
+    return (
+        getattr(activity, "started_at", None)
+        or getattr(activity, "completed_at", None)
+        or getattr(activity, "ended_at", None)
+        or getattr(activity, "created_at", None)
+    )
+
+
 def _attach_to_active_journey(db: Session, user_id: int, activity) -> Optional[Journey]:
     """Attach a freshly-created run or walk to the user's active journey if
-    it's still within its max_days window. Returns the journey if attached,
-    None otherwise. Auto-completes the journey when the running total
-    reaches the target."""
+    the activity's *actual time* falls inside the journey's window.
+    Returns the journey if attached, None otherwise. Auto-completes the
+    journey when the running total reaches the target.
+
+    Window check uses the activity's `started_at` rather than `utcnow()`
+    so a run that happened yesterday but is being imported today (Apple
+    Health backfill) still attributes if yesterday was inside the
+    journey window.
+    """
     journey = _get_active_journey(db, user_id)
     if journey is None:
         return None
+    anchor = _activity_anchor_time(activity) or datetime.utcnow()
+    if journey.started_at is not None and anchor < journey.started_at:
+        # Activity happened *before* the journey started — don't attach.
+        return None
     expires_at = _journey_expires_at(journey)
-    if expires_at is not None and datetime.utcnow() > expires_at:
-        # Window closed — don't attribute. The journey stays "active" so
-        # the user can still mark it complete or abandoned.
+    if expires_at is not None and anchor > expires_at:
+        # Window closed by the time this activity happened. The journey
+        # stays "active" so the user can still mark it complete or
+        # abandoned.
         return None
     activity.journey_id = journey.id
     db.commit()

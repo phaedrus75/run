@@ -547,18 +547,77 @@ function projectWorkout(w: WorkoutProxyTyped): ImportableWorkout {
   };
 }
 
+/** Bundle IDs we recognise → friendly display names. Extend as new
+ *  Apple/third-party recorders show up in real workout sources. */
+const KNOWN_BUNDLE_LABELS: Record<string, string> = {
+  'com.apple.health': 'Health',
+  'com.apple.Health': 'Health',
+  'com.apple.workouts': 'Workout',
+  'com.apple.Workouts': 'Workout',
+  'com.apple.fitness': 'Fitness',
+  'com.apple.Fitness': 'Fitness',
+  'com.apple.healthkit': 'Health',
+  'com.strava.stravaride': 'Strava',
+  'com.nike.nikeplus-gps': 'Nike Run Club',
+  'com.runkeeper.RunKeeperPro': 'RunKeeper',
+};
+
+/** Strings that occasionally leak from the kingstinct Nitro proxy
+ *  layer when an underlying HKSource has a missing/empty name. We
+ *  treat these as junk and fall through to the next candidate. */
+function looksLikeProxyJunk(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  // Nitro hybrid objects can stringify as "[object Object]" or to
+  // their TS interface name ("SourceProxy", "Source Proxy", etc.)
+  // when the JS bridge reads an undefined `name` value.
+  if (/^\[object/i.test(t)) return true;
+  if (/proxy$/i.test(t)) return true;
+  if (/\bproxy\b/i.test(t) && t.length < 24) return true;
+  return false;
+}
+
+function pickStringCandidate(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const t = value.trim();
+  if (!t) return null;
+  if (looksLikeProxyJunk(t)) return null;
+  return t;
+}
+
 function readSourceLabel(w: WorkoutProxyTyped): string {
-  // The package exposes the source via `sourceRevision` on the
-  // underlying sample. Different package versions surface it slightly
-  // differently — we read defensively and fall back gracefully.
+  // Order of preference:
+  //   1. Recording device name (e.g. "Apple Watch", "Munshi's iPhone")
+  //   2. Recording app's friendly name from a known bundle ID
+  //      (so "com.apple.health" reads as "Health" not as the raw bundle)
+  //   3. Recording app's reported name (e.g. "Strava", "Workout")
+  //   4. Hardware product code (e.g. "Watch7,1") — last-resort, ugly
+  //      but at least factual
+  //   5. Generic "Apple Health"
+  //
+  // We aggressively reject "proxy"-shaped strings at every layer
+  // because the kingstinct package occasionally surfaces its Nitro
+  // hybrid-object class name when the underlying HKSource.name is
+  // empty (typical for auto-detected pedometer walks).
   const anyW: any = w;
-  const candidate =
-    anyW?.device?.name ||
-    anyW?.sourceRevision?.source?.name ||
-    anyW?.sourceRevision?.productType ||
-    anyW?.metadata?.HKMetadataKeyDeviceName ||
-    null;
-  if (typeof candidate === 'string' && candidate.trim()) return candidate;
+
+  const deviceName = pickStringCandidate(anyW?.device?.name);
+  if (deviceName) return deviceName;
+
+  const bundleId = anyW?.sourceRevision?.source?.bundleIdentifier;
+  if (typeof bundleId === 'string' && KNOWN_BUNDLE_LABELS[bundleId]) {
+    return KNOWN_BUNDLE_LABELS[bundleId];
+  }
+
+  const sourceName = pickStringCandidate(anyW?.sourceRevision?.source?.name);
+  if (sourceName) return sourceName;
+
+  const productType = pickStringCandidate(anyW?.sourceRevision?.productType);
+  if (productType) return productType;
+
+  const metaName = pickStringCandidate(anyW?.metadata?.HKMetadataKeyDeviceName);
+  if (metaName) return metaName;
+
   return 'Apple Health';
 }
 
