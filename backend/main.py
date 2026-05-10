@@ -71,6 +71,7 @@ from models import (
     CoachTodayCard,
     Journey,
     JourneyDayBrief,
+    Vo2MaxSample,
 )
 from auth import (
     UserCreate, UserLogin, UserResponse, Token,
@@ -113,6 +114,10 @@ from schemas import (
     JOURNEY_TIERS,
     JOURNEY_TIER_MAX_DAYS,
     JOURNEY_STATUSES,
+    Vo2MaxCreateRequest,
+    Vo2MaxSampleResponse,
+    MaxHrUpdateRequest,
+    MaxHrResponse,
 )
 import crud
 import coach
@@ -673,6 +678,76 @@ def run_migrations():
                 conn.execute(text("""
                     CREATE UNIQUE INDEX IF NOT EXISTS uq_journey_day_briefs
                         ON journey_day_briefs(journey_id, day_index)
+                """))
+
+                # 📈🍎 Workout enrichment metrics (Phase: HK Tier A + B).
+                # Adds calories / HR / cadence / splits / zones / recovery /
+                # events to runs and walks. All nullable — legacy rows
+                # remain visually identical because the detail screens
+                # only render each metric when present.
+                for _table in ("runs", "walks"):
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS calories_kcal FLOAT"
+                    ))
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS avg_hr_bpm INTEGER"
+                    ))
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS max_hr_bpm INTEGER"
+                    ))
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS avg_cadence_spm INTEGER"
+                    ))
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS splits_json TEXT"
+                    ))
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS hr_zones_json TEXT"
+                    ))
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS hr_recovery_bpm INTEGER"
+                    ))
+                    conn.execute(text(
+                        f"ALTER TABLE {_table} ADD COLUMN IF NOT EXISTS workout_events_json TEXT"
+                    ))
+
+                # ❤️ User max-HR setting — backstop for HR zone bucketing.
+                # Null defaults to 190 in the import code path; the user
+                # can override via a future profile setting. Kept on the
+                # user row (not per-activity) because it's a stable
+                # personal preference.
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS max_hr_bpm INTEGER"
+                ))
+                # Companion column: the user's age (years), used when
+                # they pick the "compute from age" mode in profile.
+                # Stored separately from max_hr_bpm so we recompute the
+                # Tanaka estimate every birthday automatically.
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS max_hr_age INTEGER"
+                ))
+
+                # 🫁 VO2 Max samples (Phase: HK Tier B). Mirrors the
+                # Weight HK pattern — auto-synced read-only samples,
+                # deduped on (user_id, source, external_id).
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS vo2max_samples (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        value_ml_kg_min FLOAT NOT NULL,
+                        recorded_at TIMESTAMP NOT NULL,
+                        source VARCHAR DEFAULT 'apple_health',
+                        external_id VARCHAR,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_vo2max_user_recorded
+                        ON vo2max_samples(user_id, recorded_at)
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_vo2max_external
+                        ON vo2max_samples(user_id, source, external_id)
                 """))
 
                 conn.commit()
@@ -2369,6 +2444,16 @@ def format_run_response(
         # pill on the detail screen when source == "apple_health".
         "source": getattr(run, "source", None) or "live",
         "external_id": getattr(run, "external_id", None),
+        # 📈 Workout enrichment — see models.Run for shapes. Pass
+        # through verbatim; the frontend hides each row when null.
+        "calories_kcal": getattr(run, "calories_kcal", None),
+        "avg_hr_bpm": getattr(run, "avg_hr_bpm", None),
+        "max_hr_bpm": getattr(run, "max_hr_bpm", None),
+        "avg_cadence_spm": getattr(run, "avg_cadence_spm", None),
+        "splits_json": getattr(run, "splits_json", None),
+        "hr_zones_json": getattr(run, "hr_zones_json", None),
+        "hr_recovery_bpm": getattr(run, "hr_recovery_bpm", None),
+        "workout_events_json": getattr(run, "workout_events_json", None),
     }
 
 
@@ -4978,6 +5063,15 @@ def _walk_to_dict(walk: Walk, photo_count: int = 0, milestone_unlocks: Optional[
         # when source == "apple_health".
         "source": getattr(walk, "source", None) or "live",
         "external_id": getattr(walk, "external_id", None),
+        # 📈 Workout enrichment metrics — same shapes as runs.
+        "calories_kcal": getattr(walk, "calories_kcal", None),
+        "avg_hr_bpm": getattr(walk, "avg_hr_bpm", None),
+        "max_hr_bpm": getattr(walk, "max_hr_bpm", None),
+        "avg_cadence_spm": getattr(walk, "avg_cadence_spm", None),
+        "splits_json": getattr(walk, "splits_json", None),
+        "hr_zones_json": getattr(walk, "hr_zones_json", None),
+        "hr_recovery_bpm": getattr(walk, "hr_recovery_bpm", None),
+        "workout_events_json": getattr(walk, "workout_events_json", None),
     }
 
 
@@ -5041,6 +5135,36 @@ def create_walk_endpoint(
         except Exception:
             ended_at_dt = None
 
+    # 📈 Pull through optional enrichment metrics. Bounds-check the
+    # numeric ones to keep garbage out of the DB; pass JSON blobs
+    # through verbatim (the frontend is the source of truth for
+    # those shapes).
+    def _bounded_int(val, lo, hi):
+        try:
+            n = int(val)
+        except (TypeError, ValueError):
+            return None
+        if n < lo or n > hi:
+            return None
+        return n
+
+    def _bounded_float(val, lo, hi):
+        try:
+            n = float(val)
+        except (TypeError, ValueError):
+            return None
+        if n < lo or n > hi:
+            return None
+        return n
+
+    def _bounded_str(val, max_len):
+        if val is None:
+            return None
+        s = str(val)
+        if len(s) > max_len:
+            return None
+        return s
+
     walk = crud.create_walk(
         db,
         user_id=current_user.id,
@@ -5060,6 +5184,14 @@ def create_walk_endpoint(
         public_walk_id=payload.get("public_walk_id"),
         source=source,
         external_id=external_id,
+        calories_kcal=_bounded_float(payload.get("calories_kcal"), 0, 10_000),
+        avg_hr_bpm=_bounded_int(payload.get("avg_hr_bpm"), 0, 260),
+        max_hr_bpm=_bounded_int(payload.get("max_hr_bpm"), 0, 260),
+        avg_cadence_spm=_bounded_int(payload.get("avg_cadence_spm"), 0, 300),
+        splits_json=_bounded_str(payload.get("splits_json"), 20_000),
+        hr_zones_json=_bounded_str(payload.get("hr_zones_json"), 2_000),
+        hr_recovery_bpm=_bounded_int(payload.get("hr_recovery_bpm"), 0, 200),
+        workout_events_json=_bounded_str(payload.get("workout_events_json"), 10_000),
     )
 
     # 🌅 Journey auto-attribution (window-aware, with auto-complete on
@@ -6907,6 +7039,7 @@ def get_imported_workout_ids(
     `kind` controls which tables we look in:
       - "workout" (default) — runs + walks (the original use case)
       - "weight" — body-mass entries (Weight tab auto-sync)
+      - "vo2max" — VO2 Max samples (Honors trend auto-sync)
 
     Keeping this in one endpoint with a kind switch — rather than
     spawning `/me/imported-weight-ids` etc. — keeps the surface area
@@ -6928,6 +7061,19 @@ def get_imported_workout_ids(
             .all()
         )
         ids = sorted({row[0] for row in weight_ids if row[0]})
+        return {"source": src, "kind": knd, "external_ids": ids, "count": len(ids)}
+
+    if knd == "vo2max":
+        vo2_ids = (
+            db.query(Vo2MaxSample.external_id)
+            .filter(
+                Vo2MaxSample.user_id == current_user.id,
+                Vo2MaxSample.source == src,
+                Vo2MaxSample.external_id.isnot(None),
+            )
+            .all()
+        )
+        ids = sorted({row[0] for row in vo2_ids if row[0]})
         return {"source": src, "kind": knd, "external_ids": ids, "count": len(ids)}
 
     # Default: workout (runs + walks)
@@ -6953,6 +7099,165 @@ def get_imported_workout_ids(
         {row[0] for row in run_ids if row[0]} | {row[0] for row in walk_ids if row[0]}
     )
     return {"source": src, "kind": knd, "external_ids": ids, "count": len(ids)}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 🫁 VO2 MAX  (Apple Health auto-sync, mirrors weight import pattern)
+# ─────────────────────────────────────────────────────────────────────
+
+
+@app.post("/vo2max", response_model=Vo2MaxSampleResponse)
+def create_vo2max_sample(
+    payload: Vo2MaxCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Persist a single VO2 Max reading.
+
+    Idempotent: if a row already exists with the same
+    (user_id, source, external_id) tuple we return it unchanged so the
+    HK auto-sync can be re-run without producing duplicates.
+    """
+    src = (payload.source or "apple_health").strip().lower()[:20] or "apple_health"
+    ext = payload.external_id.strip()[:120] if payload.external_id else None
+
+    if ext and src != "manual":
+        existing = (
+            db.query(Vo2MaxSample)
+            .filter(
+                Vo2MaxSample.user_id == current_user.id,
+                Vo2MaxSample.source == src,
+                Vo2MaxSample.external_id == ext,
+            )
+            .first()
+        )
+        if existing is not None:
+            return existing
+
+    sample = Vo2MaxSample(
+        user_id=current_user.id,
+        value_ml_kg_min=float(payload.value_ml_kg_min),
+        recorded_at=payload.recorded_at,
+        source=src,
+        external_id=ext,
+    )
+    db.add(sample)
+    db.commit()
+    db.refresh(sample)
+    return sample
+
+
+@app.get("/vo2max", response_model=List[Vo2MaxSampleResponse])
+def list_vo2max_samples(
+    limit: int = 365,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Return the user's VO2 Max samples ordered newest-first.
+
+    `limit` defaults to 365 — about a year's worth of weekly samples
+    plus headroom — which is plenty for the trend chart on Honors.
+    """
+    capped_limit = max(1, min(limit, 1000))
+    samples = (
+        db.query(Vo2MaxSample)
+        .filter(Vo2MaxSample.user_id == current_user.id)
+        .order_by(Vo2MaxSample.recorded_at.desc())
+        .limit(capped_limit)
+        .all()
+    )
+    return samples
+
+
+# ─────────────────────────────────────────────────────────────────────
+# ❤️ MAX-HR PREFERENCE (used to bucket HR samples into Z1–Z5)
+# ─────────────────────────────────────────────────────────────────────
+
+# Constant, also referenced by the frontend default. We keep it on
+# the server too so /me/max-hr can report what the import path
+# actually uses when the user hasn't set a preference.
+DEFAULT_MAX_HR_BPM = 190
+
+
+def _resolve_max_hr(user: User) -> tuple[str, int]:
+    """Resolution order: explicit bpm wins → age → default.
+
+    Returns (mode, effective_bpm). Tanaka formula (208 - 0.7·age) is
+    used for the age path; it's modestly more accurate than 220-age
+    for adults and tracks closer to what Apple/Garmin assume.
+    """
+    bpm = getattr(user, "max_hr_bpm", None)
+    age = getattr(user, "max_hr_age", None)
+    if bpm is not None:
+        return "custom", int(bpm)
+    if age is not None:
+        return "age", int(round(208 - 0.7 * float(age)))
+    return "default", DEFAULT_MAX_HR_BPM
+
+
+def _max_hr_response(user: User) -> MaxHrResponse:
+    mode, effective = _resolve_max_hr(user)
+    return MaxHrResponse(
+        mode=mode,
+        max_hr_age=(
+            int(user.max_hr_age) if getattr(user, "max_hr_age", None) is not None else None
+        ),
+        max_hr_bpm=(
+            int(user.max_hr_bpm) if getattr(user, "max_hr_bpm", None) is not None else None
+        ),
+        effective_max_hr_bpm=effective,
+        default_bpm=DEFAULT_MAX_HR_BPM,
+    )
+
+
+@app.get("/me/max-hr", response_model=MaxHrResponse)
+def get_my_max_hr(current_user: User = Depends(require_auth)):
+    """Return the user's max-HR mode + age + override + the value the
+    importer actually uses for HR-zone bucketing."""
+    return _max_hr_response(current_user)
+
+
+@app.put("/me/max-hr", response_model=MaxHrResponse)
+def update_my_max_hr(
+    payload: MaxHrUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Set the max-HR mode (default / age / custom).
+
+    The non-selected fields are cleared server-side so we can't end up
+    with both an age and an explicit bpm set simultaneously. New
+    workout imports use the resolved value at compute time;
+    previously imported workouts retain whatever max-HR was used
+    originally (recorded in `hr_zones_json.max_hr_used`).
+    """
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.mode == "default":
+        user.max_hr_age = None
+        user.max_hr_bpm = None
+    elif payload.mode == "age":
+        if payload.max_hr_age is None:
+            raise HTTPException(
+                status_code=400,
+                detail="max_hr_age is required when mode='age'",
+            )
+        user.max_hr_age = int(payload.max_hr_age)
+        user.max_hr_bpm = None
+    elif payload.mode == "custom":
+        if payload.max_hr_bpm is None:
+            raise HTTPException(
+                status_code=400,
+                detail="max_hr_bpm is required when mode='custom'",
+            )
+        user.max_hr_bpm = int(payload.max_hr_bpm)
+        user.max_hr_age = None
+
+    db.commit()
+    db.refresh(user)
+    return _max_hr_response(user)
 
 
 @app.post("/journeys/{journey_id}/start", response_model=JourneyResponse)

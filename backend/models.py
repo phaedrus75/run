@@ -101,6 +101,54 @@ class Run(Base):
     source = Column(String, nullable=True, default="live")
     external_id = Column(String, nullable=True, index=True)
 
+    # ────────────────────────────────────────────────────────────────
+    # 📈 Workout enrichment metrics (HealthKit + future native capture)
+    # ────────────────────────────────────────────────────────────────
+    # All nullable — populated when the data source supplied them
+    # (Apple Watch always does; manual entries never; older live rows
+    # backfilled to NULL). The detail screens render each metric only
+    # when present, so legacy rows continue to look identical.
+
+    # 🔥 Active calories burned (kcal). Apple Watch reports
+    # `HKWorkout.totalEnergyBurned`; native ZenRun GPS runs may estimate
+    # this from pace × weight in a future iteration.
+    calories_kcal = Column(Float, nullable=True)
+
+    # ❤️ Heart rate aggregates (bpm). Computed on the client from per-
+    # second HR samples queried alongside the workout time window.
+    avg_hr_bpm = Column(Integer, nullable=True)
+    max_hr_bpm = Column(Integer, nullable=True)
+
+    # 🦵 Average cadence in steps/minute. Derived from HK step samples
+    # divided by active duration.
+    avg_cadence_spm = Column(Integer, nullable=True)
+
+    # 🕐 Per-km splits. JSON array of objects:
+    #   [{ "km": 1, "duration_sec": 360, "pace_sec_per_km": 360,
+    #      "avg_hr_bpm": 142 }, ...]
+    # Computed on the client from the route polyline + HR samples; the
+    # backend just persists the JSON. `avg_hr_bpm` is optional per row.
+    splits_json = Column(Text, nullable=True)
+
+    # 🟢 Time spent in each HR zone (seconds). JSON object:
+    #   { "max_hr_used": 190, "z1_sec": 120, "z2_sec": 1800,
+    #     "z3_sec": 600, "z4_sec": 90, "z5_sec": 0 }
+    # `max_hr_used` is recorded so future re-bucketing knows the
+    # baseline (e.g. user updates their max-HR preference).
+    hr_zones_json = Column(Text, nullable=True)
+
+    # 💚 Heart-rate recovery — bpm dropped between workout end and 60s
+    # post-workout. A simple but well-correlated fitness signal.
+    hr_recovery_bpm = Column(Integer, nullable=True)
+
+    # ⏸ Workout events (pauses, lap markers). JSON array:
+    #   [{ "type": "pause", "offset_sec": 1234 },
+    #    { "type": "resume", "offset_sec": 1310 },
+    #    { "type": "lap", "offset_sec": 360 }]
+    # Apple Watch auto-inserts laps every km; the detail map renders
+    # pause pins from this so the user can see where they stopped.
+    workout_events_json = Column(Text, nullable=True)
+
 
 
 
@@ -135,6 +183,37 @@ class Weight(Base):
     # onto the same row instead of duplicating the chart.
     source = Column(String, nullable=True, default="manual")
     external_id = Column(String, nullable=True, index=True)
+
+
+class Vo2MaxSample(Base):
+    """
+    🫁 VO2 Max — cardio fitness samples synced from Apple Health.
+
+    Apple Watch estimates VO2 Max from outdoor walks/runs and writes a
+    sample roughly weekly. We sync these into ZenRun so the Honors
+    screen can show a fitness trend line — calm, low-frequency, no
+    performance pressure attached.
+
+    Mirrors the Weight model's HK auto-sync pattern: dedupe on
+    (user_id, source, external_id) where external_id is the
+    HKQuantitySample uuid. Samples are read-only from ZenRun's side —
+    we never write back to HealthKit.
+    """
+
+    __tablename__ = "vo2max_samples"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+
+    # mL/(kg·min). Apple's published VO2 Max samples are always in
+    # this unit; we still store unit-agnostic and let the import
+    # converter normalise on the way in.
+    value_ml_kg_min = Column(Float, nullable=False)
+
+    recorded_at = Column(DateTime, nullable=False)
+    source = Column(String, nullable=True, default="apple_health")
+    external_id = Column(String, nullable=True, index=True)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class User(Base):
@@ -199,6 +278,18 @@ class User(Base):
     zen_below_since = Column(DateTime, nullable=True)
     zen_celebrated_at = Column(DateTime, nullable=True)
     zen_demoted_at = Column(DateTime, nullable=True)
+
+    # ❤️ Max heart rate setting (bpm). Used by HealthKit imports to
+    # bucket heart-rate samples into Z1–Z5. Resolution order at compute
+    # time (see `_resolve_max_hr` in main.py):
+    #   1. `max_hr_bpm` set explicitly  → "custom" mode (wins)
+    #   2. `max_hr_age` set             → "age" mode (Tanaka 208 - 0.7·age)
+    #   3. both null                    → "default" mode (190 bpm)
+    # The resolved value is also stored on each `hr_zones_json` so
+    # historical zones remember which baseline they were computed
+    # against, even after the user changes their preference.
+    max_hr_bpm = Column(Integer, nullable=True)
+    max_hr_age = Column(Integer, nullable=True)
 
     # 🧠 Coach (AI companion) — opt-in, with per-surface toggles. Default
     # off everywhere; user opts in via the dedicated screen.
@@ -486,6 +577,17 @@ class Walk(Base):
     # 🍎 Source attribution for HealthKit imports — see Run.source above.
     source = Column(String, nullable=True, default="live")
     external_id = Column(String, nullable=True, index=True)
+
+    # 📈 Workout enrichment — same shapes as Run.* above. See those
+    # comments for the JSON layouts.
+    calories_kcal = Column(Float, nullable=True)
+    avg_hr_bpm = Column(Integer, nullable=True)
+    max_hr_bpm = Column(Integer, nullable=True)
+    avg_cadence_spm = Column(Integer, nullable=True)
+    splits_json = Column(Text, nullable=True)
+    hr_zones_json = Column(Text, nullable=True)
+    hr_recovery_bpm = Column(Integer, nullable=True)
+    workout_events_json = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
 

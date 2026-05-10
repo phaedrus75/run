@@ -101,6 +101,19 @@ export interface Run {
   // Apple Health pill on the detail screen.
   source?: string | null;
   external_id?: string | null;
+  // 📈 Workout enrichment metrics (HealthKit / native capture). All
+  // optional — legacy rows and indoor / manual rows look identical
+  // because the detail UI only renders the bits that are present.
+  // See `services/workoutMetrics.ts` for the JSON shapes inside the
+  // `*_json` fields.
+  calories_kcal?: number | null;
+  avg_hr_bpm?: number | null;
+  max_hr_bpm?: number | null;
+  avg_cadence_spm?: number | null;
+  splits_json?: string | null;
+  hr_zones_json?: string | null;
+  hr_recovery_bpm?: number | null;
+  workout_events_json?: string | null;
 }
 
 export interface RunPhoto {
@@ -158,6 +171,15 @@ export interface Walk {
   // 🍎 HealthKit import attribution — see Run.source above.
   source?: string | null;
   external_id?: string | null;
+  // 📈 Workout enrichment metrics — same shapes as Run.
+  calories_kcal?: number | null;
+  avg_hr_bpm?: number | null;
+  max_hr_bpm?: number | null;
+  avg_cadence_spm?: number | null;
+  splits_json?: string | null;
+  hr_zones_json?: string | null;
+  hr_recovery_bpm?: number | null;
+  workout_events_json?: string | null;
 }
 
 export interface WalkPhoto {
@@ -383,6 +405,17 @@ export const runApi = {
     // (user_id, source, external_id) to dedupe re-imports.
     source?: string;
     external_id?: string;
+    // 📈 Optional workout enrichment metrics (HealthKit / native).
+    // The `*_json` fields are JSON-stringified by the caller — see
+    // `services/workoutMetrics.ts` for the canonical shapes.
+    calories_kcal?: number;
+    avg_hr_bpm?: number;
+    max_hr_bpm?: number;
+    avg_cadence_spm?: number;
+    splits_json?: string;
+    hr_zones_json?: string;
+    hr_recovery_bpm?: number;
+    workout_events_json?: string;
   }): Promise<Run> => {
     return apiFetch('/runs', {
       method: 'POST',
@@ -1053,6 +1086,15 @@ export const walkApi = {
     // (user_id, source, external_id) to dedupe re-imports.
     source?: string;
     external_id?: string;
+    // 📈 Optional workout enrichment metrics — same shapes as runApi.
+    calories_kcal?: number;
+    avg_hr_bpm?: number;
+    max_hr_bpm?: number;
+    avg_cadence_spm?: number;
+    splits_json?: string;
+    hr_zones_json?: string;
+    hr_recovery_bpm?: number;
+    workout_events_json?: string;
   }): Promise<Walk> => {
     return apiFetch('/walks', {
       method: 'POST',
@@ -1678,7 +1720,7 @@ export interface ImportedWorkoutIds {
 }
 
 /** What slice of imported records to look up. */
-export type ImportedKind = 'workout' | 'weight';
+export type ImportedKind = 'workout' | 'weight' | 'vo2max';
 
 export const healthImportApi = {
   /**
@@ -1698,4 +1740,77 @@ export const healthImportApi = {
     const qs = `source=${encodeURIComponent(source)}&kind=${encodeURIComponent(kind)}`;
     return apiFetch(`/me/imported-workout-ids?${qs}`);
   },
+};
+
+
+// ==========================================
+// 🫁 VO2 MAX  (Apple Health auto-sync)
+// ==========================================
+
+export interface Vo2MaxSample {
+  id: number;
+  value_ml_kg_min: number;
+  recorded_at: string;
+  source?: string | null;
+  external_id?: string | null;
+}
+
+export const vo2maxApi = {
+  /** List the user's VO2 Max samples newest-first. Defaults to 365
+   *  rows — comfortably more than a year of weekly samples. */
+  list: (limit = 365): Promise<Vo2MaxSample[]> =>
+    apiFetch(`/vo2max?limit=${limit}`),
+
+  /** Push a single VO2 Max sample. Idempotent server-side — re-syncs
+   *  of the same HKQuantitySample collapse onto the existing row. */
+  create: (data: {
+    value_ml_kg_min: number;
+    recorded_at: string;
+    source?: string;
+    external_id?: string;
+  }): Promise<Vo2MaxSample> =>
+    apiFetch('/vo2max', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
+
+// ==========================================
+// ❤️ MAX-HR PREFERENCE (used to bucket HR samples into Z1–Z5)
+// ==========================================
+
+export type MaxHrMode = 'default' | 'age' | 'custom';
+
+export interface MaxHrPreference {
+  /** Which strategy the user picked. Drives the profile UI. */
+  mode: MaxHrMode;
+  /** Set when mode='age' — the user's age in years, used to derive
+   *  the effective bpm via Tanaka (208 - 0.7·age) on the server. */
+  max_hr_age: number | null;
+  /** Set when mode='custom' — explicit bpm override. */
+  max_hr_bpm: number | null;
+  /** Value the importer actually uses for HR-zone bucketing. The
+   *  server resolves this from the fields above; the client just
+   *  reads it back. */
+  effective_max_hr_bpm: number;
+  /** Server-side default (currently 190) used when mode='default'. */
+  default_bpm: number;
+}
+
+export interface MaxHrUpdatePayload {
+  mode: MaxHrMode;
+  max_hr_age?: number | null;
+  max_hr_bpm?: number | null;
+}
+
+export const maxHrApi = {
+  get: (): Promise<MaxHrPreference> => apiFetch('/me/max-hr'),
+  /** Set the resolution mode + the relevant value. The server clears
+   *  the non-selected field automatically. */
+  set: (payload: MaxHrUpdatePayload): Promise<MaxHrPreference> =>
+    apiFetch('/me/max-hr', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
 };

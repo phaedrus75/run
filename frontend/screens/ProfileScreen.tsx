@@ -18,6 +18,7 @@ import { colors, shadows, radius, spacing, typography } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
 import { levelApi, zenApi, ZenStatus } from '../services/api';
+import { MaxHrSettingCard } from '../components';
 
 import { API_BASE_URL } from '../services/config';
 
@@ -553,6 +554,12 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
             </TouchableOpacity>
           </View>
         )}
+
+        {/* ❤️ Max-HR preference — drives HR-zone bucketing on Apple
+            Health workout imports. Three modes: default / from age /
+            custom. Lives just above Goals so it sits with the other
+            personal-baseline settings. */}
+        <MaxHrSettingCard />
 
         <View
           onLayout={(e) => {

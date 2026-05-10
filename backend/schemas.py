@@ -15,7 +15,7 @@ Why separate? Security and flexibility!
 """
 
 from pydantic import BaseModel, Field, PlainSerializer
-from typing import Annotated, Optional, List
+from typing import Annotated, Literal, Optional, List
 from datetime import datetime, timezone
 
 
@@ -133,6 +133,17 @@ class RunCreate(BaseModel):
     # subsequent imports of the same workout and badge it in the UI.
     source: Optional[str] = Field(None, description="live | apple_health | manual")
     external_id: Optional[str] = Field(None, description="Upstream UUID (e.g. HKWorkout.uuid) for dedupe")
+    # 📈 Workout enrichment metrics — see models.Run for the layout
+    # of each field. All optional; set by HealthKit imports today,
+    # by the native GPS tracker tomorrow.
+    calories_kcal: Optional[float] = Field(None, ge=0, le=10_000)
+    avg_hr_bpm: Optional[int] = Field(None, ge=0, le=260)
+    max_hr_bpm: Optional[int] = Field(None, ge=0, le=260)
+    avg_cadence_spm: Optional[int] = Field(None, ge=0, le=300)
+    splits_json: Optional[str] = Field(None, max_length=20_000)
+    hr_zones_json: Optional[str] = Field(None, max_length=2_000)
+    hr_recovery_bpm: Optional[int] = Field(None, ge=0, le=200)
+    workout_events_json: Optional[str] = Field(None, max_length=10_000)
 
 
 class RunUpdate(BaseModel):
@@ -214,6 +225,19 @@ class RunResponse(BaseModel):
     # small Apple Health pill on the detail screen.
     source: Optional[str] = "live"
     external_id: Optional[str] = None
+
+    # 📈 Workout enrichment — see models.Run.* for shapes. Each field
+    # is None for runs that pre-date the import flow and for indoor
+    # / manual runs without HK metric data. Detail screens only render
+    # the bits that are present.
+    calories_kcal: Optional[float] = None
+    avg_hr_bpm: Optional[int] = None
+    max_hr_bpm: Optional[int] = None
+    avg_cadence_spm: Optional[int] = None
+    splits_json: Optional[str] = None
+    hr_zones_json: Optional[str] = None
+    hr_recovery_bpm: Optional[int] = None
+    workout_events_json: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -625,5 +649,73 @@ class JourneyResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ==========================================
+# 🫁 VO2 MAX SCHEMAS  (Apple Health auto-sync)
+# ==========================================
+
+
+class Vo2MaxCreateRequest(BaseModel):
+    """Used by the HealthKit auto-sync to push a single VO2 Max sample.
+
+    Idempotent: the backend dedupes on (user_id, source, external_id)
+    so re-syncs of the same HKQuantitySample collapse onto the
+    existing row.
+    """
+
+    value_ml_kg_min: float = Field(..., gt=0, le=120)
+    recorded_at: datetime
+    source: Optional[str] = Field("apple_health", max_length=20)
+    external_id: Optional[str] = Field(None, max_length=120)
+
+
+class Vo2MaxSampleResponse(BaseModel):
+    """One sample shape used in the trend chart."""
+
+    id: int
+    value_ml_kg_min: float
+    recorded_at: UTCDateTime
+    source: Optional[str] = "apple_health"
+    external_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ==========================================
+# ❤️ MAX HR PREFERENCE
+# ==========================================
+
+
+class MaxHrUpdateRequest(BaseModel):
+    """Set the user's preferred max-HR baseline used for zone bucketing.
+
+    `mode` selects the resolution strategy:
+    - `default`  → clear both `max_hr_age` and `max_hr_bpm`; importer
+                   falls back to 190 bpm.
+    - `age`      → store `max_hr_age`; importer computes
+                   `round(208 - 0.7 × age)` (Tanaka).
+    - `custom`   → store `max_hr_bpm` directly.
+
+    The non-selected fields are cleared server-side, so flipping modes
+    can't leave stale state behind.
+    """
+
+    mode: Literal["default", "age", "custom"]
+    max_hr_age: Optional[int] = Field(None, ge=10, le=100)
+    max_hr_bpm: Optional[int] = Field(None, ge=80, le=250)
+
+
+class MaxHrResponse(BaseModel):
+    """Current max-HR preference plus the value actually used by the
+    importer. The client renders all three so users can see "computed
+    from age 35 → 184 bpm" or "custom 175 bpm" at a glance."""
+
+    mode: Literal["default", "age", "custom"]
+    max_hr_age: Optional[int] = None
+    max_hr_bpm: Optional[int] = None
+    effective_max_hr_bpm: int
+    default_bpm: int = 190
 
 

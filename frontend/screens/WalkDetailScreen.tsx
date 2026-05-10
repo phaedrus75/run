@@ -35,6 +35,7 @@ import { EditWalkModal } from '../components/EditWalkModal';
 import { PhotoHeroCarousel } from '../components/PhotoHeroCarousel';
 import { CoachNoteCard } from '../components/CoachNoteCard';
 import { SourcePill } from '../components/SourcePill';
+import { WorkoutMetricsCard } from '../components/WorkoutMetricsCard';
 import {
   walkApi,
   walkPhotoApi,
@@ -50,6 +51,10 @@ import {
   haversineMeters,
   paceFromDistance,
 } from '../services/walkLocationTracker';
+import {
+  decodeEvents,
+  eventMarkersFromDecodedRoute,
+} from '../services/workoutMetrics';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
 
 interface Props {
@@ -142,6 +147,36 @@ export function WalkDetailScreen({ navigation, route }: Props) {
       title: p.caption ?? `Photo ${idx + 1}`,
       tintColor: colors.accent,
     }));
+
+  // ⏸/🏁 Pause + lap markers from HK workout events. Only renders when
+  // the imported workout had events recorded; live ZenRun walks have
+  // empty `workout_events_json` for now.
+  const eventMarkers: MapMarker[] = useMemo(() => {
+    if (!walk?.workout_events_json || routePoints.length < 2) return [];
+    const events = decodeEvents(walk.workout_events_json);
+    if (events.length === 0) return [];
+    const pinned = eventMarkersFromDecodedRoute(
+      events,
+      walk.duration_seconds || 1,
+      routePoints,
+    );
+    return pinned.map((m) => ({
+      id: m.id,
+      lat: m.lat,
+      lng: m.lng,
+      title: m.title,
+      // Lap pins use the secondary tone (calm) so they fade into the
+      // map; pauses use the warning tone so they read as "I stopped
+      // here" without alarm.
+      tintColor:
+        m.kind === 'lap' ? colors.secondaryDark : colors.warning,
+    }));
+  }, [walk?.workout_events_json, walk?.duration_seconds, routePoints]);
+
+  const allMarkers: MapMarker[] = useMemo(
+    () => [...eventMarkers, ...photoMarkers],
+    [eventMarkers, photoMarkers],
+  );
 
   /** Open the matching photo's lightbox when the user taps its map marker.
    *  The marker id is `photo-<id>` (set above), so we strip the prefix and
@@ -401,7 +436,7 @@ export function WalkDetailScreen({ navigation, route }: Props) {
           <WalkMap
             style={styles.map}
             route={routePoints}
-            markers={photoMarkers}
+            markers={allMarkers}
             centerOn={routeCamera?.center ?? center}
             zoom={routeCamera?.zoom ?? 15}
             showUserLocation={false}
@@ -418,7 +453,7 @@ export function WalkDetailScreen({ navigation, route }: Props) {
             <WalkMap
               style={StyleSheet.absoluteFill}
               route={routePoints}
-              markers={photoMarkers}
+              markers={allMarkers}
               centerOn={routeCamera?.center ?? center}
               zoom={routeCamera?.zoom ?? 15}
               showUserLocation={false}
@@ -471,6 +506,21 @@ export function WalkDetailScreen({ navigation, route }: Props) {
 
         {/* 🍎 Where this walk came from. Hidden for live ZenRun walks. */}
         <SourcePill source={walk.source} style={styles.sourcePill} />
+
+        {/* 📈 Apple Health / native enrichment metrics. Self-hides when
+            no metrics are present so live walks render unchanged. */}
+        <View style={styles.metricsWrap}>
+          <WorkoutMetricsCard
+            caloriesKcal={walk.calories_kcal}
+            avgHrBpm={walk.avg_hr_bpm}
+            maxHrBpm={walk.max_hr_bpm}
+            avgCadenceSpm={walk.avg_cadence_spm}
+            elevationGainM={walk.elevation_gain_m}
+            splitsJson={walk.splits_json}
+            hrZonesJson={walk.hr_zones_json}
+            hrRecoveryBpm={walk.hr_recovery_bpm}
+          />
+        </View>
 
         {walk.notes ? (
           <View style={styles.notesCard}>
@@ -778,6 +828,9 @@ const styles = StyleSheet.create({
   },
   sourcePill: {
     marginTop: spacing.sm,
+  },
+  metricsWrap: {
+    marginTop: spacing.md,
   },
   notesCard: {
     backgroundColor: colors.surface,

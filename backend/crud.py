@@ -75,6 +75,18 @@ def create_run(db: Session, run: RunCreate, user_id: int = None) -> Run:
         started_at=run.started_at,
         source=(getattr(run, "source", None) or "live"),
         external_id=getattr(run, "external_id", None),
+        # 📈 Optional enrichment metrics — populated by HealthKit
+        # imports today, by the native ZenRun GPS tracker tomorrow.
+        # `getattr` so this stays compatible with older RunCreate
+        # payloads that don't include these fields.
+        calories_kcal=getattr(run, "calories_kcal", None),
+        avg_hr_bpm=getattr(run, "avg_hr_bpm", None),
+        max_hr_bpm=getattr(run, "max_hr_bpm", None),
+        avg_cadence_spm=getattr(run, "avg_cadence_spm", None),
+        splits_json=getattr(run, "splits_json", None),
+        hr_zones_json=getattr(run, "hr_zones_json", None),
+        hr_recovery_bpm=getattr(run, "hr_recovery_bpm", None),
+        workout_events_json=getattr(run, "workout_events_json", None),
     )
     
     # Set completed_at if provided (for backdating)
@@ -1430,6 +1442,15 @@ def create_walk(
     public_walk_id: Optional[int] = None,
     source: Optional[str] = None,
     external_id: Optional[str] = None,
+    # 📈 HK / native enrichment metrics — same shapes as Run.
+    calories_kcal: Optional[float] = None,
+    avg_hr_bpm: Optional[int] = None,
+    max_hr_bpm: Optional[int] = None,
+    avg_cadence_spm: Optional[int] = None,
+    splits_json: Optional[str] = None,
+    hr_zones_json: Optional[str] = None,
+    hr_recovery_bpm: Optional[int] = None,
+    workout_events_json: Optional[str] = None,
 ) -> Walk:
     """Create a new walk record from a completed walk session."""
     avg_pace = None
@@ -1454,6 +1475,14 @@ def create_walk(
         public_walk_id=public_walk_id,
         source=(source or "live"),
         external_id=external_id,
+        calories_kcal=calories_kcal,
+        avg_hr_bpm=avg_hr_bpm,
+        max_hr_bpm=max_hr_bpm,
+        avg_cadence_spm=avg_cadence_spm,
+        splits_json=splits_json,
+        hr_zones_json=hr_zones_json,
+        hr_recovery_bpm=hr_recovery_bpm,
+        workout_events_json=workout_events_json,
     )
     if started_at:
         walk.started_at = started_at

@@ -33,6 +33,7 @@ import { RetroactivePhotoPicker } from './RetroactivePhotoPicker';
 import { PhotoHeroCarousel } from './PhotoHeroCarousel';
 import { CoachNoteCard } from './CoachNoteCard';
 import { SourcePill } from './SourcePill';
+import { WorkoutMetricsCard } from './WorkoutMetricsCard';
 import { navigationRef } from '../navigationRef';
 import {
   photoApi,
@@ -46,6 +47,10 @@ import {
 import { albumCache } from '../services/albumCache';
 import { MAX_PHOTOS_PER_ACTIVITY } from '../constants/photos';
 import { decodePolyline, pointAlongRouteAtKm, formatDistanceKm } from '../services/walkLocationTracker';
+import {
+  decodeEvents,
+  eventMarkersFromDecodedRoute,
+} from '../services/workoutMetrics';
 import type { RouteForRetroactive } from '../services/retroactivePhotos';
 
 const ALL_RUN_TYPES = ['1k', '2k', '3k', '5k', '8k', '10k', '15k', '18k', '21k'];
@@ -174,6 +179,38 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
     }
     return out;
   }, [gpsTracked, photos, routePoints]);
+
+  // ⏸/🏁 Pause + lap markers from imported HK workouts. Apple Watch
+  // auto-inserts a lap event every km, which projects nicely onto
+  // the polyline at the actual km boundaries.
+  const eventMarkers = useMemo((): MapMarker[] => {
+    if (!run?.workout_events_json || !gpsTracked) return [];
+    const events = decodeEvents(run.workout_events_json);
+    if (events.length === 0) return [];
+    const pinned = eventMarkersFromDecodedRoute(
+      events,
+      run.duration_seconds || 1,
+      routePoints,
+    );
+    return pinned.map((m) => ({
+      id: m.id,
+      lat: m.lat,
+      lng: m.lng,
+      title: m.title,
+      tintColor:
+        m.kind === 'lap' ? colors.secondaryDark : colors.warning,
+    }));
+  }, [
+    run?.workout_events_json,
+    run?.duration_seconds,
+    gpsTracked,
+    routePoints,
+  ]);
+
+  const allMapMarkers = useMemo(
+    () => [...eventMarkers, ...photoMarkers],
+    [eventMarkers, photoMarkers],
+  );
 
   /** Tap a photo marker on the map → open the same lightbox the grid uses. */
   const handleMarkerPress = useCallback(
@@ -461,6 +498,22 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
           {/* 🍎 Where this run came from. Hidden for live ZenRun runs. */}
           <SourcePill source={run.source} style={{ marginHorizontal: spacing.lg, marginTop: spacing.sm }} />
 
+          {/* 📈 Apple Health / native enrichment metrics. The card
+              hides itself when none of the inputs are present, so
+              legacy runs / manual logs render unchanged. */}
+          <View style={{ marginHorizontal: spacing.lg, marginTop: spacing.sm }}>
+            <WorkoutMetricsCard
+              caloriesKcal={run.calories_kcal}
+              avgHrBpm={run.avg_hr_bpm}
+              maxHrBpm={run.max_hr_bpm}
+              avgCadenceSpm={run.avg_cadence_spm}
+              elevationGainM={run.elevation_gain_m}
+              splitsJson={run.splits_json}
+              hrZonesJson={run.hr_zones_json}
+              hrRecoveryBpm={run.hr_recovery_bpm}
+            />
+          </View>
+
 
           {/* Route map — outdoor / watch with a polyline */}
           {showsPhotoSection && routePoints.length > 0 && routeCamera && (
@@ -470,7 +523,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
                 <WalkMap
                   style={styles.map}
                   route={routePoints}
-                  markers={photoMarkers.length ? photoMarkers : undefined}
+                  markers={allMapMarkers.length ? allMapMarkers : undefined}
                   centerOn={routeCamera.center}
                   zoom={mapZoom}
                   showUserLocation={false}
@@ -840,7 +893,7 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
               <WalkMap
                 style={StyleSheet.absoluteFill as ViewStyle}
                 route={routePoints}
-                markers={photoMarkers.length ? photoMarkers : undefined}
+                markers={allMapMarkers.length ? allMapMarkers : undefined}
                 centerOn={routeCamera.center}
                 zoom={mapZoom}
                 showUserLocation={false}
