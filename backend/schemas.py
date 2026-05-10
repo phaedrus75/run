@@ -129,6 +129,10 @@ class RunCreate(BaseModel):
     elevation_gain_m: Optional[float] = Field(None)
     started_at: Optional[datetime] = Field(None)
     distance_km: Optional[float] = Field(None, description="Actual GPS distance; if omitted, derived from run_type")
+    # 🍎 Source attribution — set by HealthKit imports so we can dedupe
+    # subsequent imports of the same workout and badge it in the UI.
+    source: Optional[str] = Field(None, description="live | apple_health | manual")
+    external_id: Optional[str] = Field(None, description="Upstream UUID (e.g. HKWorkout.uuid) for dedupe")
 
 
 class RunUpdate(BaseModel):
@@ -204,7 +208,13 @@ class RunResponse(BaseModel):
 
     neighbourhood_visibility: Optional[str] = "off"
     neighbourhood_published_at: Optional[UTCDateTime] = None
-    
+
+    # 🍎 Where this run came from. "live" for ZenRun-tracked, "apple_health"
+    # for HealthKit imports, "manual" for user-entered. Used to render a
+    # small Apple Health pill on the detail screen.
+    source: Optional[str] = "live"
+    external_id: Optional[str] = None
+
     class Config:
         from_attributes = True
 

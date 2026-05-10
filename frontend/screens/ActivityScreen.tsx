@@ -17,6 +17,7 @@ import { RunsTabScreen } from './RunsTabScreen';
 import { WalkScreen } from './WalkScreen';
 import { JourneysScreen } from './JourneysScreen';
 import { JourneyActiveCard } from '../components/JourneyActiveCard';
+import { AppleHealthBanner } from '../components/AppleHealthBanner';
 import { colors, spacing, typography, radius } from '../theme/colors';
 
 type Segment = 'runs' | 'walks' | 'journeys';
@@ -64,6 +65,11 @@ export function ActivityScreen({ navigation, route }: { navigation: any; route: 
           />
         </View>
       )}
+
+      {/* 🍎 Apple Health import nudge — only renders on iOS when the user
+       * has new HK workouts not yet in ZenRun. Self-hides otherwise. */}
+      <AppleHealthBanner surface="activity" />
+
 
       <View style={styles.body}>
         {segment === 'runs' ? (

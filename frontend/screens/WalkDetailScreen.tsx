@@ -34,6 +34,7 @@ import { WalkMap, MapMarker } from '../components/WalkMap';
 import { EditWalkModal } from '../components/EditWalkModal';
 import { PhotoHeroCarousel } from '../components/PhotoHeroCarousel';
 import { CoachNoteCard } from '../components/CoachNoteCard';
+import { SourcePill } from '../components/SourcePill';
 import {
   walkApi,
   walkPhotoApi,
@@ -468,6 +469,9 @@ export function WalkDetailScreen({ navigation, route }: Props) {
           ) : null}
         </View>
 
+        {/* 🍎 Where this walk came from. Hidden for live ZenRun walks. */}
+        <SourcePill source={walk.source} style={styles.sourcePill} />
+
         {walk.notes ? (
           <View style={styles.notesCard}>
             <Text style={styles.notesText}>{walk.notes}</Text>
@@ -771,6 +775,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: typography.weights.medium,
     textTransform: 'capitalize',
+  },
+  sourcePill: {
+    marginTop: spacing.sm,
   },
   notesCard: {
     backgroundColor: colors.surface,

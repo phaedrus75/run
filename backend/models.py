@@ -92,6 +92,15 @@ class Run(Base):
     # accumulated distance of the user's active Journey (Phase 5).
     journey_id = Column(Integer, nullable=True, index=True)
 
+    # 🍎 Source of truth for how this row got here.
+    #   "live"          — captured by ZenRun's GPS tracker (default)
+    #   "apple_health"  — imported from HealthKit (Apple Watch / iPhone)
+    #   "manual"        — user-entered, no GPS
+    # external_id holds the upstream UUID (HKWorkout.uuid) so we can
+    # dedupe re-imports cheaply. Indexed jointly with user_id below.
+    source = Column(String, nullable=True, default="live")
+    external_id = Column(String, nullable=True, index=True)
+
 
 
 
@@ -464,6 +473,10 @@ class Walk(Base):
     # 🌅 Journey attribution — when set, this walk counts toward the
     # accumulated distance of the user's active Journey (Phase 5).
     journey_id = Column(Integer, nullable=True, index=True)
+
+    # 🍎 Source attribution for HealthKit imports — see Run.source above.
+    source = Column(String, nullable=True, default="live")
+    external_id = Column(String, nullable=True, index=True)
 
     created_at = Column(DateTime, server_default=func.now())
 

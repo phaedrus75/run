@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.phaedrus75.runzen",
-      "buildNumber": "41",
+      "buildNumber": "42",
       "appleTeamId": "45WAZFV76R",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -94,6 +94,14 @@
           "photosPermission": "ZenRun saves your scenic run photos to your Photos library so you keep the originals even if an upload fails.",
           "savePhotosPermission": "ZenRun saves your scenic run photos to your Photos library so you keep the originals even if an upload fails.",
           "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "ZenRun reads your watch workouts so they appear alongside your runs and walks on this iPhone.",
+          "NSHealthUpdateUsageDescription": "ZenRun stores your workouts so you can review them later. The actual recording happens on your Apple Watch.",
+          "background": false
         }
       ]
     ]

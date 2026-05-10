@@ -96,6 +96,11 @@ export interface Run {
   neighbourhood_visibility?: string | null;
   neighbourhood_published_at?: string | null;
   circles_share?: boolean;
+  // 🍎 Where this run came from. "live" for ZenRun-tracked, "apple_health"
+  // for HealthKit imports, "manual" for user-entered. Drives the small
+  // Apple Health pill on the detail screen.
+  source?: string | null;
+  external_id?: string | null;
 }
 
 export interface RunPhoto {
@@ -150,6 +155,9 @@ export interface Walk {
   public_walk_id: number | null;
   photo_count?: number;
   milestone_unlocks?: MilestoneUnlock[];
+  // 🍎 HealthKit import attribution — see Run.source above.
+  source?: string | null;
+  external_id?: string | null;
 }
 
 export interface WalkPhoto {
@@ -366,6 +374,10 @@ export const runApi = {
     elevation_gain_m?: number;
     started_at?: string;
     distance_km?: number;
+    // 🍎 HealthKit import attribution. The backend uses
+    // (user_id, source, external_id) to dedupe re-imports.
+    source?: string;
+    external_id?: string;
   }): Promise<Run> => {
     return apiFetch('/runs', {
       method: 'POST',
@@ -1021,6 +1033,10 @@ export const walkApi = {
     mood?: string;
     category?: string;
     public_walk_id?: number;
+    // 🍎 HealthKit import attribution. The backend uses
+    // (user_id, source, external_id) to dedupe re-imports.
+    source?: string;
+    external_id?: string;
   }): Promise<Walk> => {
     return apiFetch('/walks', {
       method: 'POST',
@@ -1628,5 +1644,28 @@ export const publicWalkApi = {
       method: 'POST',
       body: JSON.stringify(params),
     });
+  },
+};
+
+// 🍎 Apple Health import — small helper module for talking to the
+// backend about externally-sourced runs/walks. The HealthKit JS calls
+// happen client-side in `services/appleHealth.ts`; this just exposes
+// the dedupe lookup so the import picker can grey out workouts we've
+// already pulled in.
+export interface ImportedWorkoutIds {
+  source: string;
+  external_ids: string[];
+  count: number;
+}
+
+export const healthImportApi = {
+  /**
+   * Returns the set of upstream workout IDs already imported into ZenRun
+   * for the given source (default: `apple_health`). Used to filter the
+   * HealthKit import picker so we don't re-show workouts that are
+   * already in the user's runs/walks lists.
+   */
+  listImportedIds: (source: string = 'apple_health'): Promise<ImportedWorkoutIds> => {
+    return apiFetch(`/me/imported-workout-ids?source=${encodeURIComponent(source)}`);
   },
 };

@@ -32,6 +32,7 @@ import { WalkMap, type MapMarker } from './WalkMap';
 import { RetroactivePhotoPicker } from './RetroactivePhotoPicker';
 import { PhotoHeroCarousel } from './PhotoHeroCarousel';
 import { CoachNoteCard } from './CoachNoteCard';
+import { SourcePill } from './SourcePill';
 import { navigationRef } from '../navigationRef';
 import {
   photoApi,
@@ -456,6 +457,10 @@ export function EditRunModal({ visible, run, onClose, onSave, onDelete }: EditRu
               </Text>
             </View>
           )}
+
+          {/* 🍎 Where this run came from. Hidden for live ZenRun runs. */}
+          <SourcePill source={run.source} style={{ marginHorizontal: spacing.lg, marginTop: spacing.sm }} />
+
 
           {/* Route map — outdoor / watch with a polyline */}
           {showsPhotoSection && routePoints.length > 0 && routeCamera && (

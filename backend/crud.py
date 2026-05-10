@@ -73,6 +73,8 @@ def create_run(db: Session, run: RunCreate, user_id: int = None) -> Run:
         end_lng=run.end_lng,
         elevation_gain_m=run.elevation_gain_m,
         started_at=run.started_at,
+        source=(getattr(run, "source", None) or "live"),
+        external_id=getattr(run, "external_id", None),
     )
     
     # Set completed_at if provided (for backdating)
@@ -1426,6 +1428,8 @@ def create_walk(
     mood: Optional[str] = None,
     category: Optional[str] = "outdoor",
     public_walk_id: Optional[int] = None,
+    source: Optional[str] = None,
+    external_id: Optional[str] = None,
 ) -> Walk:
     """Create a new walk record from a completed walk session."""
     avg_pace = None
@@ -1448,6 +1452,8 @@ def create_walk(
         mood=mood,
         category=category or "outdoor",
         public_walk_id=public_walk_id,
+        source=(source or "live"),
+        external_id=external_id,
     )
     if started_at:
         walk.started_at = started_at

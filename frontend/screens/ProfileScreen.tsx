@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -422,6 +423,21 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           <Text style={styles.linkRowText}>Journeys</Text>
           <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
+
+        {/* 🍎 Apple Health import — iOS only. Tapping this opens the
+         *  picker; the same screen is reachable via the inline banner
+         *  on the Activity tab when there are new workouts to import. */}
+        {Platform.OS === 'ios' && (
+          <TouchableOpacity
+            style={[styles.linkRow, shadows.small]}
+            onPress={() => navigation.navigate('AppleHealthImport')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="heart-outline" size={20} color={colors.primary} />
+            <Text style={styles.linkRowText}>Import from Apple Health</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
 
         {/* Runner Level */}
         <View style={[styles.section, shadows.small]}>

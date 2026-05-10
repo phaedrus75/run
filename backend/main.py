@@ -606,6 +606,38 @@ def run_migrations():
                         ON walks(journey_id)
                 """))
 
+                # 🍎 HealthKit import attribution (Phase: Apple Health import).
+                # `source` defaults to "live" so existing rows are correctly
+                # marked as ZenRun-tracked. `external_id` holds HKWorkout
+                # UUIDs (or other upstream IDs) for cheap dedupe on re-import.
+                conn.execute(text(
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'live'"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS external_id VARCHAR"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE walks ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'live'"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE walks ADD COLUMN IF NOT EXISTS external_id VARCHAR"
+                ))
+                # Backfill nulls — pre-import rows are all live captures.
+                conn.execute(text(
+                    "UPDATE runs SET source = 'live' WHERE source IS NULL"
+                ))
+                conn.execute(text(
+                    "UPDATE walks SET source = 'live' WHERE source IS NULL"
+                ))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_runs_external
+                        ON runs(user_id, source, external_id)
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_walks_external
+                        ON walks(user_id, source, external_id)
+                """))
+
                 # Per-day Guide briefs (Phase G).
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS journey_day_briefs (
@@ -702,6 +734,12 @@ def run_migrations():
                 # Journey attribution columns (Phase 5)
                 _sqlite_col("runs", "journey_id", "journey_id INTEGER")
                 _sqlite_col("walks", "journey_id", "journey_id INTEGER")
+
+                # 🍎 HealthKit import attribution
+                _sqlite_col("runs", "source", "source VARCHAR DEFAULT 'live'")
+                _sqlite_col("runs", "external_id", "external_id VARCHAR")
+                _sqlite_col("walks", "source", "source VARCHAR DEFAULT 'live'")
+                _sqlite_col("walks", "external_id", "external_id VARCHAR")
                 _sqlite_col("journeys", "max_days", "max_days INTEGER NOT NULL DEFAULT 1")
                 _sqlite_col("journeys", "completion_note", "completion_note TEXT")
                 # Plan-then-start lifecycle (Phase H)
@@ -1435,7 +1473,29 @@ def create_run(
         run.mood = _sanitize_text(run.mood, max_length=50)
     if hasattr(run, 'category') and run.category:
         run.category = _sanitize_text(run.category, max_length=50)
-    
+    if getattr(run, "source", None):
+        run.source = _sanitize_text(run.source, max_length=20)
+    if getattr(run, "external_id", None):
+        run.external_id = _sanitize_text(run.external_id, max_length=120)
+
+    # 🍎 Dedupe HealthKit / external imports. If we've already stored a
+    # run with the same (user_id, source, external_id) tuple, return it
+    # idempotently instead of inserting a duplicate. This means the
+    # frontend can re-run the import flow safely after a crash or
+    # intermittent network failure.
+    if run.external_id and (run.source or "live") != "live":
+        existing = (
+            db.query(Run)
+            .filter(
+                Run.user_id == current_user.id,
+                Run.source == run.source,
+                Run.external_id == run.external_id,
+            )
+            .first()
+        )
+        if existing is not None:
+            return format_run_response(existing, db=db)
+
     db_run = crud.create_run(db=db, run=run, user_id=current_user.id)
 
     # 🌅 Journey auto-attribution: if the user has an active Journey AND
@@ -2234,6 +2294,10 @@ def format_run_response(
         "neighbourhood_published_at": getattr(run, "neighbourhood_published_at", None),
         # Default True for legacy rows where the column hasn't been touched.
         "circles_share": True if getattr(run, "circles_share", None) is None else bool(run.circles_share),
+        # 🍎 HealthKit import attribution — frontend renders an Apple Health
+        # pill on the detail screen when source == "apple_health".
+        "source": getattr(run, "source", None) or "live",
+        "external_id": getattr(run, "external_id", None),
     }
 
 
@@ -4839,6 +4903,10 @@ def _walk_to_dict(walk: Walk, photo_count: int = 0, milestone_unlocks: Optional[
         "public_walk_id": walk.public_walk_id,
         "photo_count": photo_count,
         "milestone_unlocks": milestone_unlocks or [],
+        # 🍎 Source attribution — frontend renders an Apple Health pill
+        # when source == "apple_health".
+        "source": getattr(walk, "source", None) or "live",
+        "external_id": getattr(walk, "external_id", None),
     }
 
 
@@ -4861,6 +4929,30 @@ def create_walk_endpoint(
     notes = payload.get("notes")
     if notes:
         notes = _sanitize_text(notes, max_length=500)
+
+    source = payload.get("source")
+    if source:
+        source = _sanitize_text(str(source), max_length=20)
+    external_id = payload.get("external_id")
+    if external_id:
+        external_id = _sanitize_text(str(external_id), max_length=120)
+
+    # 🍎 Dedupe HealthKit imports — same contract as POST /runs above.
+    if external_id and (source or "live") != "live":
+        existing = (
+            db.query(Walk)
+            .filter(
+                Walk.user_id == current_user.id,
+                Walk.source == source,
+                Walk.external_id == external_id,
+            )
+            .first()
+        )
+        if existing is not None:
+            photo_count = (
+                db.query(WalkPhoto).filter(WalkPhoto.walk_id == existing.id).count()
+            )
+            return _walk_to_dict(existing, photo_count=photo_count)
 
     started_at = payload.get("started_at")
     ended_at = payload.get("ended_at")
@@ -4895,6 +4987,8 @@ def create_walk_endpoint(
         mood=payload.get("mood"),
         category=payload.get("category"),
         public_walk_id=payload.get("public_walk_id"),
+        source=source,
+        external_id=external_id,
     )
 
     # 🌅 Journey auto-attribution (window-aware, with auto-complete on
@@ -6724,6 +6818,46 @@ def get_my_journey_map_context(
     bubble.
     """
     return _build_journey_map_context(db, current_user, tier=tier)
+
+
+@app.get("/me/imported-workout-ids")
+def get_imported_workout_ids(
+    source: str = "apple_health",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """🍎 List external IDs of workouts already imported from a given source.
+
+    The HealthKit import flow uses this to filter "Already in ZenRun"
+    rows out of the picker before showing the user. Cheap, indexed-only
+    query — returns just the IDs, no payload.
+
+    Returns: { "source": "apple_health", "external_ids": [...] }
+    """
+    src = (source or "apple_health").strip().lower()[:20] or "apple_health"
+
+    run_ids = (
+        db.query(Run.external_id)
+        .filter(
+            Run.user_id == current_user.id,
+            Run.source == src,
+            Run.external_id.isnot(None),
+        )
+        .all()
+    )
+    walk_ids = (
+        db.query(Walk.external_id)
+        .filter(
+            Walk.user_id == current_user.id,
+            Walk.source == src,
+            Walk.external_id.isnot(None),
+        )
+        .all()
+    )
+    ids = sorted(
+        {row[0] for row in run_ids if row[0]} | {row[0] for row in walk_ids if row[0]}
+    )
+    return {"source": src, "external_ids": ids, "count": len(ids)}
 
 
 @app.post("/journeys/{journey_id}/start", response_model=JourneyResponse)
