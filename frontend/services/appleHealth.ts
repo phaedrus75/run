@@ -94,8 +94,10 @@ export interface ImportableWorkout {
   activityType: WorkoutActivityType;
   startedAt: Date;
   endedAt: Date;
-  /** Calendar-aware duration in seconds, derived from start/end so we
-   *  don't get tripped up by paused-workout `duration` quirks. */
+  /** Active workout duration in seconds, taken from `HKWorkout.duration`
+   *  when present (so pauses are excluded — matches what the Watch
+   *  rings show). Falls back to wall-clock `endDate - startDate` when
+   *  HK didn't supply a duration. */
   durationSeconds: number;
   /** Best-effort distance in km. Indoor workouts can have 0/null here. */
   distanceKm: number;
@@ -321,13 +323,71 @@ function quantityToKm(
   }
 }
 
+/**
+ * Convert an HK `Quantity` carrying a time interval into seconds.
+ *
+ * Mirrors `quantityToKm`. `HKWorkout.duration` is documented as a
+ * `TimeInterval` (seconds), but the nitro bridge surfaces a
+ * `Quantity` whose unit is whatever HK chose — typically 's', but
+ * occasionally 'min' or 'hr' for some third-party watch faces.
+ *
+ * Empty / unknown units default to seconds, which is HK's default
+ * for duration. Returns 0 for missing / non-finite quantities so
+ * callers can fall back to a wall-clock derivation.
+ */
+function quantityToSeconds(
+  q?: { unit?: string | null; quantity?: number | null } | null,
+): number {
+  if (!q) return 0;
+  const value = Number(q.quantity);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  const unit = String(q.unit ?? '').trim().toLowerCase();
+  switch (unit) {
+    case 's':
+    case 'sec':
+    case 'secs':
+    case 'second':
+    case 'seconds':
+    case '':
+      return value;
+    case 'ms':
+    case 'millisecond':
+    case 'milliseconds':
+      return value / 1000;
+    case 'min':
+    case 'minute':
+    case 'minutes':
+      return value * 60;
+    case 'hr':
+    case 'hour':
+    case 'hours':
+      return value * 3600;
+    default:
+      console.warn(
+        '[appleHealth] unknown duration unit, assuming seconds:',
+        q.unit,
+      );
+      return value;
+  }
+}
+
 function projectWorkout(w: WorkoutProxyTyped): ImportableWorkout {
   const startedAt = w.startDate;
   const endedAt = w.endDate;
-  const durationSeconds = Math.max(
+  // Prefer HKWorkout.duration: it's the *active* workout time and
+  // excludes pauses (water breaks, red lights, photo stops). That's
+  // what Apple Watch shows in the rings and what users remember when
+  // they previously logged half marathons by hand. Fall back to
+  // wall-clock only if HK didn't supply a duration (rare — happens
+  // for some imported third-party workouts).
+  const wallSeconds = Math.max(
     1,
     Math.round((endedAt.getTime() - startedAt.getTime()) / 1000),
   );
+  const activeSeconds = quantityToSeconds(w.duration);
+  const durationSeconds = activeSeconds > 0
+    ? Math.round(activeSeconds)
+    : wallSeconds;
   const distanceKm = quantityToKm(w.totalDistance);
   const kind: 'run' | 'walk' = RUN_TYPES.includes(w.workoutActivityType)
     ? 'run'
