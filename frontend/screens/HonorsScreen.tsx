@@ -19,7 +19,7 @@ import {
   type Achievement,
   type Vo2MaxSample,
 } from '../services/api';
-import { autoSyncVo2MaxFromHealth } from '../services/appleHealth';
+import { autoSyncVo2MaxFromHealth } from '../services/healthBridge';
 import { colors, spacing, typography } from '../theme/colors';
 
 // 🫁 Throttle the silent VO2 Max sync — Apple Watch writes new VO2

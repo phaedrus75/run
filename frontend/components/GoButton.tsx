@@ -26,6 +26,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
+import { AndroidBackgroundTipModal } from './AndroidBackgroundTipModal';
+import { useAndroidGpsStartGate } from '../hooks/useAndroidGpsStartGate';
 
 const ACCENT = '#F97316'; // orange accent for run options
 const WALK_COLOR = '#10B981'; // green for walk
@@ -71,6 +73,8 @@ const OPTIONS: Option[] = [
 
 export function GoButton() {
   const navigation = useNavigation<any>();
+  const { tipVisible, runGpsStart, onTipContinue, onTipCancel } =
+    useAndroidGpsStartGate();
   const [visible, setVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(200)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -108,7 +112,14 @@ export function GoButton() {
 
   const pick = (opt: Option) => {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-    close(() => opt.onPress(navigation));
+    const action = () => opt.onPress(navigation);
+    if (opt.label === 'Start a Walk' || opt.label === 'Start a Run') {
+      close(() => {
+        void runGpsStart(action);
+      });
+    } else {
+      close(action);
+    }
   };
 
   return (
@@ -189,6 +200,12 @@ export function GoButton() {
           </Pressable>
         </Animated.View>
       </Modal>
+
+      <AndroidBackgroundTipModal
+        visible={tipVisible}
+        onContinue={onTipContinue}
+        onDismiss={onTipCancel}
+      />
     </>
   );
 }

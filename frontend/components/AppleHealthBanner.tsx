@@ -28,10 +28,12 @@ import { useNavigation } from '@react-navigation/native';
 
 import { colors, radius, spacing, typography, shadows } from '../theme/colors';
 import {
-  isApplePlatform,
+  isHealthPlatform,
   getAvailability,
   listImportableWorkouts,
-} from '../services/appleHealth';
+  healthPlatformName,
+} from '../services/healthBridge';
+import { Platform } from 'react-native';
 
 const DISMISS_HASH_KEY = '@zenrun/apple_health_banner_dismissed_hash';
 
@@ -54,7 +56,7 @@ export function AppleHealthBanner({ surface = 'activity', style }: Props) {
 
   // ── Probe HK on mount + re-probe periodically ──────────────────────
   const probe = useCallback(async () => {
-    if (!isApplePlatform() || !getAvailability()) return;
+    if (!isHealthPlatform() || !getAvailability()) return;
     // Throttle: don't hammer HK on every screen focus. 60s is fine —
     // watch syncs typically take a minute or two anyway.
     const now = Date.now();
@@ -109,17 +111,22 @@ export function AppleHealthBanner({ surface = 'activity', style }: Props) {
     navigation.navigate?.('AppleHealthImport');
   }, [navigation]);
 
-  if (!isApplePlatform() || !getAvailability()) return null;
+  if (!isHealthPlatform() || !getAvailability()) return null;
   if (count === 0 || dismissed) return null;
 
   return (
     <Pressable style={[styles.banner, style]} onPress={onReview}>
       <View style={styles.iconWrap}>
-        <Ionicons name="watch" size={20} color={colors.textOnPrimary} />
+        <Ionicons
+          name={Platform.OS === 'ios' ? 'watch' : 'fitness'}
+          size={20}
+          color={colors.textOnPrimary}
+        />
       </View>
       <View style={styles.copyWrap}>
         <Text style={styles.title}>
-          {count} new {count === 1 ? 'workout' : 'workouts'} on your Watch
+          {count} new {count === 1 ? 'workout' : 'workouts'} in{' '}
+          {healthPlatformName()}
         </Text>
         <Text style={styles.subtitle}>Tap to review and add to ZenRun</Text>
       </View>

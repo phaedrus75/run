@@ -66,8 +66,8 @@ export function ActivityScreen({ navigation, route }: { navigation: any; route: 
         </View>
       )}
 
-      {/* 🍎 Apple Health import nudge — only renders on iOS when the user
-       * has new HK workouts not yet in ZenRun. Self-hides otherwise. */}
+      {/* Health import nudge — Apple Health (iOS) or Health Connect
+       * (Android) when new workouts are available. Self-hides otherwise. */}
       <AppleHealthBanner surface="activity" />
 
 

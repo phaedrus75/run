@@ -43,6 +43,12 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "production-android": {
+      "extends": "production",
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {

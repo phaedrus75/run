@@ -38,6 +38,7 @@
     "react-native": "0.81.5",
     "react-native-confetti-cannon": "^1.5.2",
     "react-native-gesture-handler": "~2.28.0",
+    "react-native-health-connect": "^3.5.3",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
@@ -51,6 +52,8 @@
     "@types/mapbox__polyline": "^1.0.5",
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.10",
+    "expo-build-properties": "^55.0.14",
+    "expo-health-connect": "^0.1.1",
     "typescript": "~5.9.2"
   },
   "private": true

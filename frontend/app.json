@@ -38,13 +38,19 @@
         "backgroundColor": "#1E3A5F"
       },
       "package": "com.rhea.runzen",
-      "versionCode": 1,
+      "versionCode": 51,
+      "config": {
+        "googleMaps": {
+          "apiKey": "REPLACE_WITH_GOOGLE_MAPS_API_KEY"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -76,6 +82,17 @@
       "./plugins/withWatchApp.js",
       "./plugins/withHealthKit.js",
       "./plugins/withPodfileResourceBundleFix.js",
+      "expo-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
+          }
+        }
+      ],
       "expo-font",
       "@react-native-community/datetimepicker",
       "expo-maps",

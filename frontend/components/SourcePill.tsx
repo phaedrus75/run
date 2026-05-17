@@ -35,6 +35,9 @@ export function SourcePill({ source, style }: Props) {
   if (source === 'apple_health') {
     label = 'Apple Health';
     icon = 'heart';
+  } else if (source === 'health_connect') {
+    label = 'Health Connect';
+    icon = 'heart';
   } else if (source === 'manual') {
     label = 'Logged manually';
     icon = 'pencil';

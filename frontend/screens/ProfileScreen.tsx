@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getToken } from '../services/auth';
 import { levelApi, zenApi, ZenStatus } from '../services/api';
 import { MaxHrSettingCard } from '../components';
+import { isHealthPlatform, healthPlatformName } from '../services/healthBridge';
 
 import { API_BASE_URL } from '../services/config';
 
@@ -425,17 +426,17 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 
-        {/* 🍎 Apple Health import — iOS only. Tapping this opens the
-         *  picker; the same screen is reachable via the inline banner
-         *  on the Activity tab when there are new workouts to import. */}
-        {Platform.OS === 'ios' && (
+        {/* Health import — Apple Health on iOS, Health Connect on Android. */}
+        {isHealthPlatform() && (
           <TouchableOpacity
             style={[styles.linkRow, shadows.small]}
             onPress={() => navigation.navigate('AppleHealthImport')}
             activeOpacity={0.7}
           >
             <Ionicons name="heart-outline" size={20} color={colors.primary} />
-            <Text style={styles.linkRowText}>Import from Apple Health</Text>
+            <Text style={styles.linkRowText}>
+              Import from {healthPlatformName()}
+            </Text>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         )}

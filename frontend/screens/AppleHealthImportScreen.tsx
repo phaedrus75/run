@@ -43,10 +43,12 @@ import {
   getAvailability,
   importMany,
   importWorkout,
-  isApplePlatform,
+  isHealthPlatform,
   listImportableWorkouts,
   requestAuth,
-} from '../services/appleHealth';
+  healthPlatformName,
+  openHealthSettings,
+} from '../services/healthBridge';
 import {
   formatDistanceKm,
   formatDurationHms,
@@ -76,7 +78,7 @@ export function AppleHealthImportScreen({ navigation }: Props) {
 
   // ── Auth + initial load ────────────────────────────────────────────
   const initialise = useCallback(async () => {
-    if (!isApplePlatform() || !getAvailability()) {
+    if (!isHealthPlatform() || !getAvailability()) {
       setAuthChecked(true);
       setAuthOk(false);
       return;
@@ -241,13 +243,13 @@ export function AppleHealthImportScreen({ navigation }: Props) {
   }, [allSelected, workouts]);
 
   // ── Render ─────────────────────────────────────────────────────────
-  if (!isApplePlatform()) {
+  if (!isHealthPlatform()) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyTitle}>iOS only</Text>
+        <Text style={styles.emptyTitle}>Not available</Text>
         <Text style={styles.emptyBody}>
-          Apple Health import is only available on iPhone. Android workouts
-          come from Health Connect — coming soon.
+          Workout import is available on iPhone (Apple Health) and Android
+          (Health Connect).
         </Text>
       </View>
     );
@@ -258,7 +260,7 @@ export function AppleHealthImportScreen({ navigation }: Props) {
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.emptyBody, { marginTop: spacing.md }]}>
-          Reading your Apple Health workouts…
+          Reading your {healthPlatformName()} workouts…
         </Text>
       </View>
     );
@@ -267,10 +269,11 @@ export function AppleHealthImportScreen({ navigation }: Props) {
   if (!getAvailability()) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyTitle}>Apple Health isn't available</Text>
+        <Text style={styles.emptyTitle}>{healthPlatformName()} isn&apos;t available</Text>
         <Text style={styles.emptyBody}>
-          We couldn't reach HealthKit on this device. This usually only
-          happens on the iOS simulator. Try again on your iPhone.
+          {Platform.OS === 'android'
+            ? 'Install or update the Health Connect app from the Play Store, then try again.'
+            : "We couldn't reach HealthKit on this device. Try again on your iPhone."}
         </Text>
       </View>
     );
@@ -281,16 +284,25 @@ export function AppleHealthImportScreen({ navigation }: Props) {
       <View style={styles.center}>
         <Text style={styles.emptyTitle}>Permission needed</Text>
         <Text style={styles.emptyBody}>
-          Open Settings → Privacy & Security → Health → ZenRun and turn on
-          the workout categories you'd like to import. Then come back and
-          pull to refresh.
+          {Platform.OS === 'android'
+            ? 'Open Health Connect and allow ZenRun to read workouts, distance, and heart rate. Then pull to refresh.'
+            : "Open Settings → Privacy & Security → Health → ZenRun and turn on the workout categories you'd like to import. Then pull to refresh."}
         </Text>
-        <Pressable
-          style={[styles.primaryBtn, { marginTop: spacing.lg }]}
-          onPress={initialise}
-        >
-          <Text style={styles.primaryBtnText}>Try again</Text>
-        </Pressable>
+        {Platform.OS === 'android' ? (
+          <Pressable
+            style={[styles.primaryBtn, { marginTop: spacing.lg }]}
+            onPress={() => openHealthSettings()}
+          >
+            <Text style={styles.primaryBtnText}>Open Health Connect</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.primaryBtn, { marginTop: spacing.lg }]}
+            onPress={initialise}
+          >
+            <Text style={styles.primaryBtnText}>Try again</Text>
+          </Pressable>
+        )}
       </View>
     );
   }
@@ -314,9 +326,9 @@ export function AppleHealthImportScreen({ navigation }: Props) {
             All caught up
           </Text>
           <Text style={styles.emptyBody}>
-            We don't see any new runs, walks or hikes from Apple Health
-            in the last 60 days. Pull to refresh after your next watch
-            workout to see it here.
+            We don&apos;t see any new runs, walks or hikes from{' '}
+            {healthPlatformName()} in the last 60 days. Pull to refresh
+            after your next workout to see it here.
           </Text>
           <Pressable
             style={[styles.secondaryBtn, { marginTop: spacing.lg }]}
@@ -389,10 +401,10 @@ function Header({
   return (
     <View style={styles.header}>
       <View style={styles.headerTop}>
-        <Text style={styles.title}>Apple Health</Text>
+        <Text style={styles.title}>{healthPlatformName()}</Text>
         <Text style={styles.subtitle}>
           {count > 0
-            ? `${count} new ${count === 1 ? 'workout' : 'workouts'} from your Watch`
+            ? `${count} new ${count === 1 ? 'workout' : 'workouts'} to import`
             : 'No new workouts'}
         </Text>
       </View>

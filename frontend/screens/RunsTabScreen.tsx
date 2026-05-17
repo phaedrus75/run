@@ -21,6 +21,8 @@ import { runApi, statsApi, type Run, type Stats } from '../services/api';
 import { RunHistoryCard } from '../components/RunHistoryCard';
 import { EditRunModal } from '../components/EditRunModal';
 import { navigationRef } from '../navigationRef';
+import { AndroidBackgroundTipModal } from '../components/AndroidBackgroundTipModal';
+import { useAndroidGpsStartGate } from '../hooks/useAndroidGpsStartGate';
 
 const MIN_YEAR = 2026;
 
@@ -43,6 +45,8 @@ export function RunsTabScreen({ navigation, route, embedded }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editRun, setEditRun] = useState<Run | null>(null);
+  const { tipVisible, runGpsStart, onTipContinue, onTipCancel } =
+    useAndroidGpsStartGate();
 
   const runs = useMemo(
     () => allRuns.filter((r) => new Date(r.completed_at).getFullYear() >= MIN_YEAR),
@@ -93,7 +97,7 @@ export function RunsTabScreen({ navigation, route, embedded }: Props) {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {}
-    navigation.navigate('ActiveRun');
+    void runGpsStart(() => navigation.navigate('ActiveRun'));
   };
 
   const hubHeader = (
@@ -185,6 +189,12 @@ export function RunsTabScreen({ navigation, route, embedded }: Props) {
           setEditRun(null);
           fetchData();
         }}
+      />
+
+      <AndroidBackgroundTipModal
+        visible={tipVisible}
+        onContinue={onTipContinue}
+        onDismiss={onTipCancel}
       />
     </Shell>
   );

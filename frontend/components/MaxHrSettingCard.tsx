@@ -35,7 +35,8 @@ import {
   MaxHrPreference,
   maxHrApi,
 } from '../services/api';
-import { invalidateMaxHrCache } from '../services/appleHealth';
+import { invalidateMaxHrCache } from '../services/healthBridge';
+import { Platform } from 'react-native';
 
 type LoadState = 'loading' | 'ready' | 'error';
 
@@ -169,8 +170,8 @@ export function MaxHrSettingCard({ onSaved }: Props) {
     <View style={[styles.section, shadows.small]}>
       <Text style={styles.sectionTitle}>Max heart rate</Text>
       <Text style={styles.helpText}>
-        Used to bucket Apple Watch heart-rate samples into zones (Z1–Z5)
-        when importing workouts.
+        Used to bucket heart-rate samples into zones (Z1–Z5) when importing
+        workouts from {Platform.OS === 'ios' ? 'Apple Watch' : 'Health Connect'}.
       </Text>
 
       <View style={styles.effectiveRow}>

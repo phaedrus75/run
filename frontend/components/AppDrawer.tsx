@@ -15,6 +15,7 @@ import {
   Dimensions,
   Linking,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -130,7 +131,7 @@ export function AppDrawer({ visible, onClose }: Props) {
             {row('barbell-outline', 'Gym', () => goHomeScreen('GymTab'), 'Strength sessions', '#C9907A')}
             {row('scale-outline', 'Weight', () => goHomeScreen('WeightTab'), 'Track weight', '#7BAFA6')}
             {row('footsteps-outline', 'High step days', () => goHomeScreen('StepsTab'), '15k / 20k / 25k days', '#D4BF85')}
-            {isAdminUser(user?.email) ? (
+            {isAdminUser(user?.email) && Platform.OS === 'ios' ? (
               <>
                 {row(
                   'watch-outline',

@@ -40,6 +40,8 @@ import {
   setBackgroundTrackingEnabled,
 } from '../services/walkBackgroundTask';
 import { colors, spacing, typography, radius, shadows } from '../theme/colors';
+import { AndroidBackgroundTipModal } from '../components/AndroidBackgroundTipModal';
+import { useAndroidGpsStartGate } from '../hooks/useAndroidGpsStartGate';
 
 // Background location tasks are not supported in Expo Go — they require a
 // standalone build with the UIBackgroundModes entitlement baked in.
@@ -59,6 +61,8 @@ export function WalkScreen({ navigation, embedded }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [bgEnabled, setBgEnabled] = useState(false);
   const [bgUpdating, setBgUpdating] = useState(false);
+  const { tipVisible, runGpsStart, onTipContinue, onTipCancel } =
+    useAndroidGpsStartGate();
 
   useEffect(() => {
     void getBackgroundTrackingEnabled().then(setBgEnabled);
@@ -139,7 +143,7 @@ export function WalkScreen({ navigation, embedded }: Props) {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {}
-    navigation.navigate('ActiveWalk');
+    void runGpsStart(() => navigation.navigate('ActiveWalk'));
   };
 
   const Shell = embedded ? View : SafeAreaView;
@@ -250,6 +254,12 @@ export function WalkScreen({ navigation, embedded }: Props) {
           )}
         </View>
       </ScrollView>
+
+      <AndroidBackgroundTipModal
+        visible={tipVisible}
+        onContinue={onTipContinue}
+        onDismiss={onTipCancel}
+      />
     </Shell>
   );
 }

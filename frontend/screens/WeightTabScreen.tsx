@@ -43,9 +43,11 @@ import { WeightTracker } from '../components/WeightTracker';
 import {
   autoSyncWeightsFromHealth,
   getAvailability,
-  isApplePlatform,
+  isHealthPlatform,
+  healthPlatformName,
   requestWeightAuth,
-} from '../services/appleHealth';
+} from '../services/healthBridge';
+import { Platform } from 'react-native';
 import { colors, radius, shadows, spacing, typography } from '../theme/colors';
 
 interface Props {
@@ -116,7 +118,7 @@ export function WeightTabScreen({ navigation }: Props) {
 
   // ── Apple Health auto-sync (silent on every focus) ────────────────
   const runSilentSync = useCallback(async () => {
-    if (!isApplePlatform() || !getAvailability()) return;
+    if (!isHealthPlatform() || !getAvailability()) return;
     const now = Date.now();
     if (now - lastSynced.current < SYNC_THROTTLE_MS) return;
     lastSynced.current = now;
@@ -128,10 +130,9 @@ export function WeightTabScreen({ navigation }: Props) {
       // is irrelevant to the 209→180 in 2026 narrative.
       const since = new Date(new Date().getFullYear(), 0, 1);
       const res = await autoSyncWeightsFromHealth({ since, limit: 365 });
-      if (!res.available) return;
       if (res.imported > 0) {
         setSyncStatus(
-          `Synced ${res.imported} ${res.imported === 1 ? 'weight' : 'weights'} from Apple Health`,
+          `Synced ${res.imported} ${res.imported === 1 ? 'weight' : 'weights'} from ${healthPlatformName()}`,
         );
         // Refresh the local view so the chart shows the new points.
         await fetchData();
@@ -203,12 +204,12 @@ export function WeightTabScreen({ navigation }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────
   const showConsentCard =
-    isApplePlatform() &&
+    isHealthPlatform() &&
     getAvailability() &&
     prefLoaded &&
     autoSyncPref === null;
   const showReconnectLink =
-    isApplePlatform() &&
+    isHealthPlatform() &&
     getAvailability() &&
     prefLoaded &&
     autoSyncPref === 'disabled';
@@ -278,7 +279,7 @@ export function WeightTabScreen({ navigation }: Props) {
           >
             <Ionicons name="heart-outline" size={16} color={colors.textSecondary} />
             <Text style={styles.reconnectText}>
-              Sync weight from Apple Health
+              Sync weight from {healthPlatformName()}
             </Text>
           </TouchableOpacity>
         )}
@@ -304,7 +305,7 @@ function ConsentCard({ onEnable, onDecline, busy }: ConsentProps) {
         <Ionicons name="heart" size={22} color={colors.textOnPrimary} />
       </View>
       <Text style={styles.consentTitle}>
-        Sync weight from Apple Health
+        Sync weight from {healthPlatformName()}
       </Text>
       <Text style={styles.consentBody}>
         We'll quietly pull weight readings from your scale (or Health app)
